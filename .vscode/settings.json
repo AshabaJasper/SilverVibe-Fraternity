@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd \"c:\\\\Users\\\\Ashaba's PC\\\\Desktop\\\\SilverVibe Fraternity\\\\sacco-app\" ; node -v ; npm -v$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
