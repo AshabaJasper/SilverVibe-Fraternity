@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* ── Theme tokens ──────────────────────────────────────────── */
+@theme {
+  --color-background: #F8F9FA;
+  --color-foreground: #1A1A1A;
+  --color-card: #ffffff;
+  --color-card-foreground: #1A1A1A;
+  --color-primary: #1A1A1A;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #C0C0C0;
+  --color-secondary-foreground: #1A1A1A;
+  --color-accent: #4A90D9;
+  --color-accent-foreground: #ffffff;
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-ring: #4A90D9;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-sidebar-bg: #0f0f0f;
+  --color-sidebar-foreground: #e2e8f0;
+  --color-sidebar-accent: #1e1e1e;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', 'Inter', sans-serif;
+
+  --animate-fade-in: fadeIn 0.5s ease-out forwards;
+  --animate-slide-in: slideInRight 0.4s ease-out forwards;
+  --animate-count-up: countUp 0.6s ease-out forwards;
+  --animate-shimmer: shimmer 2s linear infinite;
+}
+
+/* ── Dark-mode CSS custom properties ───────────────────────── */
+:root {
+  --dm-bg: #F8F9FA;
+  --dm-surface: #ffffff;
+  --dm-surface-hover: #f1f5f9;
+  --dm-text: #1A1A1A;
+  --dm-text-secondary: #64748b;
+  --dm-border: #e2e8f0;
+  --dm-glass-bg: rgba(255, 255, 255, 0.85);
+  --dm-glass-border: rgba(192, 192, 192, 0.2);
+  --dm-input-bg: #ffffff;
+  --dm-header-bg: rgba(255, 255, 255, 0.8);
+  --dm-scroll-thumb: #c0c0c0;
+  --dm-scroll-hover: #a0a0a0;
+}
+
+html.dark {
+  --dm-bg: #0f1117;
+  --dm-surface: #1a1d27;
+  --dm-surface-hover: #242836;
+  --dm-text: #e2e8f0;
+  --dm-text-secondary: #94a3b8;
+  --dm-border: #2d3348;
+  --dm-glass-bg: rgba(26, 29, 39, 0.85);
+  --dm-glass-border: rgba(45, 51, 72, 0.5);
+  --dm-input-bg: #242836;
+  --dm-header-bg: rgba(15, 17, 23, 0.8);
+  --dm-scroll-thumb: #3d4460;
+  --dm-scroll-hover: #4d5580;
+}
+
+/* ── Base layer ────────────────────────────────────────────── */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--dm-bg);
+    color: var(--dm-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--dm-scroll-thumb); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dm-scroll-hover); }
+}
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Utilities layer ───────────────────────────────────────── */
+@utility glass-card {
+  background: var(--dm-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--dm-glass-border);
+}
+
+@utility silver-gradient {
+  background: linear-gradient(135deg, #1A1A1A 0%, #2d2d2d 50%, #1A1A1A 100%);
+}
+
+@utility silver-text-gradient {
+  background: linear-gradient(135deg, #C0C0C0, #E8E8E8, #C0C0C0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Dark-mode helper classes ──────────────────────────────── */
+@utility dm-bg {
+  background-color: var(--dm-bg);
+}
+@utility dm-surface {
+  background-color: var(--dm-surface);
+}
+@utility dm-surface-hover {
+  background-color: var(--dm-surface-hover);
+}
+@utility dm-text {
+  color: var(--dm-text);
+}
+@utility dm-text-secondary {
+  color: var(--dm-text-secondary);
+}
+@utility dm-border {
+  border-color: var(--dm-border);
+}
+@utility dm-header {
+  background-color: var(--dm-header-bg);
+}
+@utility dm-input {
+  background-color: var(--dm-input-bg);
+  color: var(--dm-text);
+  border-color: var(--dm-border);
+}
+
+@utility stagger-1 { animation-delay: 0.1s; }
+@utility stagger-2 { animation-delay: 0.2s; }
+@utility stagger-3 { animation-delay: 0.3s; }
+@utility stagger-4 { animation-delay: 0.4s; }
+@utility stagger-5 { animation-delay: 0.5s; }
