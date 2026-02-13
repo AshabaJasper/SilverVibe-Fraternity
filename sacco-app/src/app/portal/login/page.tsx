@@ -68,7 +68,7 @@ export default function MemberLogin() {
             <p className="text-[#C0C0C0]/50 text-sm mt-1">SilverVibe Fraternity Cooperative</p>
           </div>
 
-          <div className="bg-white/[0.03] backdrop-blur-xl border border-[#C0C0C0]/10 rounded-2xl p-8 shadow-2xl">
+          <div className="bg-[#1a1a1a] border border-[#C0C0C0]/10 rounded-2xl p-8 shadow-2xl">
             <h2 className="text-2xl font-bold text-white mb-1 hidden lg:block">Sign In</h2>
             <p className="text-[#C0C0C0]/50 mb-6 text-sm hidden lg:block">Access your member account</p>
 

@@ -40,10 +40,10 @@
   --dm-text: #1A1A1A;
   --dm-text-secondary: #64748b;
   --dm-border: #e2e8f0;
-  --dm-glass-bg: rgba(255, 255, 255, 0.85);
-  --dm-glass-border: rgba(192, 192, 192, 0.2);
+  --dm-card-bg: #ffffff;
+  --dm-card-border: #e2e8f0;
   --dm-input-bg: #ffffff;
-  --dm-header-bg: rgba(255, 255, 255, 0.8);
+  --dm-header-bg: #ffffff;
   --dm-scroll-thumb: #c0c0c0;
   --dm-scroll-hover: #a0a0a0;
 }
@@ -55,10 +55,10 @@ html.dark {
   --dm-text: #e2e8f0;
   --dm-text-secondary: #94a3b8;
   --dm-border: #2d3348;
-  --dm-glass-bg: rgba(26, 29, 39, 0.85);
-  --dm-glass-border: rgba(45, 51, 72, 0.5);
+  --dm-card-bg: #1a1d27;
+  --dm-card-border: #2d3348;
   --dm-input-bg: #242836;
-  --dm-header-bg: rgba(15, 17, 23, 0.8);
+  --dm-header-bg: #1a1d27;
   --dm-scroll-thumb: #3d4460;
   --dm-scroll-hover: #4d5580;
 }
@@ -108,10 +108,8 @@ html.dark {
 
 /* ── Utilities layer ───────────────────────────────────────── */
 @utility glass-card {
-  background: var(--dm-glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--dm-glass-border);
+  background-color: var(--dm-card-bg);
+  border: 1px solid var(--dm-card-border);
 }
 
 @utility silver-gradient {

@@ -34,7 +34,7 @@ export default function AdminLogin() {
           <p className="text-[#C0C0C0]/50 text-sm mt-1">SilverVibe SACCO Management</p>
         </div>
 
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-[#C0C0C0]/10 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-[#1a1a1a] border border-[#C0C0C0]/10 rounded-2xl p-8 shadow-2xl">
           <div className="flex items-center gap-2 mb-6">
             <ShieldCheck className="w-5 h-5 text-[#C0C0C0]" />
             <span className="text-sm text-[#C0C0C0]/60">Secure Admin Access</span>
