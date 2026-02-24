@@ -21,8 +21,8 @@ export default function SupportPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Help & Support</h1>
-        <p className="text-[#64748b] text-sm">Get answers and reach out to us</p>
+        <h1 className="text-2xl font-bold dm-text">Help & Support</h1>
+        <p className="dm-text-secondary text-sm">Get answers and reach out to us</p>
       </div>
 
       {/* Contact Cards */}
@@ -36,30 +36,30 @@ export default function SupportPage() {
             <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: `${c.color}15` }}>
               <c.icon className="w-6 h-6" style={{ color: c.color }} />
             </div>
-            <p className="text-sm font-medium text-[#1A1A1A]">{c.label}</p>
-            <p className="text-xs text-[#64748b] mt-1">{c.value}</p>
+            <p className="text-sm font-medium dm-text">{c.label}</p>
+            <p className="text-xs dm-text-secondary mt-1">{c.value}</p>
           </div>
         ))}
       </div>
 
       {/* FAQ */}
       <div className="glass-card rounded-2xl p-6 animate-fade-in stagger-2">
-        <h3 className="font-semibold text-[#1A1A1A] mb-4 flex items-center gap-2">
+        <h3 className="font-semibold dm-text mb-4 flex items-center gap-2">
           <HelpCircle className="w-4 h-4 text-[#4A90D9]" /> Frequently Asked Questions
         </h3>
         <div className="space-y-2">
           {faqs.map((faq, i) => (
-            <div key={i} className="border border-[#e2e8f0] rounded-xl overflow-hidden">
+            <div key={i} className="border dm-border rounded-xl overflow-hidden">
               <button
                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                className="w-full flex items-center justify-between p-4 text-left hover:bg-[#f1f5f9] transition-colors"
+                className="w-full flex items-center justify-between p-4 text-left hover:dm-surface-hover transition-colors"
               >
-                <span className="text-sm font-medium text-[#1A1A1A]">{faq.q}</span>
-                {openFaq === i ? <ChevronUp className="w-4 h-4 text-[#64748b]" /> : <ChevronDown className="w-4 h-4 text-[#64748b]" />}
+                <span className="text-sm font-medium dm-text">{faq.q}</span>
+                {openFaq === i ? <ChevronUp className="w-4 h-4 dm-text-secondary" /> : <ChevronDown className="w-4 h-4 dm-text-secondary" />}
               </button>
               {openFaq === i && (
                 <div className="px-4 pb-4">
-                  <p className="text-sm text-[#64748b] leading-relaxed">{faq.a}</p>
+                  <p className="text-sm dm-text-secondary leading-relaxed">{faq.a}</p>
                 </div>
               )}
             </div>
@@ -69,20 +69,20 @@ export default function SupportPage() {
 
       {/* Contact Form */}
       <div className="glass-card rounded-2xl p-6 animate-fade-in stagger-3">
-        <h3 className="font-semibold text-[#1A1A1A] mb-4 flex items-center gap-2">
+        <h3 className="font-semibold dm-text mb-4 flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-[#4A90D9]" /> Send a Message
         </h3>
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setMessage(""); }}>
           <div>
-            <label className="text-sm text-[#64748b] mb-1 block">Subject</label>
+            <label className="text-sm dm-text-secondary mb-1 block">Subject</label>
             <input type="text" placeholder="What do you need help with?"
-              className="w-full border border-[#e2e8f0] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#4A90D9] transition-colors" />
+              className="w-full border dm-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#4A90D9] transition-colors" />
           </div>
           <div>
-            <label className="text-sm text-[#64748b] mb-1 block">Message</label>
+            <label className="text-sm dm-text-secondary mb-1 block">Message</label>
             <textarea rows={4} value={message} onChange={(e) => setMessage(e.target.value)}
               placeholder="Describe your issue or question..."
-              className="w-full border border-[#e2e8f0] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#4A90D9] transition-colors resize-none" />
+              className="w-full border dm-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#4A90D9] transition-colors resize-none" />
           </div>
           <button type="submit"
             className="flex items-center gap-2 px-6 py-2.5 bg-[#4A90D9] text-white rounded-xl text-sm font-medium hover:bg-[#3a7bc8] transition-colors">
@@ -98,8 +98,8 @@ export default function SupportPage() {
             <BookOpen className="w-6 h-6 text-[#a855f7]" />
           </div>
           <div>
-            <p className="text-sm font-medium text-[#1A1A1A]">User Guide</p>
-            <p className="text-xs text-[#64748b]">Step-by-step guides for all features</p>
+            <p className="text-sm font-medium dm-text">User Guide</p>
+            <p className="text-xs dm-text-secondary">Step-by-step guides for all features</p>
           </div>
         </div>
         <div className="glass-card rounded-2xl p-5 flex items-center gap-4 hover:shadow-md transition-all cursor-pointer">
@@ -107,8 +107,8 @@ export default function SupportPage() {
             <Video className="w-6 h-6 text-[#ef4444]" />
           </div>
           <div>
-            <p className="text-sm font-medium text-[#1A1A1A]">Video Tutorials</p>
-            <p className="text-xs text-[#64748b]">Watch how-to videos for common tasks</p>
+            <p className="text-sm font-medium dm-text">Video Tutorials</p>
+            <p className="text-xs dm-text-secondary">Watch how-to videos for common tasks</p>
           </div>
         </div>
       </div>

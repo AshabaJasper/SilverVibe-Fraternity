@@ -65,11 +65,11 @@ export default function AdminLoansPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Loans Management</h1>
-          <p className="text-[#64748b] text-sm">Process applications, monitor portfolio, manage collections</p>
+          <h1 className="text-2xl font-bold dm-text">Loans Management</h1>
+          <p className="dm-text-secondary text-sm">Process applications, monitor portfolio, manage collections</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2.5 border dm-border dm-text rounded-xl text-sm font-medium hover:dm-surface-hover transition-colors">
             <Download className="w-4 h-4" /> Export
           </button>
           <button className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors">
@@ -78,11 +78,11 @@ export default function AdminLoansPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1 overflow-x-auto">
         {(["overview", "applications", "active", "products"] as const).map((t) => (
           <button key={t} onClick={() => setActiveTab(t)}
             className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize whitespace-nowrap ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              activeTab === t ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{t === "active" ? "Active Loans" : t}</button>
         ))}
       </div>
@@ -90,34 +90,34 @@ export default function AdminLoansPage() {
       {activeTab === "overview" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#1A1A1A]/10 flex items-center justify-center mb-3"><CreditCard className="w-5 h-5 text-[#1A1A1A]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Loan Portfolio</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(ADMIN_KPI.total_loan_book.value)}</p>
+            <div className="dm-surface rounded-xl p-5 border dm-border">
+              <div className="w-10 h-10 rounded-xl bg-[#1A1A1A]/10 flex items-center justify-center mb-3"><CreditCard className="w-5 h-5 dm-text" /></div>
+              <p className="text-xs dm-text-secondary mb-1">Loan Portfolio</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(ADMIN_KPI.total_loan_book.value)}</p>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center mb-3"><TrendingUp className="w-5 h-5 text-[#22c55e]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Active Loans</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">350</p>
-              <span className="text-xs text-[#64748b]">189 members</span>
+              <p className="text-xs dm-text-secondary mb-1">Active Loans</p>
+              <p className="text-xl font-bold dm-text">350</p>
+              <span className="text-xs dm-text-secondary">189 members</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#ef4444]/10 flex items-center justify-center mb-3"><AlertTriangle className="w-5 h-5 text-[#ef4444]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">PAR &gt; 30 Days</p>
+              <p className="text-xs dm-text-secondary mb-1">PAR &gt; 30 Days</p>
               <p className="text-xl font-bold text-[#ef4444]">{ADMIN_KPI.par_30.value}%</p>
-              <span className="text-xs text-[#64748b]">Industry standard: &lt;5%</span>
+              <span className="text-xs dm-text-secondary">Industry standard: &lt;5%</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/10 flex items-center justify-center mb-3"><Clock className="w-5 h-5 text-[#f59e0b]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Pending Applications</p>
+              <p className="text-xs dm-text-secondary mb-1">Pending Applications</p>
               <p className="text-xl font-bold text-[#f59e0b]">{ADMIN_LOAN_APPLICATIONS.length}</p>
               <span className="text-xs text-[#4A90D9] cursor-pointer hover:underline" onClick={() => setActiveTab("applications")}>Review now →</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Disbursement vs Recovery</h3>
+            <div className="dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Disbursement vs Recovery</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={ADMIN_LOAN_PERFORMANCE}>
@@ -132,8 +132,8 @@ export default function AdminLoansPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Portfolio Quality</h3>
+            <div className="dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Portfolio Quality</h3>
               <div className="space-y-3 mt-6">
                 {PORTFOLIO_QUALITY.map((pq) => {
                   const colors: Record<string, string> = {
@@ -143,9 +143,9 @@ export default function AdminLoansPage() {
                   return (
                     <div key={pq.category}>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="text-[#64748b]">{pq.category}</span>
+                        <span className="dm-text-secondary">{pq.category}</span>
                         <div className="flex items-center gap-3">
-                          <span className="font-medium text-[#1A1A1A]">{formatCurrency(pq.amount)}</span>
+                          <span className="font-medium dm-text">{formatCurrency(pq.amount)}</span>
                           <span className="font-semibold" style={{ color: colors[pq.category] }}>{pq.percent}%</span>
                         </div>
                       </div>
@@ -164,7 +164,7 @@ export default function AdminLoansPage() {
       {activeTab === "applications" && (
         <div className="space-y-4">
           {applications.map((app) => (
-            <div key={app.id} className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-sm transition-all">
+            <div key={app.id} className="dm-surface rounded-xl p-5 border dm-border hover:shadow-sm transition-all">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -174,7 +174,7 @@ export default function AdminLoansPage() {
                       app.status === "under_appraisal" ? "bg-[#4A90D9]/10 text-[#4A90D9]" :
                       app.status === "approved" ? "bg-[#22c55e]/10 text-[#22c55e]" :
                       app.status === "rejected" ? "bg-[#ef4444]/10 text-[#ef4444]" :
-                      "bg-[#64748b]/10 text-[#64748b]"
+                      "bg-[#64748b]/10 dm-text-secondary"
                     }`}>{app.status.replace("_", " ")}</span>
                     {app.score && (
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
@@ -184,22 +184,22 @@ export default function AdminLoansPage() {
                       }`}>Score: {app.score}</span>
                     )}
                   </div>
-                  <h3 className="font-semibold text-[#1A1A1A] mb-1">{app.member} ({app.sv})</h3>
-                  <div className="flex flex-wrap gap-4 text-xs text-[#64748b]">
-                    <span>Product: <b className="text-[#1A1A1A]">{app.product}</b></span>
-                    <span>Amount: <b className="text-[#1A1A1A]">{formatCurrency(app.amount)}</b></span>
-                    <span>Term: <b className="text-[#1A1A1A]">{app.term}</b></span>
-                    <span>Applied: <b className="text-[#1A1A1A]">{app.applied_date}</b></span>
+                  <h3 className="font-semibold dm-text mb-1">{app.member} ({app.sv})</h3>
+                  <div className="flex flex-wrap gap-4 text-xs dm-text-secondary">
+                    <span>Product: <b className="dm-text">{app.product}</b></span>
+                    <span>Amount: <b className="dm-text">{formatCurrency(app.amount)}</b></span>
+                    <span>Term: <b className="dm-text">{app.term}</b></span>
+                    <span>Applied: <b className="dm-text">{app.applied_date}</b></span>
                   </div>
                   {app.guarantors && (
-                    <p className="text-xs text-[#64748b] mt-1">
-                      Guarantors: <span className="text-[#1A1A1A]">{app.guarantors.join(", ")}</span>
+                    <p className="text-xs dm-text-secondary mt-1">
+                      Guarantors: <span className="dm-text">{app.guarantors.join(", ")}</span>
                     </p>
                   )}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => { setSelectedApp(app); setReviewOpen(true); }}
-                    className="px-4 py-2 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors flex items-center gap-1.5">
+                    className="px-4 py-2 border dm-border rounded-lg text-xs font-medium dm-text-secondary hover:dm-surface-hover transition-colors flex items-center gap-1.5">
                     <Eye className="w-3.5 h-3.5" /> Review
                   </button>
                   {app.status !== "approved" && app.status !== "rejected" && (
@@ -222,19 +222,19 @@ export default function AdminLoansPage() {
       )}
 
       {activeTab === "active" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Loan ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Product</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Principal</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Balance</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Rate</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Next Due</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Loan ID</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Member</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Product</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Principal</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Balance</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Rate</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Next Due</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,22 +247,22 @@ export default function AdminLoansPage() {
                   const s = sc[l.status] || sc.current;
                   const progress = ((l.principal - l.balance) / l.principal) * 100;
                   return (
-                    <tr key={l.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors">
+                    <tr key={l.id} className="border-b dm-border hover:bg-[#f8f9fa] transition-colors">
                       <td className="px-4 py-3 text-xs font-mono text-[#C0C0C0]">{l.id}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A] font-medium">{l.member}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{l.product}</td>
-                      <td className="px-4 py-3 text-xs text-right text-[#1A1A1A]">{formatCurrency(l.principal)}</td>
+                      <td className="px-4 py-3 text-xs dm-text font-medium">{l.member}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{l.product}</td>
+                      <td className="px-4 py-3 text-xs text-right dm-text">{formatCurrency(l.principal)}</td>
                       <td className="px-4 py-3 text-right">
-                        <p className="text-xs font-medium text-[#1A1A1A]">{formatCurrency(l.balance)}</p>
+                        <p className="text-xs font-medium dm-text">{formatCurrency(l.balance)}</p>
                         <div className="w-16 bg-[#e2e8f0] rounded-full h-1 mt-1 ml-auto">
                           <div className="bg-[#22c55e] h-1 rounded-full" style={{ width: `${progress}%` }} />
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-center text-[#1A1A1A]">{l.rate}</td>
+                      <td className="px-4 py-3 text-xs text-center dm-text">{l.rate}</td>
                       <td className="px-4 py-3">
                         <span className={`${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>{l.status}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{l.nextDue}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{l.nextDue}</td>
                     </tr>
                   );
                 })}
@@ -275,23 +275,23 @@ export default function AdminLoansPage() {
       {activeTab === "products" && (
         <div className="space-y-4">
           {loanProducts.map((p) => (
-            <div key={p.code} className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-sm transition-all">
+            <div key={p.code} className="dm-surface rounded-xl p-5 border dm-border hover:shadow-sm transition-all">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-[#1A1A1A]">{p.name}</h3>
+                    <h3 className="font-semibold dm-text">{p.name}</h3>
                     <span className="text-[10px] font-mono text-[#C0C0C0]">{p.code}</span>
                   </div>
-                  <div className="flex flex-wrap gap-4 text-xs text-[#64748b]">
-                    <span className="flex items-center gap-1"><Percent className="w-3 h-3" /> Rate: <b className="text-[#1A1A1A]">{p.rate}</b></span>
-                    <span className="flex items-center gap-1"><Target className="w-3 h-3" /> Max: <b className="text-[#1A1A1A]">{p.maxMultiple}</b></span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Term: <b className="text-[#1A1A1A]">{p.maxTerm}</b></span>
-                    <span className="flex items-center gap-1"><Users className="w-3 h-3" /> Active: <b className="text-[#1A1A1A]">{p.active}</b></span>
+                  <div className="flex flex-wrap gap-4 text-xs dm-text-secondary">
+                    <span className="flex items-center gap-1"><Percent className="w-3 h-3" /> Rate: <b className="dm-text">{p.rate}</b></span>
+                    <span className="flex items-center gap-1"><Target className="w-3 h-3" /> Max: <b className="dm-text">{p.maxMultiple}</b></span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Term: <b className="dm-text">{p.maxTerm}</b></span>
+                    <span className="flex items-center gap-1"><Users className="w-3 h-3" /> Active: <b className="dm-text">{p.active}</b></span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-[#64748b]">Portfolio</p>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(p.portfolio)}</p>
+                  <p className="text-xs dm-text-secondary">Portfolio</p>
+                  <p className="text-lg font-bold dm-text">{formatCurrency(p.portfolio)}</p>
                   <p className="text-xs mt-1">PAR: <span className={`font-semibold ${parseFloat(p.par) > 3 ? "text-[#ef4444]" : "text-[#22c55e]"}`}>{p.par}</span></p>
                 </div>
               </div>
@@ -308,27 +308,27 @@ export default function AdminLoansPage() {
             <div className="bg-[#f8f9fa] rounded-xl p-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Applicant</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selectedApp.member} ({selectedApp.sv})</p>
+                  <p className="text-[10px] dm-text-secondary">Applicant</p>
+                  <p className="text-sm font-semibold dm-text">{selectedApp.member} ({selectedApp.sv})</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Product</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selectedApp.product}</p>
+                  <p className="text-[10px] dm-text-secondary">Product</p>
+                  <p className="text-sm font-semibold dm-text">{selectedApp.product}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Amount Requested</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{formatCurrency(selectedApp.amount)}</p>
+                  <p className="text-[10px] dm-text-secondary">Amount Requested</p>
+                  <p className="text-sm font-semibold dm-text">{formatCurrency(selectedApp.amount)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Term</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selectedApp.term}</p>
+                  <p className="text-[10px] dm-text-secondary">Term</p>
+                  <p className="text-sm font-semibold dm-text">{selectedApp.term}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Application Date</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selectedApp.applied_date}</p>
+                  <p className="text-[10px] dm-text-secondary">Application Date</p>
+                  <p className="text-sm font-semibold dm-text">{selectedApp.applied_date}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Credit Score</p>
+                  <p className="text-[10px] dm-text-secondary">Credit Score</p>
                   <p className={`text-sm font-semibold ${selectedApp.score >= 80 ? "text-[#22c55e]" : selectedApp.score >= 60 ? "text-[#f59e0b]" : "text-[#ef4444]"}`}>
                     {selectedApp.score}/100
                   </p>
@@ -336,7 +336,7 @@ export default function AdminLoansPage() {
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium text-[#64748b] mb-2">Guarantors</p>
+              <p className="text-xs font-medium dm-text-secondary mb-2">Guarantors</p>
               <div className="flex gap-2 flex-wrap">
                 {selectedApp.guarantors.map((g) => (
                   <span key={g} className="px-3 py-1.5 bg-[#4A90D9]/10 text-[#4A90D9] rounded-lg text-xs font-medium">
@@ -370,7 +370,7 @@ export default function AdminLoansPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setApproveOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleApprove}
@@ -382,23 +382,23 @@ export default function AdminLoansPage() {
         {selectedApp && (
           <div className="space-y-4">
             <div className="p-3 bg-[#22c55e]/5 rounded-xl border border-[#22c55e]/20">
-              <p className="text-sm text-[#1A1A1A]">
+              <p className="text-sm dm-text">
                 Approve <b>{formatCurrency(selectedApp.amount)}</b> {selectedApp.product} for <b>{selectedApp.member}</b>?
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-[#f8f9fa] rounded-lg p-3">
-                <p className="text-[#64748b]">Credit Score</p>
-                <p className="font-bold text-[#1A1A1A]">{selectedApp.score}/100</p>
+                <p className="dm-text-secondary">Credit Score</p>
+                <p className="font-bold dm-text">{selectedApp.score}/100</p>
               </div>
               <div className="bg-[#f8f9fa] rounded-lg p-3">
-                <p className="text-[#64748b]">Guarantors</p>
-                <p className="font-bold text-[#1A1A1A]">{selectedApp.guarantors.length}</p>
+                <p className="dm-text-secondary">Guarantors</p>
+                <p className="font-bold dm-text">{selectedApp.guarantors.length}</p>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Approval Note (Optional)</label>
-              <textarea className="w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 focus:border-[#22c55e] transition-colors resize-none"
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Approval Note (Optional)</label>
+              <textarea className="w-full px-3 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 focus:border-[#22c55e] transition-colors resize-none"
                 rows={3} placeholder="Add any conditions or notes..." value={approveNote} onChange={(e) => setApproveNote(e.target.value)} />
             </div>
           </div>
@@ -410,7 +410,7 @@ export default function AdminLoansPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setDeclineOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleDecline} disabled={!declineReason}
@@ -422,13 +422,13 @@ export default function AdminLoansPage() {
         {selectedApp && (
           <div className="space-y-4">
             <div className="p-3 bg-[#ef4444]/5 rounded-xl border border-[#ef4444]/20">
-              <p className="text-sm text-[#1A1A1A]">
+              <p className="text-sm dm-text">
                 Decline <b>{formatCurrency(selectedApp.amount)}</b> {selectedApp.product} application from <b>{selectedApp.member}</b>?
               </p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Reason for Decline *</label>
-              <select className="w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ef4444]/20 focus:border-[#ef4444] transition-colors mb-3"
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Reason for Decline *</label>
+              <select className="w-full px-3 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#ef4444]/20 focus:border-[#ef4444] transition-colors mb-3"
                 value={declineReason} onChange={(e) => setDeclineReason(e.target.value)}>
                 <option value="">Select a reason...</option>
                 <option value="insufficient_savings">Insufficient savings balance</option>
@@ -438,7 +438,7 @@ export default function AdminLoansPage() {
                 <option value="incomplete_docs">Incomplete documentation</option>
                 <option value="other">Other (specify below)</option>
               </select>
-              <textarea className="w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ef4444]/20 focus:border-[#ef4444] transition-colors resize-none"
+              <textarea className="w-full px-3 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#ef4444]/20 focus:border-[#ef4444] transition-colors resize-none"
                 rows={2} placeholder="Additional notes..." />
             </div>
           </div>

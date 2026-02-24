@@ -47,7 +47,7 @@ export default function MemberLogin() {
               { label: "Loans Disbursed", value: "UGX 2.1B" },
               { label: "Share Capital", value: "UGX 1.2B" },
             ].map((stat) => (
-              <div key={stat.label} className="bg-white/5 border border-[#C0C0C0]/10 rounded-xl p-4">
+              <div key={stat.label} className="dm-surface/5 border border-[#C0C0C0]/10 rounded-xl p-4">
                 <p className="text-2xl font-bold text-white">{stat.value}</p>
                 <p className="text-sm text-[#C0C0C0]/50">{stat.label}</p>
               </div>
@@ -73,7 +73,7 @@ export default function MemberLogin() {
             <p className="text-[#C0C0C0]/50 mb-6 text-sm hidden lg:block">Access your member account</p>
 
             {/* Login Method Toggle */}
-            <div className="flex bg-white/5 rounded-xl p-1 mb-6">
+            <div className="flex dm-surface/5 rounded-xl p-1 mb-6">
               <button
                 onClick={() => setLoginMethod("password")}
                 className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -106,7 +106,7 @@ export default function MemberLogin() {
                   value={svNumber}
                   onChange={(e) => setSvNumber(e.target.value)}
                   placeholder="SV-0042"
-                  className="w-full bg-white/5 border border-[#C0C0C0]/20 rounded-xl px-4 py-3 text-white placeholder-[#C0C0C0]/30 focus:outline-none focus:border-[#4A90D9]/60 focus:ring-1 focus:ring-[#4A90D9]/30 transition-all"
+                  className="w-full dm-surface/5 border border-[#C0C0C0]/20 rounded-xl px-4 py-3 text-white placeholder-[#C0C0C0]/30 focus:outline-none focus:border-[#4A90D9]/60 focus:ring-1 focus:ring-[#4A90D9]/30 transition-all"
                 />
               </div>
 
@@ -121,7 +121,7 @@ export default function MemberLogin() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-white/5 border border-[#C0C0C0]/20 rounded-xl px-4 py-3 text-white placeholder-[#C0C0C0]/30 focus:outline-none focus:border-[#4A90D9]/60 focus:ring-1 focus:ring-[#4A90D9]/30 transition-all pr-12"
+                      className="w-full dm-surface/5 border border-[#C0C0C0]/20 rounded-xl px-4 py-3 text-white placeholder-[#C0C0C0]/30 focus:outline-none focus:border-[#4A90D9]/60 focus:ring-1 focus:ring-[#4A90D9]/30 transition-all pr-12"
                     />
                     <button
                       type="button"
@@ -140,7 +140,7 @@ export default function MemberLogin() {
                   <input
                     type="tel"
                     placeholder="+256 7XX XXX XXX"
-                    className="w-full bg-white/5 border border-[#C0C0C0]/20 rounded-xl px-4 py-3 text-white placeholder-[#C0C0C0]/30 focus:outline-none focus:border-[#4A90D9]/60 focus:ring-1 focus:ring-[#4A90D9]/30 transition-all"
+                    className="w-full dm-surface/5 border border-[#C0C0C0]/20 rounded-xl px-4 py-3 text-white placeholder-[#C0C0C0]/30 focus:outline-none focus:border-[#4A90D9]/60 focus:ring-1 focus:ring-[#4A90D9]/30 transition-all"
                   />
                 </div>
               )}

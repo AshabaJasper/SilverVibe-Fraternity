@@ -47,7 +47,7 @@ export default function Home() {
           </button>
 
           <button
-            onClick={() => router.push("/admin/login")}
+            onClick={() => router.push("/admin-login")}
             className="group relative bg-white/5 hover:bg-white/10 border border-[#C0C0C0]/20 hover:border-[#C0C0C0]/50 rounded-2xl p-8 w-72 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-[#C0C0C0]/10 cursor-pointer"
           >
             <div className="w-14 h-14 rounded-xl bg-[#C0C0C0]/10 flex items-center justify-center mx-auto mb-4 group-hover:bg-[#C0C0C0]/20 transition-colors">

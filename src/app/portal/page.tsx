@@ -193,15 +193,15 @@ export default function MemberDashboard() {
             {formatCurrency(totalNetWorth)}
           </p>
           <div className="flex flex-wrap gap-4 mt-4">
-            <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/10">
+            <div className="dm-surface/5 rounded-xl px-4 py-2 border border-white/10">
               <p className="text-[#C0C0C0]/50 text-xs">Savings</p>
               <p className="text-white font-semibold">{formatCurrency(totalSavings)}</p>
             </div>
-            <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/10">
+            <div className="dm-surface/5 rounded-xl px-4 py-2 border border-white/10">
               <p className="text-[#C0C0C0]/50 text-xs">Share Capital</p>
               <p className="text-white font-semibold">{formatCurrency(MEMBER_SHARES.total_value)}</p>
             </div>
-            <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/10">
+            <div className="dm-surface/5 rounded-xl px-4 py-2 border border-white/10">
               <p className="text-[#C0C0C0]/50 text-xs">Investments</p>
               <p className="text-white font-semibold">{formatCurrency(MEMBER_IU.current_value)}</p>
             </div>

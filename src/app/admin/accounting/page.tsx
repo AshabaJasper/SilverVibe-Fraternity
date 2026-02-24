@@ -64,7 +64,7 @@ const ACCOUNTS = [
   "Mobile Money Float", "Dividends Payable", "Depreciation Expense",
 ];
 
-const inputClass = "w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 text-[#1A1A1A]";
+const inputClass = "w-full px-4 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 dm-text";
 
 export default function AdminAccountingPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "journal" | "trial-balance" | "statements">("overview");
@@ -103,11 +103,11 @@ export default function AdminAccountingPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Accounting</h1>
-          <p className="text-[#64748b] text-sm">Financial records, journal entries, and statements</p>
+          <h1 className="text-2xl font-bold dm-text">Accounting</h1>
+          <p className="dm-text-secondary text-sm">Financial records, journal entries, and statements</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2.5 border dm-border dm-text rounded-xl text-sm font-medium hover:dm-surface-hover transition-colors">
             <Download className="w-4 h-4" /> Export
           </button>
           <button onClick={() => { setEntryForm(EMPTY_ENTRY); setNewEntryOpen(true); }}
@@ -117,11 +117,11 @@ export default function AdminAccountingPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1 overflow-x-auto">
         {(["overview", "journal", "trial-balance", "statements"] as const).map((t) => (
           <button key={t} onClick={() => setActiveTab(t)}
             className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize whitespace-nowrap ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              activeTab === t ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{t.replace("-", " ")}</button>
         ))}
       </div>
@@ -129,34 +129,34 @@ export default function AdminAccountingPage() {
       {activeTab === "overview" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center mb-3"><ArrowUpRight className="w-5 h-5 text-[#22c55e]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Monthly Revenue</p>
+              <p className="text-xs dm-text-secondary mb-1">Monthly Revenue</p>
               <p className="text-xl font-bold text-[#22c55e]">{formatCurrency(55000000)}</p>
               <span className="text-xs text-[#22c55e]">+12% vs last month</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#ef4444]/10 flex items-center justify-center mb-3"><ArrowDownRight className="w-5 h-5 text-[#ef4444]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Monthly Expenses</p>
+              <p className="text-xs dm-text-secondary mb-1">Monthly Expenses</p>
               <p className="text-xl font-bold text-[#ef4444]">{formatCurrency(25000000)}</p>
               <span className="text-xs text-[#22c55e]">-3% vs last month</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center mb-3"><TrendingUp className="w-5 h-5 text-[#4A90D9]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Net Income</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(30000000)}</p>
-              <span className="text-xs text-[#64748b]">54.5% margin</span>
+              <p className="text-xs dm-text-secondary mb-1">Net Income</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(30000000)}</p>
+              <span className="text-xs dm-text-secondary">54.5% margin</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#a855f7]/10 flex items-center justify-center mb-3"><Scale className="w-5 h-5 text-[#a855f7]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Total Assets</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(1860000000)}</p>
+              <p className="text-xs dm-text-secondary mb-1">Total Assets</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(1860000000)}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Income vs Expenses (6 Months)</h3>
+            <div className="lg:col-span-2 dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Income vs Expenses (6 Months)</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={INCOME_EXPENSE}>
@@ -171,8 +171,8 @@ export default function AdminAccountingPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Expense Breakdown</h3>
+            <div className="dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Expense Breakdown</h3>
               <div className="h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -189,9 +189,9 @@ export default function AdminAccountingPage() {
                   <div key={d.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                      <span className="text-[#64748b]">{d.name}</span>
+                      <span className="dm-text-secondary">{d.name}</span>
                     </div>
-                    <span className="font-medium text-[#1A1A1A]">{formatCurrency(d.value)}</span>
+                    <span className="font-medium dm-text">{formatCurrency(d.value)}</span>
                   </div>
                 ))}
               </div>
@@ -201,20 +201,20 @@ export default function AdminAccountingPage() {
       )}
 
       {activeTab === "journal" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Ref</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Description</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Debit A/C</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Credit A/C</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Amount</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">By</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Ref</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Description</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Debit A/C</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Credit A/C</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Amount</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">By</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,25 +222,25 @@ export default function AdminAccountingPage() {
                   const sc: Record<string, { bg: string; text: string }> = {
                     posted: { bg: "bg-[#22c55e]/10", text: "text-[#22c55e]" },
                     pending: { bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]" },
-                    draft: { bg: "bg-[#64748b]/10", text: "text-[#64748b]" },
+                    draft: { bg: "bg-[#64748b]/10", text: "dm-text-secondary" },
                   };
                   const s = sc[j.status] || sc.posted;
                   return (
-                    <tr key={j.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
+                    <tr key={j.id} className="border-b dm-border hover:bg-[#f8f9fa]">
                       <td className="px-4 py-3 text-xs font-mono text-[#C0C0C0]">{j.id}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{j.date}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{j.description}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{j.debit}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{j.credit}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(j.amount)}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{j.date}</td>
+                      <td className="px-4 py-3 text-xs dm-text">{j.description}</td>
+                      <td className="px-4 py-3 text-xs dm-text">{j.debit}</td>
+                      <td className="px-4 py-3 text-xs dm-text">{j.credit}</td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text">{formatCurrency(j.amount)}</td>
                       <td className="px-4 py-3">
                         <span className={`${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>{j.status}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{j.by}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{j.by}</td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => setViewEntry(j)} className="p-1 rounded-lg hover:bg-[#f1f5f9]">
-                            <Eye className="w-3.5 h-3.5 text-[#64748b]" />
+                          <button onClick={() => setViewEntry(j)} className="p-1 rounded-lg hover:dm-surface-hover">
+                            <Eye className="w-3.5 h-3.5 dm-text-secondary" />
                           </button>
                           {j.status !== "posted" && (
                             <button onClick={() => handlePostEntry(j.id)}
@@ -258,11 +258,11 @@ export default function AdminAccountingPage() {
       )}
 
       {activeTab === "trial-balance" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
-          <div className="p-4 border-b border-[#e2e8f0] flex items-center justify-between">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
+          <div className="p-4 border-b dm-border flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-[#1A1A1A] text-sm">Trial Balance</h3>
-              <p className="text-xs text-[#64748b]">As at January 15, 2025</p>
+              <h3 className="font-semibold dm-text text-sm">Trial Balance</h3>
+              <p className="text-xs dm-text-secondary">As at January 15, 2025</p>
             </div>
             <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
               totalDebit === totalCredit ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#ef4444]/10 text-[#ef4444]"
@@ -273,18 +273,18 @@ export default function AdminAccountingPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Account</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Debit (UGX)</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Credit (UGX)</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Account</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Debit (UGX)</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Credit (UGX)</th>
                 </tr>
               </thead>
               <tbody>
                 {TRIAL_BALANCE.map((t) => (
-                  <tr key={t.account} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
-                    <td className="px-4 py-3 text-xs text-[#1A1A1A]">{t.account}</td>
-                    <td className="px-4 py-3 text-right text-xs text-[#1A1A1A]">{t.debit > 0 ? formatCurrency(t.debit) : "—"}</td>
-                    <td className="px-4 py-3 text-right text-xs text-[#1A1A1A]">{t.credit > 0 ? formatCurrency(t.credit) : "—"}</td>
+                  <tr key={t.account} className="border-b dm-border hover:bg-[#f8f9fa]">
+                    <td className="px-4 py-3 text-xs dm-text">{t.account}</td>
+                    <td className="px-4 py-3 text-right text-xs dm-text">{t.debit > 0 ? formatCurrency(t.debit) : "—"}</td>
+                    <td className="px-4 py-3 text-right text-xs dm-text">{t.credit > 0 ? formatCurrency(t.credit) : "—"}</td>
                   </tr>
                 ))}
                 <tr className="bg-[#1A1A1A]">
@@ -306,17 +306,17 @@ export default function AdminAccountingPage() {
             { title: "Cash Flow Statement", desc: "Operating, investing, and financing cash flows", icon: DollarSign, color: "#a855f7" },
             { title: "Member Equity Statement", desc: "Changes in member shares and retained earnings", icon: BarChart3, color: "#f59e0b" },
           ].map((s) => (
-            <div key={s.title} className="bg-white rounded-xl p-6 border border-[#e2e8f0] hover:shadow-sm transition-all cursor-pointer group">
+            <div key={s.title} className="dm-surface rounded-xl p-6 border dm-border hover:shadow-sm transition-all cursor-pointer group">
               <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: `${s.color}12` }}>
                 <s.icon className="w-6 h-6" style={{ color: s.color }} />
               </div>
-              <h3 className="font-semibold text-[#1A1A1A] mb-1">{s.title}</h3>
-              <p className="text-xs text-[#64748b] mb-4">{s.desc}</p>
+              <h3 className="font-semibold dm-text mb-1">{s.title}</h3>
+              <p className="text-xs dm-text-secondary mb-4">{s.desc}</p>
               <div className="flex gap-2">
                 <button className="px-3 py-1.5 bg-[#1A1A1A] text-white rounded-lg text-xs font-medium hover:bg-[#333] transition-colors">
                   Generate
                 </button>
-                <button className="px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+                <button className="px-3 py-1.5 border dm-border rounded-lg text-xs font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
                   <Download className="w-3 h-3 inline mr-1" /> PDF
                 </button>
               </div>
@@ -330,7 +330,7 @@ export default function AdminAccountingPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setNewEntryOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Cancel</button>
             <button onClick={handleNewEntry} disabled={!entryForm.description || entryForm.amount <= 0}
               className="px-5 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
               <Plus className="w-4 h-4" /> Create Entry
@@ -339,29 +339,29 @@ export default function AdminAccountingPage() {
         }>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Description *</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Description *</label>
             <input className={inputClass} value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} placeholder="e.g. Monthly salary provision" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Debit Account</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Debit Account</label>
               <select className={inputClass} value={entryForm.debit} onChange={(e) => setEntryForm({ ...entryForm, debit: e.target.value })}>
                 {ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Credit Account</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Credit Account</label>
               <select className={inputClass} value={entryForm.credit} onChange={(e) => setEntryForm({ ...entryForm, credit: e.target.value })}>
                 {ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Amount (UGX) *</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Amount (UGX) *</label>
             <input className={inputClass} type="number" value={entryForm.amount || ""} onChange={(e) => setEntryForm({ ...entryForm, amount: Number(e.target.value) })} placeholder="0" />
           </div>
-          <div className="bg-[#f8f9fa] rounded-xl p-3 text-xs text-[#64748b]">
-            Entry will be saved as <span className="font-semibold text-[#64748b]">Draft</span>. You can post it from the journal tab.
+          <div className="bg-[#f8f9fa] rounded-xl p-3 text-xs dm-text-secondary">
+            Entry will be saved as <span className="font-semibold dm-text-secondary">Draft</span>. You can post it from the journal tab.
           </div>
         </div>
       </Modal>
@@ -371,7 +371,7 @@ export default function AdminAccountingPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setViewEntry(null)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Close</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Close</button>
             {viewEntry && viewEntry.status !== "posted" && (
               <button onClick={() => { handlePostEntry(viewEntry.id); setViewEntry(null); }}
                 className="px-5 py-2.5 bg-[#22c55e] text-white rounded-xl text-sm font-medium hover:bg-[#16a34a] transition-colors flex items-center gap-2">
@@ -384,33 +384,33 @@ export default function AdminAccountingPage() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-xs text-[#64748b]">Date</p>
-                <p className="text-sm font-medium text-[#1A1A1A]">{viewEntry.date}</p>
+                <p className="text-xs dm-text-secondary">Date</p>
+                <p className="text-sm font-medium dm-text">{viewEntry.date}</p>
               </div>
               <div>
-                <p className="text-xs text-[#64748b]">Status</p>
-                <p className={`text-sm font-semibold capitalize ${viewEntry.status === "posted" ? "text-[#22c55e]" : viewEntry.status === "pending" ? "text-[#f59e0b]" : "text-[#64748b]"}`}>{viewEntry.status}</p>
+                <p className="text-xs dm-text-secondary">Status</p>
+                <p className={`text-sm font-semibold capitalize ${viewEntry.status === "posted" ? "text-[#22c55e]" : viewEntry.status === "pending" ? "text-[#f59e0b]" : "dm-text-secondary"}`}>{viewEntry.status}</p>
               </div>
             </div>
             <div>
-              <p className="text-xs text-[#64748b]">Description</p>
-              <p className="text-sm text-[#1A1A1A]">{viewEntry.description}</p>
+              <p className="text-xs dm-text-secondary">Description</p>
+              <p className="text-sm dm-text">{viewEntry.description}</p>
             </div>
             <div className="bg-[#f8f9fa] rounded-xl p-4 space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-[#64748b]">Debit</span>
-                <span className="font-medium text-[#1A1A1A]">{viewEntry.debit}</span>
+                <span className="dm-text-secondary">Debit</span>
+                <span className="font-medium dm-text">{viewEntry.debit}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-[#64748b]">Credit</span>
-                <span className="font-medium text-[#1A1A1A]">{viewEntry.credit}</span>
+                <span className="dm-text-secondary">Credit</span>
+                <span className="font-medium dm-text">{viewEntry.credit}</span>
               </div>
-              <div className="border-t border-[#e2e8f0] pt-2 flex justify-between text-sm">
-                <span className="font-semibold text-[#64748b]">Amount</span>
-                <span className="font-bold text-[#1A1A1A]">{formatCurrency(viewEntry.amount)}</span>
+              <div className="border-t dm-border pt-2 flex justify-between text-sm">
+                <span className="font-semibold dm-text-secondary">Amount</span>
+                <span className="font-bold dm-text">{formatCurrency(viewEntry.amount)}</span>
               </div>
             </div>
-            <div className="flex justify-between text-xs text-[#64748b]">
+            <div className="flex justify-between text-xs dm-text-secondary">
               <span>Created by: {viewEntry.by}</span>
             </div>
           </div>

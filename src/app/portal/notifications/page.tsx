@@ -36,8 +36,8 @@ export default function NotificationsPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Notifications</h1>
-          <p className="text-[#64748b] text-sm">{unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}</p>
+          <h1 className="text-2xl font-bold dm-text">Notifications</h1>
+          <p className="dm-text-secondary text-sm">{unreadCount} unread notification{unreadCount !== 1 ? "s" : ""}</p>
         </div>
         {unreadCount > 0 && (
           <button onClick={markAllRead} className="flex items-center gap-2 px-3 py-2 text-sm text-[#4A90D9] hover:bg-[#4A90D9]/5 rounded-lg transition-colors">
@@ -55,7 +55,7 @@ export default function NotificationsPage() {
             className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
               filter === f
                 ? "bg-[#1A1A1A] text-white"
-                : "bg-white border border-[#e2e8f0] text-[#64748b] hover:bg-[#f1f5f9]"
+                : "dm-surface border dm-border dm-text-secondary hover:dm-surface-hover"
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -81,10 +81,10 @@ export default function NotificationsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <p className={`text-sm font-medium ${!n.read ? "text-[#1A1A1A]" : "text-[#64748b]"}`}>{n.title}</p>
-                  <span className="text-xs text-[#64748b] whitespace-nowrap">{n.date}</span>
+                  <p className={`text-sm font-medium ${!n.read ? "dm-text" : "dm-text-secondary"}`}>{n.title}</p>
+                  <span className="text-xs dm-text-secondary whitespace-nowrap">{n.date}</span>
                 </div>
-                <p className="text-xs text-[#64748b] mt-0.5">{n.message}</p>
+                <p className="text-xs dm-text-secondary mt-0.5">{n.message}</p>
               </div>
               {!n.read && <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5" style={{ backgroundColor: color }} />}
             </div>

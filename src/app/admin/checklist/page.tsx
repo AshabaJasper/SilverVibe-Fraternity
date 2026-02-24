@@ -183,7 +183,7 @@ const MODULES: Module[] = [
 const statusConfig = {
   done: { label: "Implemented", bg: "bg-[#22c55e]/10", text: "text-[#22c55e]", icon: CheckCircle },
   demo: { label: "Demo/UI Only", bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]", icon: Circle },
-  planned: { label: "Planned", bg: "bg-[#64748b]/10", text: "text-[#64748b]", icon: Circle },
+  planned: { label: "Planned", bg: "bg-[#64748b]/10", text: "dm-text-secondary", icon: Circle },
 };
 
 export default function ChecklistPage() {
@@ -200,42 +200,42 @@ export default function ChecklistPage() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Feature Checklist</h1>
-        <p className="text-[#64748b] text-sm mt-1">Complete overview of all features — implemented, demo, and planned</p>
+        <h1 className="text-2xl font-bold dm-text">Feature Checklist</h1>
+        <p className="dm-text-secondary text-sm mt-1">Complete overview of all features — implemented, demo, and planned</p>
       </div>
 
       {/* Progress Bar */}
-      <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
+      <div className="dm-surface rounded-xl p-6 border dm-border">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-[#1A1A1A]">Overall Progress</p>
+          <p className="text-sm font-semibold dm-text">Overall Progress</p>
           <p className="text-sm font-bold text-[#22c55e]">{pctDone}%</p>
         </div>
-        <div className="w-full bg-[#f1f5f9] rounded-full h-3 overflow-hidden">
+        <div className="w-full dm-surface-hover rounded-full h-3 overflow-hidden">
           <div className="h-full rounded-full bg-gradient-to-r from-[#22c55e] to-[#4A90D9] transition-all duration-500"
             style={{ width: `${pctDone}%` }} />
         </div>
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center">
             <p className="text-2xl font-bold text-[#22c55e]">{totals.done}</p>
-            <p className="text-xs text-[#64748b]">Implemented</p>
+            <p className="text-xs dm-text-secondary">Implemented</p>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-[#f59e0b]">{totals.demo}</p>
-            <p className="text-xs text-[#64748b]">Demo / UI Only</p>
+            <p className="text-xs dm-text-secondary">Demo / UI Only</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-[#64748b]">{totals.planned}</p>
-            <p className="text-xs text-[#64748b]">Planned</p>
+            <p className="text-2xl font-bold dm-text-secondary">{totals.planned}</p>
+            <p className="text-xs dm-text-secondary">Planned</p>
           </div>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1">
         {(["all", "done", "demo", "planned"] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-              filter === f ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              filter === f ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{f === "all" ? `All (${totals.total})` : f === "done" ? `Implemented (${totals.done})` : f === "demo" ? `Demo (${totals.demo})` : `Planned (${totals.planned})`}</button>
         ))}
       </div>
@@ -250,7 +250,7 @@ export default function ChecklistPage() {
           const demoCt = mod.features.filter((f) => f.status === "demo").length;
 
           return (
-            <div key={mod.title} className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+            <div key={mod.title} className="dm-surface rounded-xl border dm-border overflow-hidden">
               <button onClick={() => toggle(mod.title)}
                 className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#f8f9fa] transition-colors">
                 <div className="flex items-center gap-3">
@@ -258,20 +258,20 @@ export default function ChecklistPage() {
                     <mod.icon className="w-4.5 h-4.5" style={{ color: mod.color }} />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-semibold text-[#1A1A1A]">{mod.title}</p>
-                    <p className="text-[10px] text-[#64748b]">{doneCt + demoCt}/{mod.features.length} features ready</p>
+                    <p className="text-sm font-semibold dm-text">{mod.title}</p>
+                    <p className="text-[10px] dm-text-secondary">{doneCt + demoCt}/{mod.features.length} features ready</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="w-20 bg-[#f1f5f9] rounded-full h-1.5 overflow-hidden">
+                  <div className="w-20 dm-surface-hover rounded-full h-1.5 overflow-hidden">
                     <div className="h-full rounded-full bg-[#22c55e]"
                       style={{ width: `${((doneCt + demoCt) / mod.features.length) * 100}%` }} />
                   </div>
-                  {isOpen ? <ChevronDown className="w-4 h-4 text-[#64748b]" /> : <ChevronRight className="w-4 h-4 text-[#64748b]" />}
+                  {isOpen ? <ChevronDown className="w-4 h-4 dm-text-secondary" /> : <ChevronRight className="w-4 h-4 dm-text-secondary" />}
                 </div>
               </button>
               {isOpen && (
-                <div className="border-t border-[#e2e8f0] px-5 py-3 space-y-2">
+                <div className="border-t dm-border px-5 py-3 space-y-2">
                   {filtered.map((f, i) => {
                     const sc = statusConfig[f.status];
                     return (
@@ -279,7 +279,7 @@ export default function ChecklistPage() {
                         <sc.icon className={`w-4 h-4 mt-0.5 ${sc.text} ${f.status === "done" ? "fill-current" : ""}`} />
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className={`text-sm ${f.status === "done" ? "text-[#1A1A1A]" : "text-[#64748b]"}`}>{f.name}</span>
+                            <span className={`text-sm ${f.status === "done" ? "dm-text" : "dm-text-secondary"}`}>{f.name}</span>
                             <span className={`${sc.bg} ${sc.text} px-1.5 py-0.5 rounded text-[9px] font-semibold`}>{sc.label}</span>
                           </div>
                           {f.note && <p className="text-[10px] text-[#C0C0C0] mt-0.5">{f.note}</p>}

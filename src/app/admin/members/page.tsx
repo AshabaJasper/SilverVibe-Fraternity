@@ -75,7 +75,7 @@ export default function AdminMembersPage() {
     active: { bg: "bg-[#22c55e]/10", text: "text-[#22c55e]" },
     dormant: { bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]" },
     suspended: { bg: "bg-[#ef4444]/10", text: "text-[#ef4444]" },
-    pending: { bg: "bg-[#64748b]/10", text: "text-[#64748b]" },
+    pending: { bg: "bg-[#64748b]/10", text: "dm-text-secondary" },
   };
 
   const kycColors: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
@@ -139,13 +139,13 @@ export default function AdminMembersPage() {
   // Form field helper
   const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div>
-      <label className="block text-xs font-medium text-[#64748b] mb-1.5">{label}</label>
+      <label className="block text-xs font-medium dm-text-secondary mb-1.5">{label}</label>
       {children}
     </div>
   );
 
   const inputClass =
-    "w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
+    "w-full px-3 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
 
   const MemberForm = ({ isEdit }: { isEdit: boolean }) => (
     <div className="space-y-4">
@@ -206,11 +206,11 @@ export default function AdminMembersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Members</h1>
-          <p className="text-[#64748b] text-sm">{members.length} registered members</p>
+          <h1 className="text-2xl font-bold dm-text">Members</h1>
+          <p className="dm-text-secondary text-sm">{members.length} registered members</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2.5 border dm-border dm-text rounded-xl text-sm font-medium hover:dm-surface-hover transition-colors">
             <Download className="w-4 h-4" /> Export
           </button>
           <button
@@ -223,11 +223,11 @@ export default function AdminMembersPage() {
       </div>
 
       {/* Status tabs */}
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1">
         {(["all", "active", "dormant", "suspended", "pending"] as StatusFilter[]).map((s) => (
           <button key={s} onClick={() => setStatusFilter(s)}
             className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-              statusFilter === s ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              statusFilter === s ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>
             {s} ({statusCounts[s]})
           </button>
@@ -239,24 +239,24 @@ export default function AdminMembersPage() {
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C0C0C0]" />
         <input type="text" placeholder="Search by name, SV number, phone, or email..."
           value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9]" />
+          className="w-full pl-10 pr-4 py-3 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9]" />
       </div>
 
       <div className="flex gap-6">
         {/* Table */}
-        <div className={`flex-1 bg-white rounded-xl border border-[#e2e8f0] overflow-hidden ${selected ? "hidden lg:block" : ""}`}>
+        <div className={`flex-1 dm-surface rounded-xl border dm-border overflow-hidden ${selected ? "hidden lg:block" : ""}`}>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Contact</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">KYC</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Savings</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Loans</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shares</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Member</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Contact</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">KYC</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Savings</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Loans</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Shares</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,7 +266,7 @@ export default function AdminMembersPage() {
                   const KycIcon = kc.icon;
                   return (
                     <tr key={m.sv_number}
-                      className={`border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors cursor-pointer ${
+                      className={`border-b dm-border hover:bg-[#f8f9fa] transition-colors cursor-pointer ${
                         selectedMember === m.sv_number ? "bg-[#4A90D9]/5" : ""
                       }`}
                       onClick={() => setSelectedMember(m.sv_number)}>
@@ -276,13 +276,13 @@ export default function AdminMembersPage() {
                             <span className="text-white text-[10px] font-bold">{getInitials(m.name)}</span>
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-[#1A1A1A]">{m.name}</p>
+                            <p className="text-sm font-medium dm-text">{m.name}</p>
                             <p className="text-[10px] text-[#C0C0C0]">{m.sv_number}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-xs text-[#1A1A1A]">{m.phone}</p>
+                        <p className="text-xs dm-text">{m.phone}</p>
                         <p className="text-[10px] text-[#C0C0C0] truncate max-w-[140px]">{m.email}</p>
                       </td>
                       <td className="px-4 py-3">
@@ -295,18 +295,18 @@ export default function AdminMembersPage() {
                           <KycIcon className="w-3 h-3" /> {m.kyc}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(m.savings)}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(m.loans)}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(m.shares)}</td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text">{formatCurrency(m.savings)}</td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text">{formatCurrency(m.loans)}</td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text">{formatCurrency(m.shares)}</td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="View profile"
+                          <button className="p-1.5 rounded-lg hover:dm-surface-hover" title="View profile"
                             onClick={(e) => { e.stopPropagation(); setSelectedMember(m.sv_number); setProfileOpen(true); }}>
-                            <Eye className="w-3.5 h-3.5 text-[#64748b]" />
+                            <Eye className="w-3.5 h-3.5 dm-text-secondary" />
                           </button>
-                          <button className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="Edit member"
+                          <button className="p-1.5 rounded-lg hover:dm-surface-hover" title="Edit member"
                             onClick={(e) => { e.stopPropagation(); openEdit(m); }}>
-                            <Edit2 className="w-3.5 h-3.5 text-[#64748b]" />
+                            <Edit2 className="w-3.5 h-3.5 dm-text-secondary" />
                           </button>
                         </div>
                       </td>
@@ -314,7 +314,7 @@ export default function AdminMembersPage() {
                   );
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-[#64748b]">No members found.</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-12 text-center text-sm dm-text-secondary">No members found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -323,16 +323,16 @@ export default function AdminMembersPage() {
 
         {/* Detail Panel */}
         {selected && !profileOpen && (
-          <div className="w-full lg:w-80 bg-white rounded-xl border border-[#e2e8f0] p-5 animate-fade-in flex-shrink-0">
+          <div className="w-full lg:w-80 dm-surface rounded-xl border dm-border p-5 animate-fade-in flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-[#1A1A1A]">Member Details</h3>
-              <button onClick={() => setSelectedMember(null)} className="text-xs text-[#64748b] hover:text-[#1A1A1A]">Close</button>
+              <h3 className="text-sm font-semibold dm-text">Member Details</h3>
+              <button onClick={() => setSelectedMember(null)} className="text-xs dm-text-secondary hover:dm-text">Close</button>
             </div>
             <div className="text-center mb-5">
               <div className="w-14 h-14 rounded-full bg-[#1A1A1A] flex items-center justify-center mx-auto mb-2">
                 <span className="text-white text-lg font-bold">{getInitials(selected.name)}</span>
               </div>
-              <h4 className="font-semibold text-[#1A1A1A]">{selected.name}</h4>
+              <h4 className="font-semibold dm-text">{selected.name}</h4>
               <p className="text-xs text-[#C0C0C0]">{selected.sv_number}</p>
               <span className={`${statusColors[selected.status]?.bg} ${statusColors[selected.status]?.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize mt-2 inline-block`}>
                 {selected.status}
@@ -342,11 +342,11 @@ export default function AdminMembersPage() {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs">
                 <Phone className="w-3.5 h-3.5 text-[#C0C0C0]" />
-                <span className="text-[#1A1A1A]">{selected.phone}</span>
+                <span className="dm-text">{selected.phone}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <Mail className="w-3.5 h-3.5 text-[#C0C0C0]" />
-                <span className="text-[#1A1A1A]">{selected.email}</span>
+                <span className="dm-text">{selected.email}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
                 <Shield className="w-3.5 h-3.5 text-[#C0C0C0]" />
@@ -359,24 +359,24 @@ export default function AdminMembersPage() {
                 )}
               </div>
 
-              <hr className="border-[#e2e8f0]" />
+              <hr className="dm-border" />
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Total Savings</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(selected.savings)}</p>
+                  <p className="text-[10px] dm-text-secondary">Total Savings</p>
+                  <p className="text-sm font-bold dm-text">{formatCurrency(selected.savings)}</p>
                 </div>
                 <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Active Loans</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(selected.loans)}</p>
+                  <p className="text-[10px] dm-text-secondary">Active Loans</p>
+                  <p className="text-sm font-bold dm-text">{formatCurrency(selected.loans)}</p>
                 </div>
                 <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Shares</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(selected.shares)}</p>
+                  <p className="text-[10px] dm-text-secondary">Shares</p>
+                  <p className="text-sm font-bold dm-text">{formatCurrency(selected.shares)}</p>
                 </div>
                 <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Joined</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatDate(selected.joined)}</p>
+                  <p className="text-[10px] dm-text-secondary">Joined</p>
+                  <p className="text-sm font-bold dm-text">{formatDate(selected.joined)}</p>
                 </div>
               </div>
 
@@ -388,7 +388,7 @@ export default function AdminMembersPage() {
                     View Full Profile
                   </button>
                   <button onClick={() => openEdit(selected)}
-                    className="flex-1 py-2 border border-[#e2e8f0] text-[#1A1A1A] rounded-lg text-xs font-medium hover:bg-[#f1f5f9] transition-colors">
+                    className="flex-1 py-2 border dm-border dm-text rounded-lg text-xs font-medium hover:dm-surface-hover transition-colors">
                     Edit
                   </button>
                 </div>
@@ -428,7 +428,7 @@ export default function AdminMembersPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setRegisterOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleRegister} disabled={!form.name || !form.phone}
@@ -450,7 +450,7 @@ export default function AdminMembersPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setEditOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleSaveEdit}
@@ -473,7 +473,7 @@ export default function AdminMembersPage() {
                 <span className="text-white text-2xl font-bold">{getInitials(selected.name)}</span>
               </div>
               <div className="flex-1">
-                <h3 className="text-xl font-bold text-[#1A1A1A]">{selected.name}</h3>
+                <h3 className="text-xl font-bold dm-text">{selected.name}</h3>
                 <p className="text-sm text-[#C0C0C0] mb-2">{selected.sv_number}</p>
                 <div className="flex gap-2 flex-wrap">
                   <span className={`${statusColors[selected.status]?.bg} ${statusColors[selected.status]?.text} px-3 py-1 rounded-full text-xs font-semibold capitalize`}>
@@ -486,7 +486,7 @@ export default function AdminMembersPage() {
                 </div>
               </div>
               <button onClick={() => { setProfileOpen(false); openEdit(selected); }}
-                className="px-4 py-2 border border-[#e2e8f0] rounded-xl text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors flex items-center gap-1.5">
+                className="px-4 py-2 border dm-border rounded-xl text-xs font-medium dm-text-secondary hover:dm-surface-hover transition-colors flex items-center gap-1.5">
                 <Edit2 className="w-3.5 h-3.5" /> Edit
               </button>
             </div>
@@ -498,8 +498,8 @@ export default function AdminMembersPage() {
                   <Phone className="w-5 h-5 text-[#4A90D9]" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Phone Number</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selected.phone}</p>
+                  <p className="text-[10px] dm-text-secondary">Phone Number</p>
+                  <p className="text-sm font-semibold dm-text">{selected.phone}</p>
                 </div>
               </div>
               <div className="bg-[#f8f9fa] rounded-xl p-4 flex items-center gap-3">
@@ -507,43 +507,43 @@ export default function AdminMembersPage() {
                   <Mail className="w-5 h-5 text-[#4A90D9]" />
                 </div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Email Address</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selected.email}</p>
+                  <p className="text-[10px] dm-text-secondary">Email Address</p>
+                  <p className="text-sm font-semibold dm-text">{selected.email}</p>
                 </div>
               </div>
             </div>
 
             {/* Financial Summary */}
             <div>
-              <h4 className="text-sm font-semibold text-[#1A1A1A] mb-3">Financial Summary</h4>
+              <h4 className="text-sm font-semibold dm-text mb-3">Financial Summary</h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
+                <div className="dm-surface rounded-xl p-4 border dm-border">
                   <div className="flex items-center gap-2 mb-2">
                     <PiggyBank className="w-4 h-4 text-[#22c55e]" />
-                    <span className="text-[10px] text-[#64748b]">Savings</span>
+                    <span className="text-[10px] dm-text-secondary">Savings</span>
                   </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(selected.savings)}</p>
+                  <p className="text-lg font-bold dm-text">{formatCurrency(selected.savings)}</p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
+                <div className="dm-surface rounded-xl p-4 border dm-border">
                   <div className="flex items-center gap-2 mb-2">
                     <CreditCard className="w-4 h-4 text-[#ef4444]" />
-                    <span className="text-[10px] text-[#64748b]">Loans</span>
+                    <span className="text-[10px] dm-text-secondary">Loans</span>
                   </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(selected.loans)}</p>
+                  <p className="text-lg font-bold dm-text">{formatCurrency(selected.loans)}</p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
+                <div className="dm-surface rounded-xl p-4 border dm-border">
                   <div className="flex items-center gap-2 mb-2">
                     <Users className="w-4 h-4 text-[#4A90D9]" />
-                    <span className="text-[10px] text-[#64748b]">Shares</span>
+                    <span className="text-[10px] dm-text-secondary">Shares</span>
                   </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(selected.shares)}</p>
+                  <p className="text-lg font-bold dm-text">{formatCurrency(selected.shares)}</p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
+                <div className="dm-surface rounded-xl p-4 border dm-border">
                   <div className="flex items-center gap-2 mb-2">
                     <Clock className="w-4 h-4 text-[#a855f7]" />
-                    <span className="text-[10px] text-[#64748b]">Member Since</span>
+                    <span className="text-[10px] dm-text-secondary">Member Since</span>
                   </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatDate(selected.joined)}</p>
+                  <p className="text-lg font-bold dm-text">{formatDate(selected.joined)}</p>
                 </div>
               </div>
             </div>
@@ -562,7 +562,7 @@ export default function AdminMembersPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setDeleteConfirmOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleDelete}
@@ -574,10 +574,10 @@ export default function AdminMembersPage() {
         <div className="flex items-start gap-3 p-3 bg-[#ef4444]/5 rounded-xl">
           <AlertTriangle className="w-5 h-5 text-[#ef4444] flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-[#1A1A1A]">
+            <p className="text-sm font-medium dm-text">
               Are you sure you want to remove <b>{selected?.name}</b> ({selected?.sv_number})?
             </p>
-            <p className="text-xs text-[#64748b] mt-1">This action can be reversed by re-registering the member. All balances will be reset.</p>
+            <p className="text-xs dm-text-secondary mt-1">This action can be reversed by re-registering the member. All balances will be reset.</p>
           </div>
         </div>
       </Modal>

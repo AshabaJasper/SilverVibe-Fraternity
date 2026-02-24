@@ -31,8 +31,8 @@ export default function SavingsPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Savings</h1>
-          <p className="text-[#64748b] text-sm">Manage and track all your savings accounts</p>
+          <h1 className="text-2xl font-bold dm-text">Savings</h1>
+          <p className="dm-text-secondary text-sm">Manage and track all your savings accounts</p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors">
           <Download className="w-4 h-4" /> Download Statement
@@ -44,18 +44,18 @@ export default function SavingsPage() {
         <div className="glass-card rounded-2xl p-5 animate-fade-in">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-9 h-9 rounded-xl bg-[#1A1A1A]/5 flex items-center justify-center">
-              <PiggyBank className="w-5 h-5 text-[#1A1A1A]" />
+              <PiggyBank className="w-5 h-5 dm-text" />
             </div>
-            <span className="text-sm text-[#64748b]">Total Savings</span>
+            <span className="text-sm dm-text-secondary">Total Savings</span>
           </div>
-          <p className="text-2xl font-bold text-[#1A1A1A]">{formatCurrency(totalSavings)}</p>
+          <p className="text-2xl font-bold dm-text">{formatCurrency(totalSavings)}</p>
         </div>
         <div className="glass-card rounded-2xl p-5 animate-fade-in stagger-1">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-9 h-9 rounded-xl bg-[#22c55e]/10 flex items-center justify-center">
               <Percent className="w-5 h-5 text-[#22c55e]" />
             </div>
-            <span className="text-sm text-[#64748b]">Accrued Interest</span>
+            <span className="text-sm dm-text-secondary">Accrued Interest</span>
           </div>
           <p className="text-2xl font-bold text-[#22c55e]">{formatCurrency(totalInterest)}</p>
         </div>
@@ -64,7 +64,7 @@ export default function SavingsPage() {
             <div className="w-9 h-9 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center">
               <TrendingUp className="w-5 h-5 text-[#4A90D9]" />
             </div>
-            <span className="text-sm text-[#64748b]">Active Accounts</span>
+            <span className="text-sm dm-text-secondary">Active Accounts</span>
           </div>
           <p className="text-2xl font-bold text-[#4A90D9]">{MEMBER_SAVINGS.length}</p>
         </div>
@@ -73,7 +73,7 @@ export default function SavingsPage() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 glass-card rounded-2xl p-6 animate-fade-in stagger-2">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4">Savings Growth (6 Months)</h3>
+          <h3 className="font-semibold dm-text mb-4">Savings Growth (6 Months)</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={SAVINGS_HISTORY}>
@@ -90,7 +90,7 @@ export default function SavingsPage() {
           </div>
         </div>
         <div className="glass-card rounded-2xl p-6 animate-fade-in stagger-3">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4">Distribution</h3>
+          <h3 className="font-semibold dm-text mb-4">Distribution</h3>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -109,9 +109,9 @@ export default function SavingsPage() {
               <div key={d.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                  <span className="text-[#64748b]">{d.name}</span>
+                  <span className="dm-text-secondary">{d.name}</span>
                 </div>
-                <span className="font-medium text-[#1A1A1A]">{formatCurrency(d.value)}</span>
+                <span className="font-medium dm-text">{formatCurrency(d.value)}</span>
               </div>
             ))}
           </div>
@@ -120,7 +120,7 @@ export default function SavingsPage() {
 
       {/* Account Cards */}
       <div>
-        <h3 className="font-semibold text-[#1A1A1A] mb-3">Your Accounts</h3>
+        <h3 className="font-semibold dm-text mb-3">Your Accounts</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {MEMBER_SAVINGS.map((acct) => (
             <button
@@ -136,16 +136,16 @@ export default function SavingsPage() {
                     <PiggyBank className="w-5 h-5" style={{ color: acct.color }} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#1A1A1A]">{acct.product.replace("SilverVibe ", "")}</p>
-                    <p className="text-xs text-[#64748b]">{acct.account_number}</p>
+                    <p className="text-sm font-medium dm-text">{acct.product.replace("SilverVibe ", "")}</p>
+                    <p className="text-xs dm-text-secondary">{acct.account_number}</p>
                   </div>
                 </div>
                 <span className="px-2 py-0.5 bg-[#22c55e]/10 text-[#22c55e] rounded-full text-xs font-medium">
                   {acct.status}
                 </span>
               </div>
-              <p className="text-2xl font-bold text-[#1A1A1A] mb-2">{formatCurrency(acct.balance)}</p>
-              <div className="flex flex-wrap gap-3 text-xs text-[#64748b]">
+              <p className="text-2xl font-bold dm-text mb-2">{formatCurrency(acct.balance)}</p>
+              <div className="flex flex-wrap gap-3 text-xs dm-text-secondary">
                 <span className="flex items-center gap-1">
                   <Eye className="w-3 h-3" /> Avail: {formatCurrency(acct.available_balance)}
                 </span>
@@ -171,7 +171,7 @@ export default function SavingsPage() {
       {/* Transaction History */}
       <div className="glass-card rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-[#1A1A1A]">
+          <h3 className="font-semibold dm-text">
             Transaction History {account ? `— ${account.product.replace("SilverVibe ", "")}` : ""}
           </h3>
           {selectedAccount && (
@@ -183,19 +183,19 @@ export default function SavingsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-[#e2e8f0]">
-                <th className="text-left py-3 px-2 text-[#64748b] font-medium">Date</th>
-                <th className="text-left py-3 px-2 text-[#64748b] font-medium">Type</th>
-                <th className="text-left py-3 px-2 text-[#64748b] font-medium">Account</th>
-                <th className="text-left py-3 px-2 text-[#64748b] font-medium">Channel</th>
-                <th className="text-right py-3 px-2 text-[#64748b] font-medium">Amount</th>
-                <th className="text-center py-3 px-2 text-[#64748b] font-medium">Status</th>
+              <tr className="border-b dm-border">
+                <th className="text-left py-3 px-2 dm-text-secondary font-medium">Date</th>
+                <th className="text-left py-3 px-2 dm-text-secondary font-medium">Type</th>
+                <th className="text-left py-3 px-2 dm-text-secondary font-medium">Account</th>
+                <th className="text-left py-3 px-2 dm-text-secondary font-medium">Channel</th>
+                <th className="text-right py-3 px-2 dm-text-secondary font-medium">Amount</th>
+                <th className="text-center py-3 px-2 dm-text-secondary font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {accountTxns.map((tx) => (
-                <tr key={tx.id} className="border-b border-[#e2e8f0]/50 hover:bg-[#f1f5f9]/50 transition-colors">
-                  <td className="py-3 px-2 text-[#1A1A1A]">{tx.date}</td>
+                <tr key={tx.id} className="border-b dm-border/50 hover:dm-surface-hover/50 transition-colors">
+                  <td className="py-3 px-2 dm-text">{tx.date}</td>
                   <td className="py-3 px-2">
                     <div className="flex items-center gap-2">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
@@ -210,8 +210,8 @@ export default function SavingsPage() {
                       {tx.type}
                     </div>
                   </td>
-                  <td className="py-3 px-2 text-[#64748b]">{tx.account}</td>
-                  <td className="py-3 px-2 text-[#64748b]">{tx.channel}</td>
+                  <td className="py-3 px-2 dm-text-secondary">{tx.account}</td>
+                  <td className="py-3 px-2 dm-text-secondary">{tx.channel}</td>
                   <td className={`py-3 px-2 text-right font-semibold ${
                     tx.direction === "credit" ? "text-[#22c55e]" : "text-[#ef4444]"
                   }`}>

@@ -24,22 +24,21 @@ function KPICard({
   icon: React.ElementType; color: string; suffix?: string; prefix?: string;
 }) {
   return (
-    <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-md transition-all animate-fade-in">
+    <div className="dm-surface rounded-xl p-5 border dm-border hover:shadow-md transition-all animate-fade-in">
       <div className="flex items-start justify-between mb-3">
         <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${color}12` }}>
           <Icon className="w-5 h-5" style={{ color }} />
         </div>
         {change !== undefined && (
-          <span className={`flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
-            change >= 0 ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#ef4444]/10 text-[#ef4444]"
-          }`}>
+          <span className={`flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full ${change >= 0 ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#ef4444]/10 text-[#ef4444]"
+            }`}>
             {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {Math.abs(change)}%
           </span>
         )}
       </div>
-      <p className="text-xs text-[#64748b] mb-1">{label}</p>
-      <p className="text-xl font-bold text-[#1A1A1A]">
+      <p className="text-xs dm-text-secondary mb-1">{label}</p>
+      <p className="text-xl font-bold dm-text">
         {prefix}{typeof value === "number" ? formatNumber(value) : value}{suffix}
       </p>
     </div>
@@ -53,8 +52,8 @@ export default function AdminDashboard() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Dashboard</h1>
-          <p className="text-[#64748b] text-sm">Welcome back, Sarah. Here&apos;s your SACCO overview.</p>
+          <h1 className="text-2xl font-bold dm-text">Dashboard</h1>
+          <p className="dm-text-secondary text-sm">Welcome back, Sarah. Here&apos;s your SACCO overview.</p>
         </div>
         <div className="flex gap-2">
           <Link href="/admin/members" className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors">
@@ -72,27 +71,27 @@ export default function AdminDashboard() {
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <KPICard label="Share Capital" value={formatCurrency(kpi.total_share_capital.value)} change={kpi.total_share_capital.change} icon={BarChart3} color="#a855f7" />
-        <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] animate-fade-in">
+        <div className="dm-surface rounded-xl p-5 border dm-border animate-fade-in">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/10 flex items-center justify-center">
               <Target className="w-5 h-5 text-[#f59e0b]" />
             </div>
             <span className="text-xs font-semibold text-[#f59e0b]">{kpi.monthly_collections.percent}%</span>
           </div>
-          <p className="text-xs text-[#64748b] mb-1">Monthly Collections vs Target</p>
-          <p className="text-xl font-bold text-[#1A1A1A] mb-2">{formatCurrency(kpi.monthly_collections.value)}</p>
+          <p className="text-xs dm-text-secondary mb-1">Monthly Collections vs Target</p>
+          <p className="text-xl font-bold dm-text mb-2">{formatCurrency(kpi.monthly_collections.value)}</p>
           <div className="w-full bg-[#e2e8f0] rounded-full h-2">
             <div className="bg-[#f59e0b] h-2 rounded-full" style={{ width: `${kpi.monthly_collections.percent}%` }} />
           </div>
-          <p className="text-xs text-[#64748b] mt-1">Target: {formatCurrency(kpi.monthly_collections.target)}</p>
+          <p className="text-xs dm-text-secondary mt-1">Target: {formatCurrency(kpi.monthly_collections.target)}</p>
         </div>
-        <div className="bg-white rounded-xl p-5 border border-[#e2e8f0] animate-fade-in">
+        <div className="dm-surface rounded-xl p-5 border dm-border animate-fade-in">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-xl bg-[#ef4444]/10 flex items-center justify-center">
               <Clock className="w-5 h-5 text-[#ef4444]" />
             </div>
           </div>
-          <p className="text-xs text-[#64748b] mb-1">Pending Approvals</p>
+          <p className="text-xs dm-text-secondary mb-1">Pending Approvals</p>
           <p className="text-3xl font-bold text-[#ef4444]">{kpi.pending_approvals.value}</p>
           <Link href="/admin/settings" className="text-xs text-[#4A90D9] hover:underline mt-2 inline-block">
             Review now →
@@ -103,8 +102,8 @@ export default function AdminDashboard() {
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Savings Growth */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0] animate-fade-in">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Savings Growth (12 Months)</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border animate-fade-in">
+          <h3 className="font-semibold dm-text mb-4 text-sm">Savings Growth (12 Months)</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={ADMIN_SAVINGS_GROWTH}>
@@ -120,8 +119,8 @@ export default function AdminDashboard() {
         </div>
 
         {/* Loan Performance */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0] animate-fade-in">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Loan Disbursement vs Recovery</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border animate-fade-in">
+          <h3 className="font-semibold dm-text mb-4 text-sm">Loan Disbursement vs Recovery</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ADMIN_LOAN_PERFORMANCE}>
@@ -141,8 +140,8 @@ export default function AdminDashboard() {
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Member Growth */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0] animate-fade-in">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Member Growth</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border animate-fade-in">
+          <h3 className="font-semibold dm-text mb-4 text-sm">Member Growth</h3>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={MEMBER_GROWTH}>
@@ -157,8 +156,8 @@ export default function AdminDashboard() {
         </div>
 
         {/* Product Distribution */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0] animate-fade-in">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Savings Product Distribution</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border animate-fade-in">
+          <h3 className="font-semibold dm-text mb-4 text-sm">Savings Product Distribution</h3>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -177,17 +176,17 @@ export default function AdminDashboard() {
               <div key={d.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span className="text-[#64748b]">{d.name}</span>
+                  <span className="dm-text-secondary">{d.name}</span>
                 </div>
-                <span className="font-medium text-[#1A1A1A]">{formatCurrency(d.value)}</span>
+                <span className="font-medium dm-text">{formatCurrency(d.value)}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Portfolio Quality */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0] animate-fade-in">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Loan Portfolio Quality</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border animate-fade-in">
+          <h3 className="font-semibold dm-text mb-4 text-sm">Loan Portfolio Quality</h3>
           <div className="space-y-3">
             {PORTFOLIO_QUALITY.map((pq) => {
               const colors: Record<string, string> = {
@@ -197,7 +196,7 @@ export default function AdminDashboard() {
               return (
                 <div key={pq.category}>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-[#64748b]">{pq.category}</span>
+                    <span className="dm-text-secondary">{pq.category}</span>
                     <span className="font-medium" style={{ color: colors[pq.category] }}>{pq.percent}%</span>
                   </div>
                   <div className="w-full bg-[#e2e8f0] rounded-full h-2">
@@ -207,9 +206,9 @@ export default function AdminDashboard() {
               );
             })}
           </div>
-          <div className="mt-4 p-3 bg-[#f1f5f9] rounded-lg">
-            <p className="text-xs text-[#64748b]">Total Loan Book</p>
-            <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(ADMIN_KPI.total_loan_book.value)}</p>
+          <div className="mt-4 p-3 dm-surface-hover rounded-lg">
+            <p className="text-xs dm-text-secondary">Total Loan Book</p>
+            <p className="text-sm font-bold dm-text">{formatCurrency(ADMIN_KPI.total_loan_book.value)}</p>
           </div>
         </div>
       </div>
@@ -217,27 +216,27 @@ export default function AdminDashboard() {
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-          <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Recent Activity</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border">
+          <h3 className="font-semibold dm-text mb-4 text-sm">Recent Activity</h3>
           <div className="space-y-3">
             {ADMIN_RECENT_ACTIVITY.map((act) => {
               const statusColors: Record<string, string> = {
                 posted: "#22c55e", pending: "#f59e0b", completed: "#4A90D9", approved: "#22c55e",
               };
               return (
-                <div key={act.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-[#f1f5f9] transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4 text-[#64748b]" />
+                <div key={act.id} className="flex items-start gap-3 p-3 rounded-lg hover:dm-surface-hover transition-colors">
+                  <div className="w-8 h-8 rounded-lg dm-surface-hover flex items-center justify-center flex-shrink-0">
+                    <Clock className="w-4 h-4 dm-text-secondary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-[#1A1A1A]">{act.action}</span>
+                      <span className="text-xs font-semibold dm-text">{act.action}</span>
                       <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium"
                         style={{ backgroundColor: `${statusColors[act.status]}15`, color: statusColors[act.status] }}>
                         {act.status}
                       </span>
                     </div>
-                    <p className="text-xs text-[#64748b] mt-0.5 truncate">{act.detail}</p>
+                    <p className="text-xs dm-text-secondary mt-0.5 truncate">{act.detail}</p>
                     <p className="text-[10px] text-[#C0C0C0] mt-0.5">{act.time}</p>
                   </div>
                 </div>
@@ -247,21 +246,21 @@ export default function AdminDashboard() {
         </div>
 
         {/* Pending Approvals */}
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
+        <div className="dm-surface rounded-xl p-6 border dm-border">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-[#1A1A1A] text-sm">Pending Approvals</h3>
+            <h3 className="font-semibold dm-text text-sm">Pending Approvals</h3>
             <span className="px-2 py-0.5 bg-[#ef4444]/10 text-[#ef4444] rounded-full text-xs font-semibold">
               {ADMIN_PENDING_APPROVALS.length}
             </span>
           </div>
           <div className="space-y-3">
             {ADMIN_PENDING_APPROVALS.map((pa) => (
-              <div key={pa.id} className="p-3 border border-[#e2e8f0] rounded-lg hover:border-[#4A90D9]/30 transition-colors">
+              <div key={pa.id} className="p-3 border dm-border rounded-lg hover:border-[#4A90D9]/30 transition-colors">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-xs font-semibold text-[#1A1A1A]">{pa.type}</p>
-                    <p className="text-xs text-[#64748b] mt-0.5">{pa.member}</p>
-                    {pa.amount && <p className="text-sm font-semibold text-[#1A1A1A] mt-1">{formatCurrency(pa.amount)}</p>}
+                    <p className="text-xs font-semibold dm-text">{pa.type}</p>
+                    <p className="text-xs dm-text-secondary mt-0.5">{pa.member}</p>
+                    {pa.amount && <p className="text-sm font-semibold dm-text mt-1">{formatCurrency(pa.amount)}</p>}
                   </div>
                   <div className="flex gap-1.5">
                     <button className="p-1.5 rounded-lg bg-[#22c55e]/10 hover:bg-[#22c55e]/20 transition-colors">
@@ -273,11 +272,10 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                    pa.priority === "high" ? "bg-[#ef4444]/10 text-[#ef4444]" :
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${pa.priority === "high" ? "bg-[#ef4444]/10 text-[#ef4444]" :
                     pa.priority === "medium" ? "bg-[#f59e0b]/10 text-[#f59e0b]" :
-                    "bg-[#64748b]/10 text-[#64748b]"
-                  }`}>{pa.priority}</span>
+                      "bg-[#64748b]/10 dm-text-secondary"
+                    }`}>{pa.priority}</span>
                   <span className="text-[10px] text-[#C0C0C0]">{pa.submitted}</span>
                 </div>
               </div>

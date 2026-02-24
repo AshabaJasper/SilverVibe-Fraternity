@@ -56,7 +56,7 @@ const SHARE_GROWTH = [
   { month: "Jan", shares: 22500 },
 ];
 
-const inputClass = "w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 text-[#1A1A1A]";
+const inputClass = "w-full px-4 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 dm-text";
 
 export default function AdminSharesPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "shareholders" | "dividends" | "investment-units">("overview");
@@ -114,12 +114,12 @@ export default function AdminSharesPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Shares & Dividends</h1>
-          <p className="text-[#64748b] text-sm">Manage share capital, dividends, and investment units</p>
+          <h1 className="text-2xl font-bold dm-text">Shares & Dividends</h1>
+          <p className="dm-text-secondary text-sm">Manage share capital, dividends, and investment units</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => { setConfigForm(shareConfig); setConfigOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
+            className="flex items-center gap-2 px-4 py-2.5 border dm-border dm-text rounded-xl text-sm font-medium hover:dm-surface-hover transition-colors">
             <Settings className="w-4 h-4" /> Configure
           </button>
           <button onClick={() => { setIssueForm({ member: "", sv: "", shares: 1 }); setIssueOpen(true); }}
@@ -129,11 +129,11 @@ export default function AdminSharesPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1 overflow-x-auto">
         {(["overview", "shareholders", "dividends", "investment-units"] as const).map((t) => (
           <button key={t} onClick={() => setActiveTab(t)}
             className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize whitespace-nowrap ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              activeTab === t ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{t.replace("-", " ")}</button>
         ))}
       </div>
@@ -141,33 +141,33 @@ export default function AdminSharesPage() {
       {activeTab === "overview" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#a855f7]/10 flex items-center justify-center mb-3"><BarChart3 className="w-5 h-5 text-[#a855f7]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Total Share Capital</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(totalCapital)}</p>
+              <p className="text-xs dm-text-secondary mb-1">Total Share Capital</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(totalCapital)}</p>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center mb-3"><FileText className="w-5 h-5 text-[#4A90D9]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Total Shares Issued</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatNumber(totalShares)}</p>
-              <span className="text-xs text-[#64748b]">@ {formatCurrency(shareConfig.shareValue)} each</span>
+              <p className="text-xs dm-text-secondary mb-1">Total Shares Issued</p>
+              <p className="text-xl font-bold dm-text">{formatNumber(totalShares)}</p>
+              <span className="text-xs dm-text-secondary">@ {formatCurrency(shareConfig.shareValue)} each</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center mb-3"><Users className="w-5 h-5 text-[#22c55e]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Shareholders</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{shareholders.length}</p>
+              <p className="text-xs dm-text-secondary mb-1">Shareholders</p>
+              <p className="text-xl font-bold dm-text">{shareholders.length}</p>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/10 flex items-center justify-center mb-3"><Award className="w-5 h-5 text-[#f59e0b]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Last Dividend Rate</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{shareConfig.dividendRate}%</p>
-              <span className="text-xs text-[#64748b]">FY 2023</span>
+              <p className="text-xs dm-text-secondary mb-1">Last Dividend Rate</p>
+              <p className="text-xl font-bold dm-text">{shareConfig.dividendRate}%</p>
+              <span className="text-xs dm-text-secondary">FY 2023</span>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Share Growth</h3>
+            <div className="dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Share Growth</h3>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={SHARE_GROWTH}>
@@ -180,8 +180,8 @@ export default function AdminSharesPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Dividend History</h3>
+            <div className="dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Dividend History</h3>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={DIVIDEND_HISTORY}>
@@ -198,27 +198,27 @@ export default function AdminSharesPage() {
           </div>
 
           {/* Investment Units */}
-          <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-            <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Investment Units (IU) Summary</h3>
+          <div className="dm-surface rounded-xl p-6 border dm-border">
+            <h3 className="font-semibold dm-text mb-4 text-sm">Investment Units (IU) Summary</h3>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="bg-[#f8f9fa] rounded-lg p-4">
-                <p className="text-xs text-[#64748b]">Total Units</p>
-                <p className="text-lg font-bold text-[#1A1A1A]">{formatNumber(IU_SUMMARY.totalUnits)}</p>
+                <p className="text-xs dm-text-secondary">Total Units</p>
+                <p className="text-lg font-bold dm-text">{formatNumber(IU_SUMMARY.totalUnits)}</p>
               </div>
               <div className="bg-[#f8f9fa] rounded-lg p-4">
-                <p className="text-xs text-[#64748b]">Unit Value</p>
-                <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(IU_SUMMARY.unitValue)}</p>
+                <p className="text-xs dm-text-secondary">Unit Value</p>
+                <p className="text-lg font-bold dm-text">{formatCurrency(IU_SUMMARY.unitValue)}</p>
               </div>
               <div className="bg-[#f8f9fa] rounded-lg p-4">
-                <p className="text-xs text-[#64748b]">Total Value</p>
-                <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(IU_SUMMARY.totalValue)}</p>
+                <p className="text-xs dm-text-secondary">Total Value</p>
+                <p className="text-lg font-bold dm-text">{formatCurrency(IU_SUMMARY.totalValue)}</p>
               </div>
               <div className="bg-[#f8f9fa] rounded-lg p-4">
-                <p className="text-xs text-[#64748b]">Holders</p>
-                <p className="text-lg font-bold text-[#1A1A1A]">{IU_SUMMARY.holders}</p>
+                <p className="text-xs dm-text-secondary">Holders</p>
+                <p className="text-lg font-bold dm-text">{IU_SUMMARY.holders}</p>
               </div>
               <div className="bg-[#f8f9fa] rounded-lg p-4">
-                <p className="text-xs text-[#64748b]">Expected Return</p>
+                <p className="text-xs dm-text-secondary">Expected Return</p>
                 <p className="text-lg font-bold text-[#22c55e]">{IU_SUMMARY.returnRate}%</p>
               </div>
             </div>
@@ -227,32 +227,32 @@ export default function AdminSharesPage() {
       )}
 
       {activeTab === "shareholders" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shares</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Value</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">% Holding</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Action</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Member</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Shares</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Value</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">% Holding</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {shareholders.sort((a, b) => b.shares - a.shares).map((s) => (
-                  <tr key={s.sv} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
+                  <tr key={s.sv} className="border-b dm-border hover:bg-[#f8f9fa]">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-[#1A1A1A]">{s.name}</p>
+                      <p className="text-sm font-medium dm-text">{s.name}</p>
                       <p className="text-[10px] text-[#C0C0C0]">{s.sv}</p>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-medium text-[#1A1A1A]">{s.shares}</td>
-                    <td className="px-4 py-3 text-right text-sm text-[#1A1A1A]">{formatCurrency(s.shares * shareConfig.shareValue)}</td>
-                    <td className="px-4 py-3 text-right text-sm text-[#64748b]">{((s.shares / totalShares) * 100).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-right text-sm font-medium dm-text">{s.shares}</td>
+                    <td className="px-4 py-3 text-right text-sm dm-text">{formatCurrency(s.shares * shareConfig.shareValue)}</td>
+                    <td className="px-4 py-3 text-right text-sm dm-text-secondary">{((s.shares / totalShares) * 100).toFixed(2)}%</td>
                     <td className="px-4 py-3 text-center">
                       <button onClick={() => setEditShareholder({ ...s })}
-                        className="p-1.5 rounded-lg border border-[#e2e8f0] hover:bg-[#f1f5f9] transition-colors">
-                        <Edit2 className="w-3.5 h-3.5 text-[#64748b]" />
+                        className="p-1.5 rounded-lg border dm-border hover:dm-surface-hover transition-colors">
+                        <Edit2 className="w-3.5 h-3.5 dm-text-secondary" />
                       </button>
                     </td>
                   </tr>
@@ -265,8 +265,8 @@ export default function AdminSharesPage() {
 
       {activeTab === "dividends" && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-            <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Dividend Declaration History</h3>
+          <div className="dm-surface rounded-xl p-6 border dm-border">
+            <h3 className="font-semibold dm-text mb-4 text-sm">Dividend Declaration History</h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={DIVIDEND_HISTORY}>
@@ -281,23 +281,23 @@ export default function AdminSharesPage() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+          <div className="dm-surface rounded-xl border dm-border overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Year</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Rate</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Total Paid</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shareholders</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Year</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Rate</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Total Paid</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Shareholders</th>
                 </tr>
               </thead>
               <tbody>
                 {DIVIDEND_HISTORY.map((d) => (
-                  <tr key={d.year} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
-                    <td className="px-4 py-3 text-sm font-medium text-[#1A1A1A]">FY {d.year}</td>
+                  <tr key={d.year} className="border-b dm-border hover:bg-[#f8f9fa]">
+                    <td className="px-4 py-3 text-sm font-medium dm-text">FY {d.year}</td>
                     <td className="px-4 py-3 text-center text-sm font-semibold text-[#22c55e]">{d.rate}%</td>
-                    <td className="px-4 py-3 text-right text-sm text-[#1A1A1A]">{formatCurrency(d.amount)}</td>
-                    <td className="px-4 py-3 text-right text-sm text-[#64748b]">{d.shareholders}</td>
+                    <td className="px-4 py-3 text-right text-sm dm-text">{formatCurrency(d.amount)}</td>
+                    <td className="px-4 py-3 text-right text-sm dm-text-secondary">{d.shareholders}</td>
                   </tr>
                 ))}
               </tbody>
@@ -309,64 +309,64 @@ export default function AdminSharesPage() {
       {activeTab === "investment-units" && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <DollarSign className="w-5 h-5 text-[#4A90D9] mb-2" />
-              <p className="text-xs text-[#64748b]">Total IU Value</p>
-              <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(IU_SUMMARY.totalValue)}</p>
+              <p className="text-xs dm-text-secondary">Total IU Value</p>
+              <p className="text-lg font-bold dm-text">{formatCurrency(IU_SUMMARY.totalValue)}</p>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <FileText className="w-5 h-5 text-[#a855f7] mb-2" />
-              <p className="text-xs text-[#64748b]">Units Outstanding</p>
-              <p className="text-lg font-bold text-[#1A1A1A]">{formatNumber(IU_SUMMARY.totalUnits)}</p>
+              <p className="text-xs dm-text-secondary">Units Outstanding</p>
+              <p className="text-lg font-bold dm-text">{formatNumber(IU_SUMMARY.totalUnits)}</p>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <Users className="w-5 h-5 text-[#22c55e] mb-2" />
-              <p className="text-xs text-[#64748b]">IU Holders</p>
-              <p className="text-lg font-bold text-[#1A1A1A]">{IU_SUMMARY.holders}</p>
+              <p className="text-xs dm-text-secondary">IU Holders</p>
+              <p className="text-lg font-bold dm-text">{IU_SUMMARY.holders}</p>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <TrendingUp className="w-5 h-5 text-[#f59e0b] mb-2" />
-              <p className="text-xs text-[#64748b]">Expected Return</p>
+              <p className="text-xs dm-text-secondary">Expected Return</p>
               <p className="text-lg font-bold text-[#22c55e]">{IU_SUMMARY.returnRate}% p.a.</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-            <h3 className="font-semibold text-[#1A1A1A] mb-3 text-sm">Investment Unit Details</h3>
+          <div className="dm-surface rounded-xl p-6 border dm-border">
+            <h3 className="font-semibold dm-text mb-3 text-sm">Investment Unit Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
-                <div className="flex justify-between py-2 border-b border-[#e2e8f0]">
-                  <span className="text-xs text-[#64748b]">Unit Face Value</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">{formatCurrency(50000)}</span>
+                <div className="flex justify-between py-2 border-b dm-border">
+                  <span className="text-xs dm-text-secondary">Unit Face Value</span>
+                  <span className="text-xs font-semibold dm-text">{formatCurrency(50000)}</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-[#e2e8f0]">
-                  <span className="text-xs text-[#64748b]">Minimum Purchase</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">5 units</span>
+                <div className="flex justify-between py-2 border-b dm-border">
+                  <span className="text-xs dm-text-secondary">Minimum Purchase</span>
+                  <span className="text-xs font-semibold dm-text">5 units</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-[#e2e8f0]">
-                  <span className="text-xs text-[#64748b]">Lock-in Period</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">12 months</span>
+                <div className="flex justify-between py-2 border-b dm-border">
+                  <span className="text-xs dm-text-secondary">Lock-in Period</span>
+                  <span className="text-xs font-semibold dm-text">12 months</span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-xs text-[#64748b]">Redemption Notice</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">30 days</span>
+                  <span className="text-xs dm-text-secondary">Redemption Notice</span>
+                  <span className="text-xs font-semibold dm-text">30 days</span>
                 </div>
               </div>
               <div className="space-y-3">
-                <div className="flex justify-between py-2 border-b border-[#e2e8f0]">
-                  <span className="text-xs text-[#64748b]">Interest Accrual</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">Monthly</span>
+                <div className="flex justify-between py-2 border-b dm-border">
+                  <span className="text-xs dm-text-secondary">Interest Accrual</span>
+                  <span className="text-xs font-semibold dm-text">Monthly</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-[#e2e8f0]">
-                  <span className="text-xs text-[#64748b]">Interest Payment</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">Quarterly</span>
+                <div className="flex justify-between py-2 border-b dm-border">
+                  <span className="text-xs dm-text-secondary">Interest Payment</span>
+                  <span className="text-xs font-semibold dm-text">Quarterly</span>
                 </div>
-                <div className="flex justify-between py-2 border-b border-[#e2e8f0]">
-                  <span className="text-xs text-[#64748b]">Transferable</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">Yes (with approval)</span>
+                <div className="flex justify-between py-2 border-b dm-border">
+                  <span className="text-xs dm-text-secondary">Transferable</span>
+                  <span className="text-xs font-semibold dm-text">Yes (with approval)</span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-xs text-[#64748b]">Use as Collateral</span>
-                  <span className="text-xs font-semibold text-[#1A1A1A]">Yes (up to 80%)</span>
+                  <span className="text-xs dm-text-secondary">Use as Collateral</span>
+                  <span className="text-xs font-semibold dm-text">Yes (up to 80%)</span>
                 </div>
               </div>
             </div>
@@ -379,7 +379,7 @@ export default function AdminSharesPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setIssueOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Cancel</button>
             <button onClick={handleIssueShares} disabled={!issueForm.member || !issueForm.sv || issueForm.shares < 1}
               className="px-5 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
               <Plus className="w-4 h-4" /> Issue Shares
@@ -388,20 +388,20 @@ export default function AdminSharesPage() {
         }>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Member Name *</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Member Name *</label>
             <input className={inputClass} value={issueForm.member} onChange={(e) => setIssueForm({ ...issueForm, member: e.target.value })} placeholder="e.g. James Mukasa" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">SV Number *</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">SV Number *</label>
             <input className={inputClass} value={issueForm.sv} onChange={(e) => setIssueForm({ ...issueForm, sv: e.target.value })} placeholder="e.g. SV-0042" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Number of Shares *</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Number of Shares *</label>
             <input className={inputClass} type="number" min={1} value={issueForm.shares} onChange={(e) => setIssueForm({ ...issueForm, shares: Number(e.target.value) })} />
           </div>
           <div className="bg-[#f8f9fa] rounded-xl p-4">
-            <p className="text-xs text-[#64748b] mb-1">Total Cost</p>
-            <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(issueForm.shares * shareConfig.shareValue)}</p>
+            <p className="text-xs dm-text-secondary mb-1">Total Cost</p>
+            <p className="text-lg font-bold dm-text">{formatCurrency(issueForm.shares * shareConfig.shareValue)}</p>
             <p className="text-[10px] text-[#C0C0C0]">{issueForm.shares} shares x {formatCurrency(shareConfig.shareValue)} per share</p>
           </div>
         </div>
@@ -412,7 +412,7 @@ export default function AdminSharesPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setConfigOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Cancel</button>
             <button onClick={handleSaveConfig}
               className="px-5 py-2.5 bg-[#4A90D9] text-white rounded-xl text-sm font-medium hover:bg-[#3a7bc8] transition-colors flex items-center gap-2">
               <Save className="w-4 h-4" /> Save Configuration
@@ -421,20 +421,20 @@ export default function AdminSharesPage() {
         }>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Share Value (UGX)</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Share Value (UGX)</label>
             <input className={inputClass} type="number" value={configForm.shareValue} onChange={(e) => setConfigForm({ ...configForm, shareValue: Number(e.target.value) })} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Dividend Rate (%)</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Dividend Rate (%)</label>
             <input className={inputClass} type="number" value={configForm.dividendRate} onChange={(e) => setConfigForm({ ...configForm, dividendRate: Number(e.target.value) })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Min Shares per Member</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Min Shares per Member</label>
               <input className={inputClass} type="number" value={configForm.minShares} onChange={(e) => setConfigForm({ ...configForm, minShares: Number(e.target.value) })} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Max Shares per Member</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Max Shares per Member</label>
               <input className={inputClass} type="number" value={configForm.maxShares} onChange={(e) => setConfigForm({ ...configForm, maxShares: Number(e.target.value) })} />
             </div>
           </div>
@@ -446,7 +446,7 @@ export default function AdminSharesPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setEditShareholder(null)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Cancel</button>
             <button onClick={handleEditShareholder}
               className="px-5 py-2.5 bg-[#4A90D9] text-white rounded-xl text-sm font-medium hover:bg-[#3a7bc8] transition-colors flex items-center gap-2">
               <Save className="w-4 h-4" /> Save Changes
@@ -456,15 +456,15 @@ export default function AdminSharesPage() {
         {editShareholder && (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Name</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Name</label>
               <input className={inputClass} value={editShareholder.name} onChange={(e) => setEditShareholder({ ...editShareholder, name: e.target.value })} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">SV Number</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">SV Number</label>
               <input className={`${inputClass} bg-[#f8f9fa] cursor-not-allowed`} value={editShareholder.sv} disabled />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Number of Shares</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Number of Shares</label>
               <input className={inputClass} type="number" value={editShareholder.shares}
                 onChange={(e) => setEditShareholder({ ...editShareholder, shares: Number(e.target.value), value: Number(e.target.value) * shareConfig.shareValue })} />
             </div>

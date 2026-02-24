@@ -30,7 +30,7 @@ const SMS_TEMPLATES = [
 const AUDIENCES = ["All Members", "Active Members", "Loan Borrowers", "Shareholders", "Dormant Members"];
 const CHANNELS = ["SMS", "Email", "Push", "SMS + Email", "Email + Push", "SMS + Email + Push"];
 
-const inputClass = "w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 text-[#1A1A1A]";
+const inputClass = "w-full px-4 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 dm-text";
 
 export default function AdminCommunicationsPage() {
   const [activeTab, setActiveTab] = useState<"announcements" | "compose" | "templates" | "history">("announcements");
@@ -93,8 +93,8 @@ export default function AdminCommunicationsPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Communications</h1>
-          <p className="text-[#64748b] text-sm">Send announcements, SMS, emails, and push notifications</p>
+          <h1 className="text-2xl font-bold dm-text">Communications</h1>
+          <p className="dm-text-secondary text-sm">Send announcements, SMS, emails, and push notifications</p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors"
           onClick={() => setActiveTab("compose")}>
@@ -102,35 +102,35 @@ export default function AdminCommunicationsPage() {
         </button>
       </div>
 
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1 overflow-x-auto">
         {(["announcements", "compose", "templates", "history"] as const).map((t) => (
           <button key={t} onClick={() => setActiveTab(t)}
             className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize whitespace-nowrap ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              activeTab === t ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{t}</button>
         ))}
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+        <div className="dm-surface rounded-xl p-5 border dm-border">
           <Send className="w-5 h-5 text-[#4A90D9] mb-2" />
-          <p className="text-xs text-[#64748b]">Messages Sent (MTD)</p>
-          <p className="text-xl font-bold text-[#1A1A1A]">1,247</p>
+          <p className="text-xs dm-text-secondary">Messages Sent (MTD)</p>
+          <p className="text-xl font-bold dm-text">1,247</p>
         </div>
-        <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+        <div className="dm-surface rounded-xl p-5 border dm-border">
           <MessageSquare className="w-5 h-5 text-[#22c55e] mb-2" />
-          <p className="text-xs text-[#64748b]">SMS Credits</p>
+          <p className="text-xs dm-text-secondary">SMS Credits</p>
           <p className="text-xl font-bold text-[#22c55e]">8,450</p>
         </div>
-        <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+        <div className="dm-surface rounded-xl p-5 border dm-border">
           <Eye className="w-5 h-5 text-[#a855f7] mb-2" />
-          <p className="text-xs text-[#64748b]">Avg Open Rate</p>
-          <p className="text-xl font-bold text-[#1A1A1A]">78.5%</p>
+          <p className="text-xs dm-text-secondary">Avg Open Rate</p>
+          <p className="text-xl font-bold dm-text">78.5%</p>
         </div>
-        <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+        <div className="dm-surface rounded-xl p-5 border dm-border">
           <Clock className="w-5 h-5 text-[#f59e0b] mb-2" />
-          <p className="text-xs text-[#64748b]">Scheduled</p>
+          <p className="text-xs dm-text-secondary">Scheduled</p>
           <p className="text-xl font-bold text-[#f59e0b]">3</p>
         </div>
       </div>
@@ -138,19 +138,19 @@ export default function AdminCommunicationsPage() {
       {activeTab === "announcements" && (
         <div className="space-y-4">
           {announcements.map((a) => (
-            <div key={a.id} className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-sm transition-all">
+            <div key={a.id} className="dm-surface rounded-xl p-5 border dm-border hover:shadow-sm transition-all">
               <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-[#1A1A1A]">{a.title}</h3>
+                    <h3 className="font-semibold dm-text">{a.title}</h3>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
                       a.status === "sent" ? "bg-[#22c55e]/10 text-[#22c55e]" :
-                      a.status === "draft" ? "bg-[#64748b]/10 text-[#64748b]" :
+                      a.status === "draft" ? "bg-[#64748b]/10 dm-text-secondary" :
                       "bg-[#f59e0b]/10 text-[#f59e0b]"
                     }`}>{a.status}</span>
                   </div>
-                  <p className="text-xs text-[#64748b] mb-3">{a.content}</p>
-                  <div className="flex flex-wrap gap-3 text-xs text-[#64748b]">
+                  <p className="text-xs dm-text-secondary mb-3">{a.content}</p>
+                  <div className="flex flex-wrap gap-3 text-xs dm-text-secondary">
                     <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {a.audience}</span>
                     <span className="flex items-center gap-1"><Send className="w-3 h-3" /> {a.channel}</span>
                     {a.sentDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {a.sentDate}</span>}
@@ -165,11 +165,11 @@ export default function AdminCommunicationsPage() {
                     </button>
                   )}
                   <button onClick={() => openEdit(a)}
-                    className="p-1.5 rounded-lg border border-[#e2e8f0] hover:bg-[#f1f5f9]">
-                    <Edit2 className="w-3.5 h-3.5 text-[#64748b]" />
+                    className="p-1.5 rounded-lg border dm-border hover:dm-surface-hover">
+                    <Edit2 className="w-3.5 h-3.5 dm-text-secondary" />
                   </button>
                   <button onClick={() => { setSelected(a); setDeleteOpen(true); }}
-                    className="p-1.5 rounded-lg border border-[#e2e8f0] hover:bg-[#ef4444]/5">
+                    className="p-1.5 rounded-lg border dm-border hover:bg-[#ef4444]/5">
                     <Trash2 className="w-3.5 h-3.5 text-[#ef4444]" />
                   </button>
                 </div>
@@ -180,14 +180,14 @@ export default function AdminCommunicationsPage() {
       )}
 
       {activeTab === "compose" && (
-        <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-          <h3 className="font-semibold text-[#1A1A1A] mb-5">Compose Message</h3>
+        <div className="dm-surface rounded-xl p-6 border dm-border">
+          <h3 className="font-semibold dm-text mb-5">Compose Message</h3>
           <div className="space-y-4">
             <div className="flex gap-2">
               {(["sms", "email", "push"] as const).map((c) => (
                 <button key={c} onClick={() => setComposeType(c)}
                   className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-                    composeType === c ? "bg-[#1A1A1A] text-white" : "bg-[#f1f5f9] text-[#64748b] hover:text-[#1A1A1A]"
+                    composeType === c ? "bg-[#1A1A1A] text-white" : "dm-surface-hover dm-text-secondary hover:dm-text"
                   }`}>
                   {c === "sms" ? <MessageSquare className="w-3 h-3 inline mr-1" /> :
                    c === "email" ? <Mail className="w-3 h-3 inline mr-1" /> :
@@ -197,8 +197,8 @@ export default function AdminCommunicationsPage() {
               ))}
             </div>
             <div>
-              <label className="text-xs font-medium text-[#1A1A1A] mb-1.5 block">Recipients</label>
-              <select className="w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20"
+              <label className="text-xs font-medium dm-text mb-1.5 block">Recipients</label>
+              <select className="w-full px-4 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20"
                 value={composeForm.recipients} onChange={(e) => setComposeForm({ ...composeForm, recipients: e.target.value })}>
                 <option>All Members (342)</option>
                 <option>Active Members (310)</option>
@@ -209,26 +209,26 @@ export default function AdminCommunicationsPage() {
             </div>
             {composeType === "email" && (
               <div>
-                <label className="text-xs font-medium text-[#1A1A1A] mb-1.5 block">Subject</label>
+                <label className="text-xs font-medium dm-text mb-1.5 block">Subject</label>
                 <input type="text" placeholder="Enter email subject..." value={composeForm.subject}
                   onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20" />
+                  className="w-full px-4 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20" />
               </div>
             )}
             <div>
-              <label className="text-xs font-medium text-[#1A1A1A] mb-1.5 block">Message</label>
+              <label className="text-xs font-medium dm-text mb-1.5 block">Message</label>
               <textarea rows={composeType === "sms" ? 3 : 6} placeholder={composeType === "sms" ? "Type your SMS (max 160 chars)..." : "Type your message..."}
                 value={composeForm.message} onChange={(e) => setComposeForm({ ...composeForm, message: e.target.value })}
-                className="w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 resize-none" />
+                className="w-full px-4 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 resize-none" />
               {composeType === "sms" && <p className="text-[10px] text-[#C0C0C0] mt-1">{composeForm.message.length}/160 characters</p>}
             </div>
             <div>
-              <label className="text-xs font-medium text-[#1A1A1A] mb-1.5 block">Schedule</label>
+              <label className="text-xs font-medium dm-text mb-1.5 block">Schedule</label>
               <div className="flex gap-3">
-                <label className="flex items-center gap-2 text-xs text-[#64748b]">
+                <label className="flex items-center gap-2 text-xs dm-text-secondary">
                   <input type="radio" name="schedule" defaultChecked className="accent-[#1A1A1A]" /> Send immediately
                 </label>
-                <label className="flex items-center gap-2 text-xs text-[#64748b]">
+                <label className="flex items-center gap-2 text-xs dm-text-secondary">
                   <input type="radio" name="schedule" className="accent-[#1A1A1A]" /> Schedule for later
                 </label>
               </div>
@@ -250,7 +250,7 @@ export default function AdminCommunicationsPage() {
                 setComposeForm({ recipients: "All Members (342)", subject: "", message: "" });
                 setActiveTab("announcements");
               }}
-                className="px-6 py-2.5 border border-[#e2e8f0] text-[#64748b] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
+                className="px-6 py-2.5 border dm-border dm-text-secondary rounded-xl text-sm font-medium hover:dm-surface-hover transition-colors">
                 Save as Draft
               </button>
             </div>
@@ -261,14 +261,14 @@ export default function AdminCommunicationsPage() {
       {activeTab === "templates" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {SMS_TEMPLATES.map((t) => (
-            <div key={t.name} className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-2 text-sm">{t.name}</h3>
-              <p className="text-xs text-[#64748b] bg-[#f8f9fa] rounded-lg p-3 font-mono">{t.template}</p>
+            <div key={t.name} className="dm-surface rounded-xl p-5 border dm-border">
+              <h3 className="font-semibold dm-text mb-2 text-sm">{t.name}</h3>
+              <p className="text-xs dm-text-secondary bg-[#f8f9fa] rounded-lg p-3 font-mono">{t.template}</p>
               <div className="flex gap-2 mt-3">
                 <button className="px-3 py-1.5 bg-[#4A90D9] text-white rounded-lg text-xs font-medium hover:bg-[#3a7bc8] transition-colors">
                   Use Template
                 </button>
-                <button className="px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+                <button className="px-3 py-1.5 border dm-border rounded-lg text-xs font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
                   Edit
                 </button>
               </div>
@@ -278,18 +278,18 @@ export default function AdminCommunicationsPage() {
       )}
 
       {activeTab === "history" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Type</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Subject</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Recipients</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Delivered</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Failed</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Type</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Subject</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Recipients</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Delivered</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Failed</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -300,11 +300,11 @@ export default function AdminCommunicationsPage() {
                   { date: "2025-01-08", type: "SMS", subject: "New Loan Product Launch", recipients: 310, delivered: 245, failed: 65, status: "completed" },
                   { date: "2025-01-05", type: "Push", subject: "System Maintenance", recipients: 256, delivered: 189, failed: 67, status: "completed" },
                 ].map((h, i) => (
-                  <tr key={i} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
-                    <td className="px-4 py-3 text-xs text-[#64748b]">{h.date}</td>
-                    <td className="px-4 py-3 text-xs font-medium text-[#1A1A1A]">{h.type}</td>
-                    <td className="px-4 py-3 text-xs text-[#1A1A1A]">{h.subject}</td>
-                    <td className="px-4 py-3 text-right text-xs text-[#1A1A1A]">{h.recipients}</td>
+                  <tr key={i} className="border-b dm-border hover:bg-[#f8f9fa]">
+                    <td className="px-4 py-3 text-xs dm-text-secondary">{h.date}</td>
+                    <td className="px-4 py-3 text-xs font-medium dm-text">{h.type}</td>
+                    <td className="px-4 py-3 text-xs dm-text">{h.subject}</td>
+                    <td className="px-4 py-3 text-right text-xs dm-text">{h.recipients}</td>
                     <td className="px-4 py-3 text-right text-xs text-[#22c55e]">{h.delivered}</td>
                     <td className="px-4 py-3 text-right text-xs text-[#ef4444]">{h.failed}</td>
                     <td className="px-4 py-3">
@@ -323,7 +323,7 @@ export default function AdminCommunicationsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setEditOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Cancel</button>
             <button onClick={handleSave} disabled={!editForm.title}
               className="px-5 py-2.5 bg-[#4A90D9] text-white rounded-xl text-sm font-medium hover:bg-[#3a7bc8] transition-colors disabled:opacity-40 flex items-center gap-2">
               <Save className="w-4 h-4" /> Save Changes
@@ -332,22 +332,22 @@ export default function AdminCommunicationsPage() {
         }>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Title</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Title</label>
             <input className={inputClass} value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Content</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Content</label>
             <textarea className={`${inputClass} resize-none`} rows={4} value={editForm.content} onChange={(e) => setEditForm({ ...editForm, content: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Audience</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Audience</label>
               <select className={inputClass} value={editForm.audience} onChange={(e) => setEditForm({ ...editForm, audience: e.target.value })}>
                 {AUDIENCES.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Channel</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Channel</label>
               <select className={inputClass} value={editForm.channel} onChange={(e) => setEditForm({ ...editForm, channel: e.target.value })}>
                 {CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -361,7 +361,7 @@ export default function AdminCommunicationsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setDeleteOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">Cancel</button>
             <button onClick={handleDelete}
               className="px-5 py-2.5 bg-[#ef4444] text-white rounded-xl text-sm font-medium hover:bg-[#dc2626] transition-colors flex items-center gap-2">
               <Trash2 className="w-4 h-4" /> Delete
@@ -372,8 +372,8 @@ export default function AdminCommunicationsPage() {
           <div className="w-12 h-12 bg-[#ef4444]/10 rounded-full flex items-center justify-center mx-auto mb-3">
             <Trash2 className="w-6 h-6 text-[#ef4444]" />
           </div>
-          <p className="text-sm text-[#1A1A1A] font-medium mb-1">Are you sure?</p>
-          <p className="text-xs text-[#64748b]">This will permanently delete &quot;{selected?.title}&quot;.</p>
+          <p className="text-sm dm-text font-medium mb-1">Are you sure?</p>
+          <p className="text-xs dm-text-secondary">This will permanently delete &quot;{selected?.title}&quot;.</p>
         </div>
       </Modal>
     </div>

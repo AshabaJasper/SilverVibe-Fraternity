@@ -79,17 +79,17 @@ export default function AdminSavingsPage() {
   };
 
   const inputClass =
-    "w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
+    "w-full px-3 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Savings Management</h1>
-          <p className="text-[#64748b] text-sm">Manage savings products, process transactions, and monitor growth</p>
+          <h1 className="text-2xl font-bold dm-text">Savings Management</h1>
+          <p className="dm-text-secondary text-sm">Manage savings products, process transactions, and monitor growth</p>
         </div>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2.5 border dm-border dm-text rounded-xl text-sm font-medium hover:dm-surface-hover transition-colors">
             <Download className="w-4 h-4" /> Export
           </button>
           <button onClick={() => setNewTxnOpen(true)}
@@ -100,11 +100,11 @@ export default function AdminSavingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1">
         {(["overview", "products", "transactions"] as const).map((t) => (
           <button key={t} onClick={() => setActiveTab(t)}
             className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              activeTab === t ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{t}</button>
         ))}
       </div>
@@ -113,46 +113,46 @@ export default function AdminSavingsPage() {
         <>
           {/* KPI Row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center mb-3">
                 <PiggyBank className="w-5 h-5 text-[#22c55e]" />
               </div>
-              <p className="text-xs text-[#64748b] mb-1">Total Savings Balance</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(ADMIN_KPI.total_savings.value)}</p>
+              <p className="text-xs dm-text-secondary mb-1">Total Savings Balance</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(ADMIN_KPI.total_savings.value)}</p>
               <span className="text-xs text-[#22c55e] flex items-center gap-0.5 mt-1">
                 <TrendingUp className="w-3 h-3" /> {ADMIN_KPI.total_savings.change}% growth
               </span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center mb-3">
                 <ArrowUpRight className="w-5 h-5 text-[#4A90D9]" />
               </div>
-              <p className="text-xs text-[#64748b] mb-1">Deposits This Month</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(45000000)}</p>
-              <span className="text-xs text-[#64748b] mt-1">186 transactions</span>
+              <p className="text-xs dm-text-secondary mb-1">Deposits This Month</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(45000000)}</p>
+              <span className="text-xs dm-text-secondary mt-1">186 transactions</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/10 flex items-center justify-center mb-3">
                 <ArrowDownRight className="w-5 h-5 text-[#f59e0b]" />
               </div>
-              <p className="text-xs text-[#64748b] mb-1">Withdrawals This Month</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(12000000)}</p>
-              <span className="text-xs text-[#64748b] mt-1">43 transactions</span>
+              <p className="text-xs dm-text-secondary mb-1">Withdrawals This Month</p>
+              <p className="text-xl font-bold dm-text">{formatCurrency(12000000)}</p>
+              <span className="text-xs dm-text-secondary mt-1">43 transactions</span>
             </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
+            <div className="dm-surface rounded-xl p-5 border dm-border">
               <div className="w-10 h-10 rounded-xl bg-[#a855f7]/10 flex items-center justify-center mb-3">
                 <Percent className="w-5 h-5 text-[#a855f7]" />
               </div>
-              <p className="text-xs text-[#64748b] mb-1">Average Interest Rate</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">5.6%</p>
-              <span className="text-xs text-[#64748b] mt-1">Across all products</span>
+              <p className="text-xs dm-text-secondary mb-1">Average Interest Rate</p>
+              <p className="text-xl font-bold dm-text">5.6%</p>
+              <span className="text-xs dm-text-secondary mt-1">Across all products</span>
             </div>
           </div>
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Savings Growth Trend</h3>
+            <div className="lg:col-span-2 dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Savings Growth Trend</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={ADMIN_SAVINGS_GROWTH}>
@@ -166,8 +166,8 @@ export default function AdminSavingsPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Product Distribution</h3>
+            <div className="dm-surface rounded-xl p-6 border dm-border">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Product Distribution</h3>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -184,9 +184,9 @@ export default function AdminSavingsPage() {
                   <div key={d.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                      <span className="text-[#64748b]">{d.name}</span>
+                      <span className="dm-text-secondary">{d.name}</span>
                     </div>
-                    <span className="font-medium text-[#1A1A1A]">{formatCurrency(d.value)}</span>
+                    <span className="font-medium dm-text">{formatCurrency(d.value)}</span>
                   </div>
                 ))}
               </div>
@@ -198,34 +198,34 @@ export default function AdminSavingsPage() {
       {activeTab === "products" && (
         <div className="space-y-4">
           {products.map((p) => (
-            <div key={p.code} className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-sm transition-all">
+            <div key={p.code} className="dm-surface rounded-xl p-5 border dm-border hover:shadow-sm transition-all">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-[#1A1A1A]">{p.name}</h3>
+                    <h3 className="font-semibold dm-text">{p.name}</h3>
                     <span className="text-[10px] font-mono text-[#C0C0C0]">{p.code}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
-                      p.status === "active" ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#64748b]/10 text-[#64748b]"
+                      p.status === "active" ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#64748b]/10 dm-text-secondary"
                     }`}>{p.status}</span>
                   </div>
-                  <p className="text-xs text-[#64748b] mb-3">{p.description}</p>
+                  <p className="text-xs dm-text-secondary mb-3">{p.description}</p>
                   <div className="flex flex-wrap gap-4">
-                    <div className="flex items-center gap-1.5 text-xs text-[#64748b]">
-                      <Percent className="w-3.5 h-3.5" /> Interest: <span className="font-semibold text-[#1A1A1A]">{p.rate}</span>
+                    <div className="flex items-center gap-1.5 text-xs dm-text-secondary">
+                      <Percent className="w-3.5 h-3.5" /> Interest: <span className="font-semibold dm-text">{p.rate}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#64748b]">
-                      <CreditCard className="w-3.5 h-3.5" /> Min: <span className="font-semibold text-[#1A1A1A]">{formatCurrency(p.min)}</span>
+                    <div className="flex items-center gap-1.5 text-xs dm-text-secondary">
+                      <CreditCard className="w-3.5 h-3.5" /> Min: <span className="font-semibold dm-text">{formatCurrency(p.min)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#64748b]">
-                      <Users className="w-3.5 h-3.5" /> Members: <span className="font-semibold text-[#1A1A1A]">{p.members}</span>
+                    <div className="flex items-center gap-1.5 text-xs dm-text-secondary">
+                      <Users className="w-3.5 h-3.5" /> Members: <span className="font-semibold dm-text">{p.members}</span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-[#64748b]">Total Balance</p>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(p.balance)}</p>
+                  <p className="text-xs dm-text-secondary">Total Balance</p>
+                  <p className="text-lg font-bold dm-text">{formatCurrency(p.balance)}</p>
                   <button onClick={() => { setProductForm({ ...p }); setConfigureOpen(true); }}
-                    className="mt-2 px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+                    className="mt-2 px-3 py-1.5 border dm-border rounded-lg text-xs font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
                     <Settings2 className="w-3 h-3 inline mr-1" /> Configure
                   </button>
                 </div>
@@ -236,20 +236,20 @@ export default function AdminSavingsPage() {
       )}
 
       {activeTab === "transactions" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Ref</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Type</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Product</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Amount</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Channel</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Date</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Action</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Ref</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Member</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Type</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Product</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold dm-text-secondary">Amount</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Channel</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Date</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -262,17 +262,17 @@ export default function AdminSavingsPage() {
                   };
                   const sc = statusColors[t.status] || statusColors.posted;
                   return (
-                    <tr key={t.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors">
+                    <tr key={t.id} className="border-b dm-border hover:bg-[#f8f9fa] transition-colors">
                       <td className="px-4 py-3 text-xs font-mono text-[#C0C0C0]">{t.id}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{t.member}</td>
+                      <td className="px-4 py-3 text-xs dm-text">{t.member}</td>
                       <td className={`px-4 py-3 text-xs font-semibold ${typeColors[t.type]}`}>{t.type}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{t.product}</td>
-                      <td className="px-4 py-3 text-xs text-right font-medium text-[#1A1A1A]">{formatCurrency(t.amount)}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{t.channel}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{t.product}</td>
+                      <td className="px-4 py-3 text-xs text-right font-medium dm-text">{formatCurrency(t.amount)}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{t.channel}</td>
                       <td className="px-4 py-3">
                         <span className={`${sc.bg} ${sc.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>{t.status}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{t.date}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{t.date}</td>
                       <td className="px-4 py-3 text-center">
                         {t.status === "pending" && (
                           <button onClick={() => {
@@ -297,7 +297,7 @@ export default function AdminSavingsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setNewTxnOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleNewTxn} disabled={!txnForm.member || !txnForm.amount}
@@ -309,11 +309,11 @@ export default function AdminSavingsPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Member (SV Number) *</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Member (SV Number) *</label>
               <input className={inputClass} value={txnForm.member} onChange={(e) => setTxnForm({ ...txnForm, member: e.target.value })} placeholder="e.g. James Mukasa (SV-0042)" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Transaction Type</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Transaction Type</label>
               <select className={inputClass} value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value })}>
                 <option value="Deposit">Deposit</option>
                 <option value="Withdrawal">Withdrawal</option>
@@ -323,7 +323,7 @@ export default function AdminSavingsPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Product</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Product</label>
               <select className={inputClass} value={txnForm.product} onChange={(e) => setTxnForm({ ...txnForm, product: e.target.value })}>
                 {products.filter((p) => p.status === "active").map((p) => (
                   <option key={p.code} value={p.name}>{p.name}</option>
@@ -331,12 +331,12 @@ export default function AdminSavingsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Amount (UGX) *</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Amount (UGX) *</label>
               <input className={inputClass} type="number" value={txnForm.amount || ""} onChange={(e) => setTxnForm({ ...txnForm, amount: Number(e.target.value) })} placeholder="0" />
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Channel</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Channel</label>
             <select className={inputClass} value={txnForm.channel} onChange={(e) => setTxnForm({ ...txnForm, channel: e.target.value })}>
               <option value="Mobile Money">Mobile Money</option>
               <option value="Bank Transfer">Bank Transfer</option>
@@ -352,7 +352,7 @@ export default function AdminSavingsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setConfigureOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleSaveProduct}
@@ -364,25 +364,25 @@ export default function AdminSavingsPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Product Name</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Product Name</label>
               <input className={inputClass} value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Product Code</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Product Code</label>
               <input className={`${inputClass} bg-[#f8f9fa] cursor-not-allowed`} value={productForm.code} disabled />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Interest Rate</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Interest Rate</label>
               <input className={inputClass} value={productForm.rate} onChange={(e) => setProductForm({ ...productForm, rate: e.target.value })} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Minimum Balance (UGX)</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Minimum Balance (UGX)</label>
               <input className={inputClass} type="number" value={productForm.min} onChange={(e) => setProductForm({ ...productForm, min: Number(e.target.value) })} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Status</label>
+              <label className="block text-xs font-medium dm-text-secondary mb-1.5">Status</label>
               <select className={inputClass} value={productForm.status} onChange={(e) => setProductForm({ ...productForm, status: e.target.value })}>
                 <option value="active">Active</option>
                 <option value="draft">Draft</option>
@@ -391,7 +391,7 @@ export default function AdminSavingsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Description</label>
+            <label className="block text-xs font-medium dm-text-secondary mb-1.5">Description</label>
             <textarea className={`${inputClass} resize-none`} rows={3} value={productForm.description}
               onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
           </div>

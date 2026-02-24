@@ -127,8 +127,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group",
                   active
-                    ? "bg-white/10 text-white"
-                    : "text-[#C0C0C0]/50 hover:text-white hover:bg-white/5"
+                    ? "dm-surface/10 text-white"
+                    : "text-[#C0C0C0]/50 hover:text-white hover:dm-surface/5"
                 )}
               >
                 <Icon className={cn("w-[18px] h-[18px]", active ? "text-white" : "text-[#C0C0C0]/40 group-hover:text-[#C0C0C0]")} />

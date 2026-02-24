@@ -102,7 +102,7 @@ export default function AdminSettingsPage() {
   };
 
   const inputClass =
-    "w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
+    "w-full px-3 py-2.5 border dm-border rounded-xl text-sm dm-surface focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
 
   const settingSections: SettingsSection[] = [
     {
@@ -148,11 +148,11 @@ export default function AdminSettingsPage() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-[#64748b] mb-1.5">Full Name *</label>
+          <label className="block text-xs font-medium dm-text-secondary mb-1.5">Full Name *</label>
           <input className={inputClass} value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} placeholder="e.g. John Mugisha" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-[#64748b] mb-1.5">Email *</label>
+          <label className="block text-xs font-medium dm-text-secondary mb-1.5">Email *</label>
           <input className={inputClass} type="email" value={userForm.email}
             onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
             placeholder="user@silvervibe.coop" disabled={editUserOpen} />
@@ -160,13 +160,13 @@ export default function AdminSettingsPage() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-[#64748b] mb-1.5">Role</label>
+          <label className="block text-xs font-medium dm-text-secondary mb-1.5">Role</label>
           <select className={inputClass} value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
             {ROLES.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-[#64748b] mb-1.5">Status</label>
+          <label className="block text-xs font-medium dm-text-secondary mb-1.5">Status</label>
           <select className={inputClass} value={userForm.status} onChange={(e) => setUserForm({ ...userForm, status: e.target.value })}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
@@ -176,9 +176,9 @@ export default function AdminSettingsPage() {
       <div className="flex items-center gap-3">
         <label className="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" checked={userForm.twoFactor} onChange={(e) => setUserForm({ ...userForm, twoFactor: e.target.checked })} className="sr-only peer" />
-          <div className="w-9 h-5 bg-[#e2e8f0] peer-focus:ring-2 peer-focus:ring-[#4A90D9]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#e2e8f0] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#4A90D9]"></div>
+          <div className="w-9 h-5 bg-[#e2e8f0] peer-focus:ring-2 peer-focus:ring-[#4A90D9]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:dm-surface after:dm-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#4A90D9]"></div>
         </label>
-        <span className="text-xs text-[#64748b]">Enable Two-Factor Authentication</span>
+        <span className="text-xs dm-text-secondary">Enable Two-Factor Authentication</span>
       </div>
     </div>
   );
@@ -187,16 +187,16 @@ export default function AdminSettingsPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Settings</h1>
-          <p className="text-[#64748b] text-sm">System configuration, users, roles, and audit logs</p>
+          <h1 className="text-2xl font-bold dm-text">Settings</h1>
+          <p className="dm-text-secondary text-sm">System configuration, users, roles, and audit logs</p>
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 dm-surface-hover rounded-xl p-1 overflow-x-auto">
         {(["users", "roles", "audit", "system"] as const).map((t) => (
           <button key={t} onClick={() => setActiveTab(t)}
             className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize whitespace-nowrap ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
+              activeTab === t ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
             }`}>{t === "audit" ? "Audit Log" : t === "system" ? "System" : t}</button>
         ))}
       </div>
@@ -209,37 +209,37 @@ export default function AdminSettingsPage() {
               <Plus className="w-4 h-4" /> Add User
             </button>
           </div>
-          <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+          <div className="dm-surface rounded-xl border dm-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">User</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Role</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">2FA</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Last Login</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
+                  <tr className="bg-[#f8f9fa] border-b dm-border">
+                    <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">User</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Role</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">2FA</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Last Login</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold dm-text-secondary">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u) => (
-                    <tr key={u.email} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
+                    <tr key={u.email} className="border-b dm-border hover:bg-[#f8f9fa]">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center">
                             <span className="text-white text-[10px] font-bold">{getInitials(u.name)}</span>
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-[#1A1A1A]">{u.name}</p>
+                            <p className="text-sm font-medium dm-text">{u.name}</p>
                             <p className="text-[10px] text-[#C0C0C0]">{u.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{u.role}</td>
+                      <td className="px-4 py-3 text-xs dm-text">{u.role}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
-                          u.status === "active" ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#64748b]/10 text-[#64748b]"
+                          u.status === "active" ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#64748b]/10 dm-text-secondary"
                         }`}>{u.status}</span>
                       </td>
                       <td className="px-4 py-3">
@@ -249,15 +249,15 @@ export default function AdminSettingsPage() {
                           <span className="flex items-center gap-1 text-xs text-[#f59e0b]"><Unlock className="w-3 h-3" /> Disabled</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{u.lastLogin}</td>
+                      <td className="px-4 py-3 text-xs dm-text-secondary">{u.lastLogin}</td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => { setUserForm({ ...u }); setEditUserOpen(true); }}
-                            className="p-1.5 rounded-lg hover:bg-[#f1f5f9]"><Edit2 className="w-3.5 h-3.5 text-[#64748b]" /></button>
+                            className="p-1.5 rounded-lg hover:dm-surface-hover"><Edit2 className="w-3.5 h-3.5 dm-text-secondary" /></button>
                           <button onClick={() => {
                             setUsers((prev) => prev.map((x) => x.email === u.email ? { ...x, twoFactor: !x.twoFactor } : x));
                             showToast(`2FA ${u.twoFactor ? "disabled" : "enabled"} for ${u.name}`);
-                          }} className="p-1.5 rounded-lg hover:bg-[#f1f5f9]"><Key className="w-3.5 h-3.5 text-[#64748b]" /></button>
+                          }} className="p-1.5 rounded-lg hover:dm-surface-hover"><Key className="w-3.5 h-3.5 dm-text-secondary" /></button>
                           {u.role !== "CEO / Super Admin" && (
                             <button onClick={() => { setUserForm({ ...u }); setDeleteConfirmOpen(true); }}
                               className="p-1.5 rounded-lg hover:bg-[#ef4444]/5"><Trash2 className="w-3.5 h-3.5 text-[#ef4444]" /></button>
@@ -282,20 +282,20 @@ export default function AdminSettingsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {ROLES.map((r) => (
-              <div key={r.name} className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-sm transition-all">
+              <div key={r.name} className="dm-surface rounded-xl p-5 border dm-border hover:shadow-sm transition-all">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${r.color}15` }}>
                       <Shield className="w-4 h-4" style={{ color: r.color }} />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-[#1A1A1A] text-sm">{r.name}</h3>
+                      <h3 className="font-semibold dm-text text-sm">{r.name}</h3>
                       <p className="text-[10px] text-[#C0C0C0]">{r.users} user(s)</p>
                     </div>
                   </div>
-                  <button className="p-1.5 rounded-lg hover:bg-[#f1f5f9]"><Edit2 className="w-3.5 h-3.5 text-[#64748b]" /></button>
+                  <button className="p-1.5 rounded-lg hover:dm-surface-hover"><Edit2 className="w-3.5 h-3.5 dm-text-secondary" /></button>
                 </div>
-                <p className="text-xs text-[#64748b]">{r.permissions}</p>
+                <p className="text-xs dm-text-secondary">{r.permissions}</p>
               </div>
             ))}
           </div>
@@ -303,30 +303,30 @@ export default function AdminSettingsPage() {
       )}
 
       {activeTab === "audit" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
+        <div className="dm-surface rounded-xl border dm-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Timestamp</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Action</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">User</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Detail</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Severity</th>
+                <tr className="bg-[#f8f9fa] border-b dm-border">
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Timestamp</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Action</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">User</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Detail</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold dm-text-secondary">Severity</th>
                 </tr>
               </thead>
               <tbody>
                 {AUDIT_LOG.map((a, i) => (
-                  <tr key={i} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
-                    <td className="px-4 py-3 text-xs text-[#64748b] whitespace-nowrap">{a.timestamp}</td>
-                    <td className="px-4 py-3 text-xs font-medium text-[#1A1A1A]">{a.action}</td>
-                    <td className="px-4 py-3 text-xs text-[#1A1A1A]">{a.user}</td>
-                    <td className="px-4 py-3 text-xs text-[#64748b] max-w-xs truncate">{a.detail}</td>
+                  <tr key={i} className="border-b dm-border hover:bg-[#f8f9fa]">
+                    <td className="px-4 py-3 text-xs dm-text-secondary whitespace-nowrap">{a.timestamp}</td>
+                    <td className="px-4 py-3 text-xs font-medium dm-text">{a.action}</td>
+                    <td className="px-4 py-3 text-xs dm-text">{a.user}</td>
+                    <td className="px-4 py-3 text-xs dm-text-secondary max-w-xs truncate">{a.detail}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
                         a.severity === "warning" ? "bg-[#f59e0b]/10 text-[#f59e0b]" :
                         a.severity === "important" ? "bg-[#4A90D9]/10 text-[#4A90D9]" :
-                        "bg-[#64748b]/10 text-[#64748b]"
+                        "bg-[#64748b]/10 dm-text-secondary"
                       }`}>{a.severity}</span>
                     </td>
                   </tr>
@@ -340,21 +340,21 @@ export default function AdminSettingsPage() {
       {activeTab === "system" && (
         <div className="space-y-4">
           {settingSections.map((section) => (
-            <div key={section.title} className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
+            <div key={section.title} className="dm-surface rounded-xl p-6 border dm-border">
               <div className="flex items-center gap-2 mb-4">
-                <section.icon className="w-5 h-5 text-[#1A1A1A]" />
-                <h3 className="font-semibold text-[#1A1A1A]">{section.title}</h3>
+                <section.icon className="w-5 h-5 dm-text" />
+                <h3 className="font-semibold dm-text">{section.title}</h3>
               </div>
               <div className="space-y-3">
                 {section.fields.map((f) => (
-                  <div key={f.label} className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-[#e2e8f0] last:border-0">
-                    <span className="text-xs text-[#64748b]">{f.label}</span>
-                    <span className="text-xs font-medium text-[#1A1A1A]">{f.value}</span>
+                  <div key={f.label} className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b dm-border last:border-0">
+                    <span className="text-xs dm-text-secondary">{f.label}</span>
+                    <span className="text-xs font-medium dm-text">{f.value}</span>
                   </div>
                 ))}
               </div>
               <button onClick={() => { setEditingSection(section); setEditSettingsOpen(true); }}
-                className="mt-4 px-4 py-2 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+                className="mt-4 px-4 py-2 border dm-border rounded-lg text-xs font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
                 <Edit2 className="w-3 h-3 inline mr-1" /> Edit Settings
               </button>
             </div>
@@ -367,7 +367,7 @@ export default function AdminSettingsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setAddUserOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleAddUser} disabled={!userForm.name || !userForm.email}
@@ -384,7 +384,7 @@ export default function AdminSettingsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setEditUserOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleEditUser}
@@ -401,7 +401,7 @@ export default function AdminSettingsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setDeleteConfirmOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={handleDeleteUser}
@@ -410,8 +410,8 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         }>
-        <p className="text-sm text-[#1A1A1A]">Are you sure you want to remove <b>{userForm.name}</b> ({userForm.email})?</p>
-        <p className="text-xs text-[#64748b] mt-1">This will revoke their system access immediately.</p>
+        <p className="text-sm dm-text">Are you sure you want to remove <b>{userForm.name}</b> ({userForm.email})?</p>
+        <p className="text-xs dm-text-secondary mt-1">This will revoke their system access immediately.</p>
       </Modal>
 
       {/* ======== EDIT SETTINGS MODAL ======== */}
@@ -420,7 +420,7 @@ export default function AdminSettingsPage() {
         footer={
           <div className="flex gap-2 justify-end">
             <button onClick={() => setEditSettingsOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
+              className="px-4 py-2.5 border dm-border rounded-xl text-sm font-medium dm-text-secondary hover:dm-surface-hover transition-colors">
               Cancel
             </button>
             <button onClick={() => { setEditSettingsOpen(false); showToast(`${editingSection?.title} updated successfully`); }}
@@ -435,7 +435,7 @@ export default function AdminSettingsPage() {
               const key = Object.entries(systemSettings).find(([, v]) => v === f.value)?.[0] || "";
               return (
                 <div key={f.label}>
-                  <label className="block text-xs font-medium text-[#64748b] mb-1.5">{f.label}</label>
+                  <label className="block text-xs font-medium dm-text-secondary mb-1.5">{f.label}</label>
                   <input className={inputClass}
                     value={f.value}
                     onChange={(e) => {

@@ -116,7 +116,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
         {/* Member info */}
         <div className="px-4 py-4 border-b border-[#C0C0C0]/10">
-          <div className="flex items-center gap-3 bg-white/5 rounded-xl p-3">
+          <div className="flex items-center gap-3 dm-surface/5 rounded-xl p-3">
             <div className="w-10 h-10 rounded-full bg-[#4A90D9]/20 flex items-center justify-center">
               <span className="text-sm font-semibold text-[#4A90D9]">JM</span>
             </div>
@@ -141,7 +141,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group",
                   active
                     ? "bg-[#4A90D9] text-white shadow-lg shadow-[#4A90D9]/20"
-                    : "text-[#C0C0C0]/60 hover:text-white hover:bg-white/5"
+                    : "text-[#C0C0C0]/60 hover:text-white hover:dm-surface/5"
                 )}
               >
                 <Icon className={cn("w-5 h-5", active ? "text-white" : "text-[#C0C0C0]/40 group-hover:text-[#4A90D9]")} />
