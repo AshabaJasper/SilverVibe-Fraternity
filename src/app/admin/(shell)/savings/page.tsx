@@ -8,7 +8,8 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell,
 } from "recharts";
-import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, useHydrated, cn } from "@/lib/utils";
+import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, cn } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
 import { ADMIN_SAVINGS_GROWTH, ADMIN_MEMBERS_LIST, DEMO_TODAY } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";

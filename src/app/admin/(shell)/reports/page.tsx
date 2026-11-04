@@ -11,15 +11,17 @@ import { Badge, EmptyState, PageHeader, StatCard, Tabs } from "@/components/ui";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { useAuthStore } from "@/lib/store";
 import { exportToCsv, printArea } from "@/lib/export";
+import { generateBalanceSheet, generateIncomeStatement, generateTablePdf, generateTrialBalance } from "@/lib/pdf-reports";
 import {
-  generateBalanceSheet, generateCashFlow, generateCustomReport, generateIncomeStatement, generateLoanPortfolio,
-  generateMemberRegister, generatePARReport, generateSavingsSummary, generateTrialBalance,
-} from "@/lib/pdf-reports";
-import type { StatementLine } from "@/lib/pdf-reports";
-import {
-  ADMIN_KPI, ADMIN_LOAN_PERFORMANCE, ADMIN_MEMBERS_LIST, ADMIN_PRODUCT_DISTRIBUTION, DEMO_ADMIN, DEMO_TODAY, PORTFOLIO_QUALITY,
+  ADMIN_KPI, ADMIN_LOAN_APPLICATIONS, ADMIN_LOAN_PERFORMANCE, ADMIN_MEMBERS_LIST, ADMIN_PRODUCT_DISTRIBUTION, DEMO_ADMIN, DEMO_TODAY,
+  MEMBER_GROWTH, PORTFOLIO_QUALITY,
 } from "@/lib/mock-data";
-import { cn, formatCurrency, formatDate, formatDateTime, formatNumber, parseDate, uid, useHydrated } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, formatDateTime, formatNumber, parseDate, todayISO, uid } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
+import {
+  DEFAULT_JOURNAL, FY_START, JOURNAL_KEY, buildStatements, buildTrialBalance, cashFlowTable, safeJournal, trialBalanceRows,
+  type JournalEntry, type Statements, type TbRow,
+} from "../_lib/ledger";
 
 /* ============================================================
  * Report catalog
@@ -96,131 +98,305 @@ const ALL_REPORTS = CATEGORIES.flatMap((c) => c.reports.map((r) => ({ ...r, cate
 type CatalogReport = (typeof ALL_REPORTS)[number];
 const findReport = (id: string) => ALL_REPORTS.find((r) => r.id === id);
 
-/* ---------- report data (shared by PDF generation and the print preview) ---------- */
-const INCOME: StatementLine[] = [
-  { label: "Interest income — loans", amount: 412_500_000 },
-  { label: "Interest income — investments", amount: 96_000_000 },
-  { label: "Membership & entrance fees", amount: 18_400_000 },
-  { label: "Loan processing fees", amount: 31_200_000 },
-];
-const EXPENSES: StatementLine[] = [
-  { label: "Interest on member savings", amount: 168_000_000 },
-  { label: "Salaries & benefits", amount: 142_000_000 },
-  { label: "Office rent & utilities", amount: 38_600_000 },
-  { label: "Loan loss provision", amount: 21_500_000 },
-  { label: "Administration & IT", amount: 26_900_000 },
-];
-const ASSETS: StatementLine[] = [
-  { label: "Cash & bank balances", amount: 610_000_000 },
-  { label: "Loans to members (net)", amount: ADMIN_KPI.total_loan_book.value - 43_000_000 },
-  { label: "Investments & fixed deposits", amount: 2_980_000_000 },
-  { label: "Property & equipment", amount: 340_000_000 },
-  { label: "Other receivables", amount: 63_000_000 },
-];
-const LIABILITIES: StatementLine[] = [
-  { label: "Member savings deposits", amount: ADMIN_KPI.total_savings.value },
-  { label: "Accrued interest payable", amount: 42_000_000 },
-  { label: "Other payables", amount: 38_000_000 },
-];
-const EQUITY: StatementLine[] = [{ label: "Share capital", amount: ADMIN_KPI.total_share_capital.value }];
-const CASH_FLOW: StatementLine[] = [
-  { label: "Net surplus", amount: 163_100_000 },
-  { label: "Add: loan loss provision", amount: 21_500_000 },
-  { label: "Increase in member savings", amount: 320_000_000 },
-  { label: "Net loans disbursed", amount: -170_000_000 },
-  { label: "Purchase of equipment", amount: -24_000_000 },
-  { label: "New share capital", amount: 142_000_000 },
-];
-const sum = (lines: StatementLine[]) => lines.reduce((a, l) => a + l.amount, 0);
-// Balanced trial balance derived from the statement lines above.
-const TRIAL_BALANCE = (() => {
-  const rows = [
-    ...ASSETS.map((l, i) => ({ code: `1${i + 1}00`, name: l.label, debit: l.amount, credit: 0 })),
-    ...LIABILITIES.map((l, i) => ({ code: `2${i + 1}00`, name: l.label, debit: 0, credit: l.amount })),
-    ...EQUITY.map((l, i) => ({ code: `3${i + 1}00`, name: l.label, debit: 0, credit: l.amount })),
-    ...INCOME.map((l, i) => ({ code: `4${i + 1}00`, name: l.label, debit: 0, credit: l.amount })),
-    ...EXPENSES.map((l, i) => ({ code: `5${i + 1}00`, name: l.label, debit: l.amount, credit: 0 })),
-  ];
-  const diff = rows.reduce((a, r) => a + r.debit - r.credit, 0);
-  rows.push({ code: "3900", name: "Retained surplus & reserves", debit: diff < 0 ? -diff : 0, credit: diff > 0 ? diff : 0 });
-  return rows;
-})();
-
-const KPI_ROWS: (string | number)[][] = [
-  ["Total members", formatNumber(ADMIN_KPI.total_members.value)],
-  ["Active members", formatNumber(ADMIN_KPI.total_members.active)],
-  ["Total savings", formatCurrency(ADMIN_KPI.total_savings.value)],
-  ["Loan book", formatCurrency(ADMIN_KPI.total_loan_book.value)],
-  ["Share capital", formatCurrency(ADMIN_KPI.total_share_capital.value)],
-  ["PAR > 30 days", `${ADMIN_KPI.par_30.value}%`],
-  ["Monthly collections", formatCurrency(ADMIN_KPI.monthly_collections.value)],
-];
-
-interface PreviewSection {
+/* ---------- report data (one spec drives both the on-screen preview and the PDF) ---------- */
+type Cell = string | number;
+interface ReportSection {
   heading?: string;
   columns: string[];
-  rows: (string | number)[][];
+  rows: Cell[][];
+  boldRows?: number[];
+  numericCols?: number[];
 }
+interface ReportSpec {
+  title: string;
+  summary: [string, string][];
+  sections: ReportSection[];
+  orientation?: "portrait" | "landscape";
+}
+/** Ledger snapshot the financial statements are built from (same as Accounting). */
+interface Ledger { tb: TbRow[]; st: Statements }
 
-const money = (n: number) => formatCurrency(n);
-const linesSection = (heading: string, lines: StatementLine[], totalLabel: string): PreviewSection => ({
-  heading, columns: ["Line item", "Amount"], rows: [...lines.map((l) => [l.label, money(l.amount)]), [totalLabel, money(sum(lines))]],
-});
+const pct = (n: number, d = 1) => `${n.toFixed(d)}%`;
+const memberBySv = (sv: string) => ADMIN_MEMBERS_LIST.find((m) => m.sv_number === sv);
 
-/** On-screen version of each report, used for the print preview. */
-function previewSections(r: CatalogReport): PreviewSection[] {
+// Savings product rates (% p.a.) — the same rates the Savings page uses.
+const PRODUCT_RATES: Record<string, number> = { "Regular Savings": 5, "Flexi/Wallet": 3, "Fixed Savings": 12, "Young Savers": 6, "Loan Guarantee": 3 };
+// Last account activity for dormant / at-risk members (dormancy = no activity for 6+ months).
+const LAST_ACTIVITY: Record<string, string> = { "SV-0067": "2026-03-14", "SV-0095": "2026-06-02" };
+// Arrears follow-up for borrowers (PAR review, 2 Nov 2026).
+const ARREARS_FOLLOW_UP: Record<string, { days: number; action: string }> = {
+  "SV-0095": { days: 74, action: "Account suspended · referred to recovery" },
+  "SV-0034": { days: 18, action: "SMS reminder sent 2 Nov" },
+  "SV-0023": { days: 0, action: "Current" },
+};
+// Cash transactions at or above the reporting threshold (FIA large cash transaction reports).
+const LCT_THRESHOLD = 20_000_000;
+const LARGE_CASH_TXNS: { date: string; sv: string; type: string; channel: string; amount: number; status: string }[] = [
+  { date: "2026-11-03", sv: "SV-0089", type: "Deposit", channel: "Cash — Kampala branch", amount: 32_000_000, status: "LCTR filed" },
+  { date: "2026-10-27", sv: "SV-0056", type: "Deposit", channel: "Cash — Kampala branch", amount: 25_000_000, status: "LCTR filed" },
+  { date: "2026-10-19", sv: "SV-0012", type: "Withdrawal", channel: "Cash — Kampala branch", amount: 21_500_000, status: "LCTR filed" },
+  { date: "2026-10-08", sv: "SV-0001", type: "Deposit", channel: "Cash — Kampala branch", amount: 20_000_000, status: "LCTR filed" },
+  { date: "2026-09-30", sv: "SV-0095", type: "Deposit", channel: "Cash — Kampala branch", amount: 19_800_000, status: "Below threshold · structuring review" },
+];
+
+function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
+  const bal = (code: string) => {
+    const row = tb.find((x) => x.code === code);
+    return row ? (row.normal === "debit" ? row.net : -row.net) : 0;
+  };
   switch (r.gen) {
+    // ---- Financial statements: same lines/ordering the pdf-reports generators print ----
     case "income":
-      return [linesSection("Income", INCOME, "Total income"), linesSection("Expenses", EXPENSES, "Total expenses"),
-        { columns: ["", ""], rows: [["Net surplus", money(sum(INCOME) - sum(EXPENSES))]] }];
+      return {
+        title: "Income Statement",
+        summary: [["Total income", formatCurrency(st.totalIncome)], ["Total expenses", formatCurrency(st.totalExpenses)], ["Net surplus", formatCurrency(st.surplus)]],
+        sections: [
+          { heading: "Income", columns: ["Line item", "Amount (UGX)"], rows: [...st.income.map((l) => [l.label, l.amount]), ["Total income", st.totalIncome]], boldRows: [st.income.length], numericCols: [1] },
+          { heading: "Expenses", columns: ["Line item", "Amount (UGX)"], rows: [...st.expenses.map((l) => [l.label, l.amount]), ["Total expenses", st.totalExpenses], ["Net surplus", st.surplus]], boldRows: [st.expenses.length, st.expenses.length + 1], numericCols: [1] },
+        ],
+      };
     case "balance": {
-      const retained = sum(ASSETS) - sum(LIABILITIES) - sum(EQUITY);
-      return [linesSection("Assets", ASSETS, "Total assets"), linesSection("Liabilities", LIABILITIES, "Total liabilities"),
-        linesSection("Equity", [...EQUITY, { label: "Retained surplus & reserves", amount: retained }], "Total equity")];
+      const eqLines = [...st.equity, { label: "Retained surplus & reserves", amount: st.retained }];
+      return {
+        title: "Statement of Financial Position",
+        summary: [["Total assets", formatCurrency(st.totalAssets)], ["Total liabilities", formatCurrency(st.totalLiabilities)], ["Total equity", formatCurrency(st.totalEquity)]],
+        sections: [
+          { heading: "Assets", columns: ["Account", "Amount (UGX)"], rows: [...st.assets.map((l) => [l.label, l.amount]), ["Total assets", st.totalAssets]], boldRows: [st.assets.length], numericCols: [1] },
+          { heading: "Liabilities", columns: ["Account", "Amount (UGX)"], rows: [...st.liabilities.map((l) => [l.label, l.amount]), ["Total liabilities", st.totalLiabilities]], boldRows: [st.liabilities.length], numericCols: [1] },
+          { heading: "Equity", columns: ["Account", "Amount (UGX)"], rows: [...eqLines.map((l) => [l.label, l.amount]), ["Total equity", st.totalEquity], ["Liabilities + equity", st.totalLiabilities + st.totalEquity]], boldRows: [eqLines.length, eqLines.length + 1], numericCols: [1] },
+        ],
+      };
     }
-    case "cashflow":
-      return [linesSection("Cash flows", CASH_FLOW, "Net increase in cash")];
+    case "cashflow": {
+      const cf = cashFlowTable(st);
+      return {
+        title: "Cash Flow Statement",
+        summary: [["Net surplus (= income statement)", formatCurrency(st.surplus)], ["Net increase in cash", formatCurrency(st.netCash)], ["Closing cash & bank", formatCurrency(st.openingCash + st.netCash)]],
+        sections: [{ columns: ["Item", "Amount (UGX)"], rows: cf.rows, boldRows: cf.boldRows, numericCols: [1] }],
+      };
+    }
     case "trial": {
-      const td = TRIAL_BALANCE.reduce((a, x) => a + x.debit, 0);
-      const tc = TRIAL_BALANCE.reduce((a, x) => a + x.credit, 0);
-      return [{ columns: ["Code", "Account", "Debit", "Credit"], rows: [
-        ...TRIAL_BALANCE.map((x) => [x.code, x.name, x.debit ? money(x.debit) : "-", x.credit ? money(x.credit) : "-"]),
-        ["", "Totals", money(td), money(tc)],
-      ] }];
+      const rows = trialBalanceRows(tb);
+      const td = rows.reduce((a, x) => a + x.debit, 0);
+      const tc = rows.reduce((a, x) => a + x.credit, 0);
+      return {
+        title: "Trial Balance",
+        summary: [["Total debits", formatCurrency(td)], ["Total credits", formatCurrency(tc)], ["Status", td === tc ? "Balanced" : `Out of balance by ${formatCurrency(Math.abs(td - tc))}`]],
+        sections: [{ columns: ["Code", "Account", "Debit (UGX)", "Credit (UGX)"], rows: [...rows.map((x) => [x.code, x.name, x.debit || "-", x.credit || "-"]), ["", "Totals", td, tc]], boldRows: [rows.length], numericCols: [2, 3] }],
+      };
     }
+
+    // ---- Operational reports ----
     case "savings": {
       const total = ADMIN_PRODUCT_DISTRIBUTION.reduce((a, p) => a + p.value, 0);
-      return [{ columns: ["Product", "Balance", "Share"], rows: [
-        ...ADMIN_PRODUCT_DISTRIBUTION.map((p) => [p.name, money(p.value), `${((p.value / total) * 100).toFixed(1)}%`]),
-        ["Total", money(total), "100%"],
-      ] }];
+      return {
+        title: "Savings Portfolio Summary",
+        summary: [["Total savings", formatCurrency(total)], ["Growth (month)", `${ADMIN_KPI.total_savings.change}%`]],
+        sections: [{ columns: ["Product", "Balance (UGX)", "Share of portfolio"], rows: [...ADMIN_PRODUCT_DISTRIBUTION.map((p) => [p.name, p.value, pct((p.value / total) * 100)]), ["Total", total, "100%"]], boldRows: [ADMIN_PRODUCT_DISTRIBUTION.length], numericCols: [1, 2] }],
+      };
     }
     case "loans":
-      return [
-        { heading: "Disbursements vs recoveries", columns: ["Month", "Disbursed", "Recovered"], rows: ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, money(m.disbursed), money(m.recovered)]) },
-        { heading: "Borrowers", columns: ["SV No.", "Member", "Outstanding"], rows: ADMIN_MEMBERS_LIST.filter((m) => m.loans > 0).map((m) => [m.sv_number, m.name, money(m.loans)]) },
-      ];
+      return {
+        title: "Loan Portfolio Report",
+        summary: [["Gross loan book", formatCurrency(ADMIN_KPI.total_loan_book.value)], ["PAR > 30 days", `${ADMIN_KPI.par_30.value}%`]],
+        sections: [
+          { heading: "Disbursements vs recoveries (6 months)", columns: ["Month", "Disbursed (UGX)", "Recovered (UGX)"], rows: ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, m.recovered]), numericCols: [1, 2] },
+          { heading: "Borrowers", columns: ["SV No.", "Member", "Outstanding (UGX)"], rows: ADMIN_MEMBERS_LIST.filter((m) => m.loans > 0).map((m) => [m.sv_number, m.name, m.loans]), numericCols: [2] },
+        ],
+      };
     case "par":
-      return [{ columns: ["Ageing bucket", "Amount", "% of portfolio"], rows: PORTFOLIO_QUALITY.map((p) => [p.category, money(p.amount), `${p.percent}%`]) }];
+      return {
+        title: "Portfolio at Risk (PAR) Report",
+        summary: [["PAR > 30 days", `${ADMIN_KPI.par_30.value}%`]],
+        sections: [{ columns: ["Ageing bucket", "Amount (UGX)", "% of portfolio"], rows: PORTFOLIO_QUALITY.map((p) => [p.category, p.amount, `${p.percent}%`]), numericCols: [1, 2] }],
+      };
     case "members":
-      return [{ columns: ["SV No.", "Name", "Status", "KYC", "Savings", "Loans", "Shares"], rows: ADMIN_MEMBERS_LIST.map((m) => [m.sv_number, m.name, m.status, m.kyc, money(m.savings), money(m.loans), money(m.shares)]) }];
-    default:
-      return [{ heading: "Key indicators", columns: ["Indicator", "Value"], rows: KPI_ROWS }];
+      return {
+        title: "Member Register",
+        orientation: "landscape",
+        summary: [["Members listed", String(ADMIN_MEMBERS_LIST.length)]],
+        sections: [{ columns: ["SV No.", "Name", "Phone", "Status", "KYC", "Savings", "Loans", "Shares", "Joined"], rows: ADMIN_MEMBERS_LIST.map((m) => [m.sv_number, m.name, m.phone, m.status, m.kyc, m.savings, m.loans, m.shares, formatDate(m.joined)]), numericCols: [5, 6, 7] }],
+      };
   }
+
+  // ---- Catalogue reports with their own layouts ----
+  switch (r.id) {
+    case "dormant": {
+      const dormant = ADMIN_MEMBERS_LIST.filter((m) => m.status === "dormant");
+      const atRisk = ADMIN_MEMBERS_LIST.filter((m) => m.status === "suspended");
+      const row = (m: (typeof ADMIN_MEMBERS_LIST)[number]) => [m.sv_number, m.name, m.phone, LAST_ACTIVITY[m.sv_number] ? formatDate(LAST_ACTIVITY[m.sv_number]) : "—", m.savings, m.shares];
+      const cols = ["SV No.", "Member", "Phone", "Last activity", "Savings (UGX)", "Shares (UGX)"];
+      return {
+        title: "Dormant Accounts",
+        summary: [
+          ["Dormant members (whole register)", formatNumber(ADMIN_KPI.total_members.dormant)],
+          ["Dormant in this extract", String(dormant.length)],
+          ["Savings held in dormant accounts", formatCurrency(dormant.reduce((a, m) => a + m.savings, 0))],
+        ],
+        sections: [
+          { heading: "Dormant — no activity for 6+ months", columns: cols, rows: dormant.map(row), numericCols: [4, 5] },
+          { heading: "Watch list — suspended accounts", columns: cols, rows: atRisk.map(row), numericCols: [4, 5] },
+        ],
+      };
+    }
+    case "interest": {
+      const products = ADMIN_PRODUCT_DISTRIBUTION.map((p) => ({ name: p.name, balance: p.value, rate: PRODUCT_RATES[p.name] ?? 0 }));
+      const monthly = (b: number, rate: number) => Math.round((b * rate) / 100 / 12);
+      const total = products.reduce((a, p) => a + monthly(p.balance, p.rate), 0);
+      const totalBal = products.reduce((a, p) => a + p.balance, 0);
+      const regRate = PRODUCT_RATES["Regular Savings"];
+      const members = ADMIN_MEMBERS_LIST.filter((m) => m.savings > 0);
+      return {
+        title: "Interest Computation",
+        summary: [["Savings balances", formatCurrency(totalBal)], ["Monthly interest accrual", formatCurrency(total)], ["Method", "Balance × annual rate ÷ 12"]],
+        sections: [
+          { heading: "By product — November 2026", columns: ["Product", "Balance (UGX)", "Rate p.a.", "Monthly interest (UGX)"], rows: [...products.map((p) => [p.name, p.balance, `${p.rate}%`, monthly(p.balance, p.rate)]), ["Total", totalBal, "", total]], boldRows: [products.length], numericCols: [1, 2, 3] },
+          { heading: `Member accruals (savings balance at ${regRate}% p.a.)`, columns: ["SV No.", "Member", "Savings (UGX)", "Monthly interest (UGX)"], rows: members.map((m) => [m.sv_number, m.name, m.savings, monthly(m.savings, regRate)]), numericCols: [2, 3] },
+        ],
+      };
+    }
+    case "disbursement": {
+      const total = ADMIN_LOAN_PERFORMANCE.reduce((a, m) => a + m.disbursed, 0);
+      const approved = ADMIN_LOAN_APPLICATIONS.filter((a) => a.status === "approved");
+      return {
+        title: "Disbursement Report",
+        summary: [["Disbursed (Jun–Nov 2026)", formatCurrency(total)], ["Average per month", formatCurrency(Math.round(total / ADMIN_LOAN_PERFORMANCE.length))], ["Approved, awaiting disbursement", String(approved.length)]],
+        sections: [
+          { heading: "Monthly disbursements", columns: ["Month (2026)", "Disbursed (UGX)", "Share of period"], rows: [...ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, pct((m.disbursed / total) * 100)]), ["Total", total, "100%"]], boldRows: [ADMIN_LOAN_PERFORMANCE.length], numericCols: [1, 2] },
+          { heading: "Approved applications", columns: ["SV No.", "Member", "Product", "Term", "Amount (UGX)"], rows: approved.map((a) => [a.sv, a.member, a.product, a.term, a.amount]), numericCols: [4] },
+        ],
+      };
+    }
+    case "collection": {
+      const total = ADMIN_LOAN_PERFORMANCE.reduce((a, m) => a + m.recovered, 0);
+      const mc = ADMIN_KPI.monthly_collections;
+      return {
+        title: "Collection Report",
+        summary: [["Collected (Jun–Nov 2026)", formatCurrency(total)], ["This month vs target", `${formatCurrency(mc.value)} of ${formatCurrency(mc.target)} (${mc.percent}%)`]],
+        sections: [
+          { heading: "Loan repayments received", columns: ["Month (2026)", "Disbursed (UGX)", "Recovered (UGX)", "Recovery ratio"], rows: [...ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, m.recovered, pct((m.recovered / m.disbursed) * 100)]), ["Total", ADMIN_LOAN_PERFORMANCE.reduce((a, m) => a + m.disbursed, 0), total, ""]], boldRows: [ADMIN_LOAN_PERFORMANCE.length], numericCols: [1, 2, 3] },
+          { heading: "Monthly collections target", columns: ["Measure", "Amount (UGX)"], rows: [["Target", mc.target], ["Collected", mc.value], ["Shortfall", mc.target - mc.value]], boldRows: [2], numericCols: [1] },
+        ],
+      };
+    }
+    case "arrears": {
+      const buckets = PORTFOLIO_QUALITY.filter((p) => p.category !== "Current");
+      const arrears = buckets.reduce((a, p) => a + p.amount, 0);
+      const borrowers = ADMIN_MEMBERS_LIST.filter((m) => m.loans > 0);
+      return {
+        title: "Arrears Report",
+        summary: [["Loans in arrears", formatCurrency(arrears)], ["PAR > 30 days", `${ADMIN_KPI.par_30.value}%`], ["Borrowers reviewed", String(borrowers.length)]],
+        sections: [
+          { heading: "Arrears by ageing bucket", columns: ["Bucket", "Outstanding (UGX)", "% of portfolio"], rows: [...buckets.map((p) => [p.category, p.amount, `${p.percent}%`]), ["Total in arrears", arrears, `${buckets.reduce((a, p) => a + p.percent, 0)}%`]], boldRows: [buckets.length], numericCols: [1, 2] },
+          { heading: "Borrower follow-up", columns: ["SV No.", "Member", "Outstanding (UGX)", "Days overdue", "Follow-up"], rows: borrowers.map((m) => { const f = ARREARS_FOLLOW_UP[m.sv_number] ?? { days: 0, action: "Current" }; return [m.sv_number, m.name, m.loans, f.days, f.action]; }), numericCols: [2, 3] },
+        ],
+      };
+    }
+    case "registrations": {
+      const joined = ADMIN_MEMBERS_LIST.filter((m) => m.joined.startsWith("2026"));
+      const growth = MEMBER_GROWTH.map((g, i) => [g.month, g.members, i === 0 ? "—" : g.members - MEMBER_GROWTH[i - 1].members]);
+      const ytd = MEMBER_GROWTH[MEMBER_GROWTH.length - 1].members - MEMBER_GROWTH[0].members;
+      return {
+        title: "New Registrations",
+        summary: [["Members now", formatNumber(ADMIN_KPI.total_members.value)], ["Net new since Dec 2025", formatNumber(ytd)], ["Joined in 2026 (this extract)", String(joined.length)]],
+        sections: [
+          { heading: "Members registered in 2026", columns: ["SV No.", "Member", "Joined", "Status", "KYC"], rows: joined.map((m) => [m.sv_number, m.name, formatDate(m.joined), m.status, m.kyc]) },
+          { heading: "Membership growth", columns: ["Month", "Members", "Net new"], rows: growth, numericCols: [1, 2] },
+        ],
+      };
+    }
+    case "kyc": {
+      const statuses = Array.from(new Set(ADMIN_MEMBERS_LIST.map((m) => m.kyc)));
+      const n = ADMIN_MEMBERS_LIST.length;
+      const outstanding = ADMIN_MEMBERS_LIST.filter((m) => m.kyc !== "verified");
+      const verified = n - outstanding.length;
+      return {
+        title: "KYC Compliance",
+        summary: [["Members reviewed", String(n)], ["Verified", `${verified} (${pct((verified / n) * 100, 0)})`], ["Outstanding", String(outstanding.length)]],
+        sections: [
+          { heading: "By KYC status", columns: ["Status", "Members", "Share"], rows: statuses.map((s) => { const c = ADMIN_MEMBERS_LIST.filter((m) => m.kyc === s).length; return [s[0].toUpperCase() + s.slice(1), c, pct((c / n) * 100, 0)]; }), numericCols: [1, 2] },
+          { heading: "Members with outstanding KYC", columns: ["SV No.", "Member", "KYC status", "Member status", "Phone"], rows: outstanding.map((m) => [m.sv_number, m.name, m.kyc, m.status, m.phone]) },
+        ],
+      };
+    }
+    case "umra": {
+      const loans = bal("1200");
+      const deposits = bal("2000");
+      const liquid = bal("1000") + bal("1100") + bal("1150");
+      const capital = st.totalEquity;
+      const parAmount = PORTFOLIO_QUALITY.filter((p) => /31|61|90/.test(p.category)).reduce((a, p) => a + p.amount, 0);
+      const ratios: [string, number, string, boolean][] = [
+        ["Core capital / total assets", (capital / st.totalAssets) * 100, "≥ 10%", capital / st.totalAssets >= 0.1],
+        ["Liquid assets / member deposits", (liquid / deposits) * 100, "≥ 10%", liquid / deposits >= 0.1],
+        ["Loans / member deposits", (loans / deposits) * 100, "≤ 80%", loans / deposits <= 0.8],
+        ["Portfolio at risk > 30 days", ADMIN_KPI.par_30.value, "≤ 5%", ADMIN_KPI.par_30.value <= 5],
+        ["Loan-loss allowance / PAR > 30", (bal("1250") / parAmount) * 100, "Monitor", true],
+      ];
+      return {
+        title: "UMRA Quarterly Return",
+        summary: [["Return period", "Q3 FY 2026 (Jul–Sep), updated to date"], ["Total assets", formatCurrency(st.totalAssets)], ["Ratios within limits", `${ratios.filter((x) => x[3]).length} of ${ratios.length}`]],
+        sections: [
+          { heading: "Prudential ratios", columns: ["Ratio", "Value", "Requirement", "Status"], rows: ratios.map(([label, v, req, ok]) => [label, pct(v), req, ok ? "Compliant" : "Breach"]), numericCols: [1] },
+          { heading: "Key balances", columns: ["Item", "Amount (UGX)"], rows: [["Gross loans to members", loans], ["Member savings deposits", deposits], ["Cash, bank & mobile money", liquid], ["Core capital (share capital + reserves + surplus)", capital], ["Total assets", st.totalAssets]], numericCols: [1] },
+        ],
+      };
+    }
+    case "aml": {
+      const reportable = LARGE_CASH_TXNS.filter((t) => t.amount >= LCT_THRESHOLD);
+      const row = (t: (typeof LARGE_CASH_TXNS)[number]) => [formatDate(t.date), t.sv, memberBySv(t.sv)?.name ?? t.sv, t.type, t.amount, t.status];
+      return {
+        title: "AML/CTF Report",
+        summary: [["Large cash threshold", formatCurrency(LCT_THRESHOLD)], ["Reportable transactions", String(reportable.length)], ["Under review", String(LARGE_CASH_TXNS.length - reportable.length)], ["Suspicious transaction reports", "0 filed this month"]],
+        sections: [
+          { heading: `Cash transactions ≥ ${formatCurrency(LCT_THRESHOLD)}`, columns: ["Date", "SV No.", "Member", "Type", "Amount (UGX)", "Status"], rows: reportable.map(row), numericCols: [4] },
+          { heading: "Flagged for review (possible structuring)", columns: ["Date", "SV No.", "Member", "Type", "Amount (UGX)", "Status"], rows: LARGE_CASH_TXNS.filter((t) => t.amount < LCT_THRESHOLD).map(row), numericCols: [4] },
+        ],
+      };
+    }
+    case "capital": {
+      const share = bal("3000");
+      const reserves = bal("3100");
+      const capital = share + reserves + st.retained;
+      const ratio = (capital / st.totalAssets) * 100;
+      const institutional = ((reserves + st.retained) / st.totalAssets) * 100;
+      return {
+        title: "Capital Adequacy",
+        summary: [["Capital adequacy ratio", pct(ratio)], ["Regulatory minimum", "10.0%"], ["Status", ratio >= 10 ? "Adequately capitalised" : "Below minimum"]],
+        sections: [
+          { heading: "Regulatory capital", columns: ["Component", "Amount (UGX)"], rows: [["Share capital", share], ["General reserves", reserves], ["Current-year surplus", st.retained], ["Total capital", capital], ["Total assets", st.totalAssets]], boldRows: [3], numericCols: [1] },
+          { heading: "Ratios", columns: ["Ratio", "Value", "Minimum"], rows: [["Total capital / total assets", pct(ratio), "10.0%"], ["Institutional capital (reserves + surplus) / total assets", pct(institutional), "Monitor"]], numericCols: [1, 2] },
+        ],
+      };
+    }
+  }
+  return { title: r.name, summary: [], sections: [] };
 }
 
-async function runPdf(r: CatalogReport) {
-  switch (r.gen) {
-    case "income": return generateIncomeStatement(INCOME, EXPENSES);
-    case "balance": return generateBalanceSheet(ASSETS, LIABILITIES, EQUITY);
-    case "cashflow": return generateCashFlow();
-    case "trial": return generateTrialBalance(TRIAL_BALANCE);
-    case "savings": return generateSavingsSummary();
-    case "loans": return generateLoanPortfolio();
-    case "par": return generatePARReport();
-    case "members": return generateMemberRegister();
-    default: return generateCustomReport(r.name, r.category);
-  }
+/** Subtitle printed under the title — identical on screen and in the PDF. */
+function reportSubtitle(r: CatalogReport, dateLabel: string) {
+  if (r.gen === "income") return `FY 2026 · for the period ended ${dateLabel}`;
+  if (r.gen === "cashflow") return `FY 2026 · for the period ${formatDate(FY_START)} to ${dateLabel}`;
+  return `${r.category} · As at ${dateLabel}`;
+}
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+async function runPdf(r: CatalogReport, ledger: Ledger, subtitle: string) {
+  const { tb, st } = ledger;
+  // The three named statements use the shared generators with the ledger's lines.
+  if (r.gen === "income") return generateIncomeStatement(st.income, st.expenses);
+  if (r.gen === "balance") return generateBalanceSheet(st.assets, st.liabilities, st.equity);
+  if (r.gen === "trial") return generateTrialBalance(trialBalanceRows(tb));
+  // Everything else (cash flow included) prints the exact spec the preview shows.
+  const spec = buildSpec(r, ledger);
+  return generateTablePdf({
+    title: spec.title,
+    subtitle,
+    filename: `${slug(spec.title)}-${todayISO()}`,
+    summary: spec.summary,
+    orientation: spec.orientation,
+    sections: spec.sections.map((s) => ({ ...s, rows: s.rows.map((row, i) => (r.gen === "cashflow" && !s.boldRows?.includes(i) ? [`   ${row[0]}`, ...row.slice(1)] : row)) })),
+  });
 }
 
 function runCsv(kind: CsvKind) {
@@ -293,12 +469,13 @@ const SEED_SCHEDULES: Schedule[] = [
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 
+/** Sentence-case description; keeps proper names (weekdays, months) capitalised. */
 function describeSchedule(s: Schedule) {
-  const t = s.time;
-  if (s.frequency === "daily") return `Every day at ${t}`;
-  if (s.frequency === "weekly") return `Every ${WEEKDAYS[s.day] ?? "Monday"} at ${t}`;
-  if (s.frequency === "monthly") return `${ordinal(s.day)} of every month at ${t}`;
-  return `${ordinal(s.day)} of Jan, Apr, Jul & Oct at ${t}`;
+  const t = s.time ? ` at ${s.time}` : "";
+  if (s.frequency === "daily") return `Every day${t}`;
+  if (s.frequency === "weekly") return `Every ${WEEKDAYS[s.day] ?? "Monday"}${t}`;
+  if (s.frequency === "monthly") return `The ${ordinal(s.day)} of every month${t}`;
+  return `The ${ordinal(s.day)} of Jan, Apr, Jul and Oct${t}`;
 }
 
 /** Next run strictly after `now`. */
@@ -344,34 +521,53 @@ function useSafeList<T>(key: string, seed: T[], field: keyof T) {
 /* ============================================================
  * Module-level presentational pieces
  * ============================================================ */
-function PreviewTables({ sections }: { sections: PreviewSection[] }) {
+/** Numbers print without the "UGX" prefix (it's in the column header) so tables fit at 390px. */
+const fmtCell = (c: Cell) => (typeof c === "number" ? formatNumber(Math.round(c)) : c);
+
+function PreviewTables({ spec }: { spec: ReportSpec }) {
   return (
     <div className="space-y-5">
-      {sections.map((s, i) => (
-        <div key={i}>
-          {s.heading && <p className="text-sm font-semibold mb-2">{s.heading}</p>}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr>
-                  {s.columns.map((c, j) => (
-                    <th key={j} className={cn("py-2 px-2 border-b dm-border font-semibold", j === 0 ? "text-left" : "text-right")}>{c}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {s.rows.map((row, k) => (
-                  <tr key={k} className={cn(k === s.rows.length - 1 && /total|net/i.test(String(row[0]) + String(row[1])) && "font-semibold")}>
-                    {row.map((cell, j) => (
-                      <td key={j} className={cn("py-1.5 px-2 border-b dm-border", j === 0 ? "text-left" : "text-right")}>{cell}</td>
+      {spec.summary.length > 0 && (
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+          {spec.summary.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3 border-b dm-border py-1">
+              <dt className="dm-text-secondary">{k}</dt>
+              <dd className="font-semibold dm-text text-right">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {spec.sections.map((s, i) => {
+        const numeric = new Set(s.numericCols ?? []);
+        const bold = new Set(s.boldRows ?? []);
+        return (
+          <div key={i}>
+            {s.heading && <p className="text-sm font-semibold mb-2">{s.heading}</p>}
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px] sm:text-xs border-collapse">
+                <thead>
+                  <tr>
+                    {s.columns.map((c, j) => (
+                      <th key={j} className={cn("py-2 px-1.5 sm:px-2 border-b dm-border font-semibold", numeric.has(j) ? "text-right" : "text-left")}>{c}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {s.rows.length === 0 ? (
+                    <tr><td colSpan={s.columns.length} className="py-3 px-2 text-center dm-text-secondary">No records for this period</td></tr>
+                  ) : s.rows.map((row, k) => (
+                    <tr key={k} className={cn(bold.has(k) && "font-semibold")}>
+                      {row.map((cell, j) => (
+                        <td key={j} className={cn("py-1.5 px-1.5 sm:px-2 border-b dm-border", numeric.has(j) ? "text-right whitespace-nowrap tabular-nums" : "text-left", j === 0 && "min-w-[7rem]")}>{fmtCell(cell)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -402,6 +598,12 @@ function ReportsInner() {
   const setTab = (t: TabId) => router.replace(`/admin/reports?tab=${t}`, { scroll: false });
 
   const [recent, setRecent] = useSafeList<RecentReport>("admin_recent_reports", SEED_RECENT, "report_id");
+  // Same persisted journal as the Accounting page, so posted entries flow into these statements.
+  const [journal] = usePersistedState<JournalEntry[]>(JOURNAL_KEY, DEFAULT_JOURNAL);
+  const ledger = useMemo<Ledger>(() => {
+    const tb = buildTrialBalance(safeJournal(journal));
+    return { tb, st: buildStatements(tb) };
+  }, [journal]);
   const [schedules, setSchedules] = useSafeList<Schedule>("admin_scheduled_reports", SEED_SCHEDULES, "frequency");
 
   const [expanded, setExpanded] = useState<string[]>(["Financial Reports"]);
@@ -438,7 +640,7 @@ function ReportsInner() {
     if (busy) return;
     setBusy(`${r.id}:PDF`);
     try {
-      await runPdf(r);
+      await runPdf(r, ledger, reportSubtitle(r, formatDate(new Date())));
       if (opts.log) record(r, "PDF");
       showToast(`${r.name} downloaded`);
     } catch {
@@ -487,7 +689,7 @@ function ReportsInner() {
       showToast(`Schedule for ${name} updated`);
     } else {
       setSchedules((prev) => [...prev, { ...clean, id: uid("sch") }]);
-      showToast(`${name} scheduled — ${describeSchedule(clean).toLowerCase()}`);
+      showToast(`${name} scheduled: ${describeSchedule(clean)}`);
     }
     setSchedDraft(null);
   };
@@ -731,9 +933,9 @@ function ReportsInner() {
         {preview && (
           <div id="print-area">
             <p className="text-xs opacity-70">SilverVibe Fraternity Cooperative Society Ltd</p>
-            <h2 className="text-lg font-bold">{preview.gen === "balance" ? "Statement of Financial Position" : preview.name}</h2>
-            <p className="text-xs opacity-70 mb-4">{preview.category} · As at {formatDate(now)}</p>
-            <PreviewTables sections={previewSections(preview)} />
+            <h2 className="text-lg font-bold">{buildSpec(preview, ledger).title}</h2>
+            <p className="text-xs opacity-70 mb-4">{reportSubtitle(preview, formatDate(now))}</p>
+            <PreviewTables spec={buildSpec(preview, ledger)} />
           </div>
         )}
       </Modal>
@@ -802,7 +1004,8 @@ function ReportsInner() {
               />
             </FormField>
             <p className="text-xs dm-text-secondary">
-              {describeSchedule(schedDraft)} · next run {formatDateTime(nextRun(schedDraft, now))}
+              {describeSchedule(schedDraft)}
+              {schedDraft.time ? ` · next run ${formatDateTime(nextRun(schedDraft, now))}` : " · choose a run time to see the next run"}
             </p>
             {schedErr && <p className="text-xs text-[#ef4444]" role="alert">{schedErr}</p>}
           </div>
@@ -818,7 +1021,7 @@ function ReportsInner() {
           showToast("Schedule deleted", "info");
         }}
         title="Delete schedule"
-        message={<>Stop sending <b>{schedDelete && findReport(schedDelete.report_id)?.name}</b> ({schedDelete && describeSchedule(schedDelete).toLowerCase()})?</>}
+        message={<>Stop sending <b>{schedDelete && findReport(schedDelete.report_id)?.name}</b>? It is currently scheduled for: {schedDelete && describeSchedule(schedDelete)}.</>}
         confirmLabel="Delete"
         danger
       />

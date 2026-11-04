@@ -4,7 +4,8 @@ import { ArrowRight, ChevronDown, Lightbulb, Sparkles } from "lucide-react";
 import { loadFromStorage, usePersistedState, showToast } from "@/lib/storage";
 import { getDemoSteps } from "@/lib/demo-steps";
 import { loadSampleActivity } from "@/lib/demo";
-import { cn, useHydrated } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
 
 type Variant = "admin" | "member";
 

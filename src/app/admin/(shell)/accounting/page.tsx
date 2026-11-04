@@ -8,124 +8,23 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { formatCurrency, formatCompact, formatDate, todayISO, useHydrated, cn } from "@/lib/utils";
+import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, cn } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
 import { DEMO_TODAY } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { exportToCsv } from "@/lib/export";
-import {
-  generateIncomeStatement, generateBalanceSheet, generateTrialBalance, generateTablePdf, type StatementLine,
-} from "@/lib/pdf-reports";
+import { generateIncomeStatement, generateBalanceSheet, generateTrialBalance, generateTablePdf } from "@/lib/pdf-reports";
 import Modal, { FormField, TextInput, SelectInput, Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, Badge, PageHeader, StatCard, Tabs } from "@/components/ui";
+import {
+  ACCOUNT_BY_CODE, ACCOUNT_OPTIONS, DEFAULT_JOURNAL, FY_START, HISTORY, JOURNAL_KEY, MONTHS, OPENING_DATE, PERIOD_START,
+  accountLabel, buildStatements, buildTrialBalance, cashFlowTable, nextJeId, trialBalanceRows,
+  type JournalEntry, type Statements, type TbRow,
+} from "../_lib/ledger";
 
-// ------------------------------------------------------------------
-// Chart of accounts. Opening balances are FY 2026 year-to-date as at 30 Sep 2026
-// (positive = the account's normal side). October onwards comes from the journal.
-// ------------------------------------------------------------------
-type AccountType = "asset" | "liability" | "equity" | "income" | "expense";
-interface Account {
-  code: string;
-  name: string;
-  type: AccountType;
-  /** Contra accounts (e.g. loan-loss allowance) sit under assets but carry a credit balance. */
-  normal: "debit" | "credit";
-  opening: number;
-}
-
-const OPENING_DATE = "2026-09-30";
-const PERIOD_START = "2026-10-01";
-
-const BASE_ACCOUNTS: Account[] = [
-  { code: "1000", name: "Cash on hand", type: "asset", normal: "debit", opening: 45_000_000 },
-  { code: "1100", name: "Bank — current account", type: "asset", normal: "debit", opening: 520_000_000 },
-  { code: "1150", name: "Mobile money float", type: "asset", normal: "debit", opening: 38_000_000 },
-  { code: "1200", name: "Loans to members", type: "asset", normal: "debit", opening: 2_125_000_000 },
-  { code: "1250", name: "Allowance for loan losses", type: "asset", normal: "credit", opening: 43_000_000 },
-  { code: "1300", name: "Investments & fixed deposits", type: "asset", normal: "debit", opening: 1_960_000_000 },
-  { code: "1400", name: "Property & equipment (net)", type: "asset", normal: "debit", opening: 340_000_000 },
-  { code: "1500", name: "Interest receivable", type: "asset", normal: "debit", opening: 28_000_000 },
-  { code: "2000", name: "Member savings deposits", type: "liability", normal: "credit", opening: 4_758_000_000 },
-  { code: "2100", name: "Interest payable on savings", type: "liability", normal: "credit", opening: 42_000_000 },
-  { code: "2200", name: "Accrued expenses", type: "liability", normal: "credit", opening: 18_000_000 },
-  { code: "2300", name: "Dividends payable", type: "liability", normal: "credit", opening: 0 },
-  { code: "3000", name: "Share capital", type: "equity", normal: "credit", opening: 1_266_000_000 },
-  { code: "3100", name: "General reserves (b/f)", type: "equity", normal: "credit", opening: 0 }, // balancing figure, set below
-  { code: "4000", name: "Interest income — loans", type: "income", normal: "credit", opening: 310_000_000 },
-  { code: "4100", name: "Investment income", type: "income", normal: "credit", opening: 72_000_000 },
-  { code: "4200", name: "Fees & commissions", type: "income", normal: "credit", opening: 37_000_000 },
-  { code: "5000", name: "Operating expenses", type: "expense", normal: "debit", opening: 48_000_000 },
-  { code: "5100", name: "Staff costs", type: "expense", normal: "debit", opening: 106_500_000 },
-  { code: "5200", name: "Interest on member savings", type: "expense", normal: "debit", opening: 126_000_000 },
-  { code: "5300", name: "Loan loss provision expense", type: "expense", normal: "debit", opening: 16_000_000 },
-  { code: "5400", name: "Depreciation", type: "expense", normal: "debit", opening: 18_000_000 },
-];
-
-/** Signed opening balance: debit positive, credit negative. */
-const signedOpening = (a: Account) => (a.normal === "debit" ? a.opening : -a.opening);
-
-// Reserves b/f is whatever makes the opening trial balance balance.
-const ACCOUNTS: Account[] = (() => {
-  const net = BASE_ACCOUNTS.filter((a) => a.code !== "3100").reduce((s, a) => s + signedOpening(a), 0);
-  return BASE_ACCOUNTS.map((a) => (a.code === "3100" ? { ...a, opening: net } : a));
-})();
-const ACCOUNT_BY_CODE = Object.fromEntries(ACCOUNTS.map((a) => [a.code, a]));
-const accountLabel = (code: string) => `${code} · ${ACCOUNT_BY_CODE[code]?.name ?? "Unknown"}`;
-const ACCOUNT_OPTIONS = ACCOUNTS.map((a) => ({ value: a.code, label: accountLabel(a.code) }));
-const CASH_CODES = ["1000", "1100", "1150"];
-
-// Monthly income/expense Jan–Sep 2026; sums equal the income (419M) and expense (314.5M) opening balances.
-const HISTORY = [
-  { month: "Jan", income: 42_000_000, expense: 33_000_000 },
-  { month: "Feb", income: 43_500_000, expense: 34_000_000 },
-  { month: "Mar", income: 44_000_000, expense: 34_500_000 },
-  { month: "Apr", income: 45_500_000, expense: 34_000_000 },
-  { month: "May", income: 46_000_000, expense: 35_000_000 },
-  { month: "Jun", income: 47_000_000, expense: 35_500_000 },
-  { month: "Jul", income: 48_500_000, expense: 36_000_000 },
-  { month: "Aug", income: 50_000_000, expense: 36_000_000 },
-  { month: "Sep", income: 52_500_000, expense: 36_500_000 },
-];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Chart of accounts, opening balances, seed journal and statement builders live in
+// ../_lib/ledger so the Reports page produces exactly the same figures.
 const EXPENSE_COLORS = ["#4A90D9", "#22c55e", "#f59e0b", "#a855f7", "#C0C0C0"];
-
-// ------------------------------------------------------------------
-// Journal
-// ------------------------------------------------------------------
-interface JournalEntry {
-  id: string;
-  date: string;
-  description: string;
-  debit: string; // account code
-  credit: string; // account code
-  amount: number;
-  reference: string;
-  status: "draft" | "posted";
-  by: string;
-  reversalOf?: string;
-  reversedBy?: string;
-}
-
-const je = (n: number, date: string, description: string, debit: string, credit: string, amount: number, reference: string, status: "draft" | "posted", by = "Sarah Nakamya"): JournalEntry =>
-  ({ id: `JE-2026-${String(n).padStart(4, "0")}`, date, description, debit, credit, amount, reference, status, by });
-
-const DEFAULT_JOURNAL: JournalEntry[] = [
-  je(156, "2026-11-04", "Mobile money collections swept to bank", "1100", "1150", 40_000_000, "SWP-1104", "draft"),
-  je(155, "2026-11-03", "Loan loss provision top-up (PAR review)", "5300", "1250", 1_800_000, "PAR-OCT", "draft"),
-  je(154, "2026-11-03", "Monthly interest accrual on loans", "1500", "4000", 9_500_000, "SYS-INT-11", "posted", "System"),
-  je(153, "2026-11-02", "Internet & IT subscriptions — November", "5000", "1100", 2_600_000, "INV-7781", "posted"),
-  je(152, "2026-11-02", "Fixed deposit interest — Stanbic", "1100", "4100", 8_000_000, "BNK-FD-221", "posted", "System"),
-  je(151, "2026-11-01", "Loan interest received — November", "1100", "4000", 39_500_000, "LN-INT-11", "posted", "System"),
-  je(150, "2026-11-01", "Loan processing fees reclassification", "1150", "4200", 1_500_000, "MJ-0045", "draft"),
-  je(149, "2026-10-31", "Interest on member savings accrued — October", "5200", "2100", 14_000_000, "SYS-SAV-10", "posted", "System"),
-  je(148, "2026-10-31", "Depreciation — October", "5400", "1400", 2_000_000, "DEP-10", "posted", "System"),
-  je(147, "2026-10-31", "Office rent & utilities — October", "5000", "1100", 4_200_000, "INV-7702", "posted"),
-  je(146, "2026-10-28", "Staff salaries — October 2026", "5100", "1100", 11_800_000, "PAY-10", "posted"),
-  je(145, "2026-10-20", "Share capital subscriptions — October", "1100", "3000", 14_000_000, "SHR-10", "posted"),
-  je(144, "2026-10-15", "Member savings deposits via mobile money", "1150", "2000", 62_000_000, "MM-BATCH-10", "posted", "System"),
-  je(143, "2026-10-05", "Loan disbursements — October batch", "1200", "1100", 175_000_000, "DISB-10", "posted"),
-  je(142, "2026-10-01", "Loan interest received — October", "1100", "4000", 38_000_000, "LN-INT-10", "posted", "System"),
-  je(141, "2026-10-01", "Loan principal repayments — October", "1100", "1200", 150_000_000, "LN-PRN-10", "posted", "System"),
-];
 
 type TabId = "overview" | "journal" | "trial" | "statements";
 const TAB_IDS: TabId[] = ["overview", "journal", "trial", "statements"];
@@ -133,73 +32,6 @@ type StatementKind = "income" | "balance" | "cashflow" | "trial";
 
 const th = "text-left px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap";
 const td = "px-4 py-3 text-xs whitespace-nowrap";
-
-const nextJeId = (entries: JournalEntry[]) => {
-  const max = entries.reduce((m, e) => Math.max(m, Number(e.id.split("-").pop()) || 0), 0);
-  return `JE-2026-${String(max + 1).padStart(4, "0")}`;
-};
-
-interface TbRow { code: string; name: string; type: AccountType; normal: "debit" | "credit"; net: number; movement: number; debit: number; credit: number }
-
-/** Trial balance from opening balances + POSTED entries. `net`/`movement` are signed (debit +). */
-function buildTrialBalance(entries: JournalEntry[]): TbRow[] {
-  const movement: Record<string, number> = {};
-  for (const e of entries) {
-    if (e.status !== "posted") continue;
-    movement[e.debit] = (movement[e.debit] ?? 0) + e.amount;
-    movement[e.credit] = (movement[e.credit] ?? 0) - e.amount;
-  }
-  return ACCOUNTS.map((a) => {
-    const mv = movement[a.code] ?? 0;
-    const net = signedOpening(a) + mv;
-    return { code: a.code, name: a.name, type: a.type, normal: a.normal, net, movement: mv, debit: net > 0 ? net : 0, credit: net < 0 ? -net : 0 };
-  });
-}
-
-/** Balance shown on the account's normal side (positive when normal). */
-const normalBal = (r: TbRow) => (r.normal === "debit" ? r.net : -r.net);
-
-function buildStatements(tb: TbRow[]) {
-  const by = (code: string) => tb.find((r) => r.code === code);
-  const income: StatementLine[] = tb.filter((r) => r.type === "income").map((r) => ({ label: r.name, amount: normalBal(r) }));
-  const expenses: StatementLine[] = tb.filter((r) => r.type === "expense").map((r) => ({ label: r.name, amount: normalBal(r) }));
-  const totalIncome = income.reduce((a, l) => a + l.amount, 0);
-  const totalExpenses = expenses.reduce((a, l) => a + l.amount, 0);
-  const surplus = totalIncome - totalExpenses;
-
-  // Asset lines are debit-signed so the contra allowance shows as a deduction.
-  const assets: StatementLine[] = tb.filter((r) => r.type === "asset").map((r) => ({ label: r.normal === "credit" ? `Less: ${r.name.toLowerCase()}` : r.name, amount: r.net }));
-  const liabilities: StatementLine[] = tb.filter((r) => r.type === "liability").map((r) => ({ label: r.name, amount: normalBal(r) }));
-  const equity: StatementLine[] = tb.filter((r) => r.type === "equity").map((r) => ({ label: r.name, amount: normalBal(r) }));
-  const totalAssets = assets.reduce((a, l) => a + l.amount, 0);
-  const totalLiabilities = liabilities.reduce((a, l) => a + l.amount, 0);
-  const equityBase = equity.reduce((a, l) => a + l.amount, 0);
-  // Same balancing line generateBalanceSheet() adds, so preview and PDF agree.
-  const retained = totalAssets - totalLiabilities - equityBase;
-
-  // Cash flow since the opening date (indirect method). Every non-cash account
-  // contributes −(its movement), so the total always equals the change in cash.
-  const mv = (...codes: string[]) => codes.reduce((a, c) => a + (by(c)?.movement ?? 0), 0);
-  const incomeExpenseCodes = tb.filter((r) => r.type === "income" || r.type === "expense").map((r) => r.code);
-  const cash: { section: string; label: string; amount: number }[] = [
-    { section: "Operating activities", label: "Net surplus for the period", amount: -mv(...incomeExpenseCodes) },
-    { section: "Operating activities", label: "Add: depreciation", amount: mv("5400") },
-    { section: "Operating activities", label: "Add: loan loss provisions", amount: -mv("1250") },
-    { section: "Operating activities", label: "(Increase)/decrease in interest receivable", amount: -mv("1500") },
-    { section: "Operating activities", label: "Increase in interest payable & accruals", amount: -mv("2100", "2200") },
-    { section: "Operating activities", label: "Increase in member savings deposits", amount: -mv("2000") },
-    { section: "Investing activities", label: "Net loans (disbursed)/repaid", amount: -mv("1200") },
-    { section: "Investing activities", label: "Investments & fixed deposits", amount: -mv("1300") },
-    { section: "Investing activities", label: "Purchase of property & equipment", amount: -mv("1400") - mv("5400") },
-    { section: "Financing activities", label: "Share capital subscriptions", amount: -mv("3000") },
-    { section: "Financing activities", label: "Dividends & reserve movements", amount: -mv("2300", "3100") },
-  ];
-  const openingCash = CASH_CODES.reduce((a, c) => a + signedOpening(ACCOUNT_BY_CODE[c]), 0);
-  const netCash = cash.reduce((a, l) => a + l.amount, 0);
-
-  return { income, expenses, totalIncome, totalExpenses, surplus, assets, liabilities, equity, totalAssets, totalLiabilities, retained, cash, openingCash, netCash };
-}
-type Statements = ReturnType<typeof buildStatements>;
 
 export default function AdminAccountingPage() {
   return (
@@ -219,7 +51,7 @@ function AccountingInner() {
   const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
   const today = hydrated ? todayISO() : DEMO_TODAY;
 
-  const [entries, setEntries] = usePersistedState<JournalEntry[]>("admin_journal_entries", DEFAULT_JOURNAL);
+  const [entries, setEntries] = usePersistedState<JournalEntry[]>(JOURNAL_KEY, DEFAULT_JOURNAL);
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -288,12 +120,13 @@ function AccountingInner() {
     else if (form.date < PERIOD_START) e.date = `Periods before ${formatDate(PERIOD_START)} are closed`;
     else if (form.date > today) e.date = "Entries cannot be future-dated";
     if (form.debit === form.credit) e.credit = "Debit and credit accounts must differ";
-    if (!(amount > 0)) e.amount = "Enter an amount greater than zero";
+    if (!form.amount.trim() || !(amount > 0)) e.amount = "Enter an amount greater than zero";
+    else if (!/^\d+$/.test(form.amount.trim())) e.amount = "UGX amounts must be whole shillings (no decimals)";
     setErrors(e);
     if (Object.keys(e).length) return;
     const id = nextJeId(entries);
     setEntries((prev) => [
-      { id, date: form.date, description: form.description.trim(), debit: form.debit, credit: form.credit, amount: Math.round(amount), reference: form.reference.trim(), status: post ? "posted" : "draft", by: "Sarah Nakamya" },
+      { id, date: form.date, description: form.description.trim(), debit: form.debit, credit: form.credit, amount, reference: form.reference.trim(), status: post ? "posted" : "draft", by: "Sarah Nakamya" },
       ...prev,
     ]);
     showToast(post ? `${id} posted to the ledger` : `${id} saved as draft`);
@@ -322,7 +155,7 @@ function AccountingInner() {
     setViewId(null);
   };
 
-  const tbExportRows = tb.map((r) => ({ code: r.code, name: r.name, debit: r.debit, credit: r.credit }));
+  const tbExportRows = trialBalanceRows(tb);
   const exportJournal = () => {
     if (!filtered.length) return showToast("No journal entries to export", "info");
     exportToCsv(`journal-${todayISO()}`, filtered.map((e) => ({ ...e, debit: accountLabel(e.debit), credit: accountLabel(e.credit), status: e.reversedBy ? "reversed" : e.status })), [
@@ -346,23 +179,14 @@ function AccountingInner() {
       else if (kind === "balance") await generateBalanceSheet(st.assets, st.liabilities, st.equity);
       else if (kind === "trial") await generateTrialBalance(tbExportRows);
       else {
-        // generateCashFlow() only prints fixed demo figures, so build the table from the ledger instead.
-        const rows: (string | number)[][] = [];
-        const bold: number[] = [];
-        let section = "";
-        for (const l of st.cash) {
-          if (l.section !== section) {
-            section = l.section;
-            bold.push(rows.length);
-            rows.push([section, ""]);
-          }
-          rows.push([`   ${l.label}`, l.amount]);
-        }
-        bold.push(rows.length, rows.length + 2);
-        rows.push(["Net increase/(decrease) in cash", st.netCash], ["Cash at 30 Sep 2026", st.openingCash], ["Cash at end of period", st.openingCash + st.netCash]);
+        // generateCashFlow() only prints fixed demo figures, so build the table from the ledger
+        // (same rows as the on-screen preview and the Reports page).
+        const cf = cashFlowTable(st);
+        const rows = cf.rows.map(([label, amount], i) => [cf.headingRows.includes(i) || cf.boldRows.includes(i) ? label : `   ${label}`, amount]);
+        const bold = cf.boldRows;
         await generateTablePdf({
           title: "Cash Flow Statement",
-          subtitle: `For the period ${formatDate(PERIOD_START)} to ${formatDate(todayISO())}`,
+          subtitle: `FY 2026 · for the period ${formatDate(FY_START)} to ${formatDate(todayISO())}`,
           filename: `cash-flow-${todayISO()}`,
           summary: [["Net increase in cash", formatCurrency(st.netCash)], ["Closing cash & bank", formatCurrency(st.openingCash + st.netCash)]],
           sections: [{ columns: ["Item", "Amount (UGX)"], rows, boldRows: bold, numericCols: [1] }],
@@ -379,7 +203,7 @@ function AccountingInner() {
   const STATEMENT_CARDS: { kind: StatementKind; title: string; desc: string; icon: typeof BookOpen; figure: string }[] = [
     { kind: "income", title: "Income Statement", desc: "Revenue and expenses, FY 2026 year to date", icon: TrendingUp, figure: `Surplus ${formatCompact(st.surplus)}` },
     { kind: "balance", title: "Balance Sheet", desc: "Assets, liabilities and equity", icon: Scale, figure: `Assets ${formatCompact(st.totalAssets)}` },
-    { kind: "cashflow", title: "Cash Flow Statement", desc: `Cash movements since ${formatDate(PERIOD_START)}`, icon: Landmark, figure: `Net ${formatCompact(st.netCash)}` },
+    { kind: "cashflow", title: "Cash Flow Statement", desc: `Cash movements since ${formatDate(FY_START)} (FY 2026 to date)`, icon: Landmark, figure: `Net ${formatCompact(st.netCash)}` },
     { kind: "trial", title: "Trial Balance", desc: "Closing balances of every account", icon: FileSpreadsheet, figure: balanced ? "Balanced" : "Out of balance" },
   ];
 
@@ -617,7 +441,7 @@ function AccountingInner() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Amount (UGX)" required error={errors.amount}>
-              <TextInput type="number" min={0} value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} placeholder="0" />
+              <TextInput type="number" min={1} step={1} inputMode="numeric" value={form.amount} onChange={(v) => { setForm({ ...form, amount: v }); if (errors.amount) setErrors({ ...errors, amount: "" }); }} placeholder="0" />
             </FormField>
             <FormField label="Reference" hint="Invoice, receipt or voucher number">
               <TextInput value={form.reference} onChange={(v) => setForm({ ...form, reference: v })} placeholder="e.g. INV-7790" maxLength={30} />
@@ -714,34 +538,38 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** Amount inside statement tables: the "UGX" sits in the column header so cells fit at 390px. */
+const amt = (n: number) => formatNumber(Math.round(n));
+const stTd = "px-3 sm:px-4 py-2.5 text-[11px] sm:text-xs";
+
 function TrialBalanceTable({ tb, totals }: { tb: TbRow[]; totals: { debit: number; credit: number } }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-            <th className={th}>Code</th>
-            <th className={th}>Account</th>
-            <th className={cn(th, "text-right")}>Debit</th>
-            <th className={cn(th, "text-right")}>Credit</th>
+            <th className={cn(th, "px-3 sm:px-4")}>Code</th>
+            <th className={cn(th, "px-3 sm:px-4")}>Account</th>
+            <th className={cn(th, "px-3 sm:px-4 text-right")}>Debit (UGX)</th>
+            <th className={cn(th, "px-3 sm:px-4 text-right")}>Credit (UGX)</th>
           </tr>
         </thead>
         <tbody>
           {tb.map((r) => (
             <tr key={r.code} className="border-b border-[#e2e8f0]">
-              <td className={cn(td, "font-mono dm-text-secondary")}>{r.code}</td>
-              <td className={cn(td, "dm-text")}>{r.name}</td>
-              <td className={cn(td, "text-right dm-text")}>{r.debit ? formatCurrency(r.debit) : "—"}</td>
-              <td className={cn(td, "text-right dm-text")}>{r.credit ? formatCurrency(r.credit) : "—"}</td>
+              <td className={cn(stTd, "font-mono dm-text-secondary")}>{r.code}</td>
+              <td className={cn(stTd, "dm-text min-w-[9rem]")}>{r.name}</td>
+              <td className={cn(stTd, "text-right dm-text whitespace-nowrap tabular-nums")}>{r.debit ? formatNumber(r.debit) : "—"}</td>
+              <td className={cn(stTd, "text-right dm-text whitespace-nowrap tabular-nums")}>{r.credit ? formatNumber(r.credit) : "—"}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="font-bold bg-[#f8f9fa]">
-            <td className={td} />
-            <td className={cn(td, "dm-text")}>Totals</td>
-            <td className={cn(td, "text-right dm-text")}>{formatCurrency(totals.debit)}</td>
-            <td className={cn(td, "text-right dm-text")}>{formatCurrency(totals.credit)}</td>
+            <td className={stTd} />
+            <td className={cn(stTd, "dm-text")}>Totals</td>
+            <td className={cn(stTd, "text-right dm-text whitespace-nowrap tabular-nums")}>{formatNumber(totals.debit)}</td>
+            <td className={cn(stTd, "text-right dm-text whitespace-nowrap tabular-nums")}>{formatNumber(totals.credit)}</td>
           </tr>
         </tfoot>
       </table>
@@ -749,15 +577,23 @@ function TrialBalanceTable({ tb, totals }: { tb: TbRow[]; totals: { debit: numbe
   );
 }
 
-function StatementTable({ rows }: { rows: { label: string; amount?: number; bold?: boolean; heading?: boolean }[] }) {
+interface StRow { label: string; amount?: number; bold?: boolean; heading?: boolean }
+
+function StatementTable({ rows }: { rows: StRow[] }) {
   return (
     <div className="overflow-x-auto rounded-xl border dm-border">
       <table className="w-full">
+        <thead>
+          <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
+            <th className={cn(th, "px-3 sm:px-4")}>Line item</th>
+            <th className={cn(th, "px-3 sm:px-4 text-right")}>Amount (UGX)</th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className={cn("border-b border-[#e2e8f0] last:border-0", r.heading && "bg-[#f8f9fa]")}>
-              <td className={cn(td, r.heading ? "font-semibold dm-text" : r.bold ? "font-bold dm-text" : "dm-text-secondary pl-8")}>{r.label}</td>
-              <td className={cn(td, "text-right", r.bold || r.heading ? "font-bold dm-text" : "dm-text")}>{r.amount === undefined ? "" : formatCurrency(r.amount)}</td>
+              <td className={cn(stTd, r.heading ? "font-semibold dm-text" : r.bold ? "font-bold dm-text" : "dm-text-secondary pl-5 sm:pl-8")}>{r.label}</td>
+              <td className={cn(stTd, "text-right whitespace-nowrap tabular-nums", r.bold || r.heading ? "font-bold dm-text" : "dm-text")}>{r.amount === undefined ? "" : amt(r.amount)}</td>
             </tr>
           ))}
         </tbody>
@@ -784,7 +620,6 @@ function StatementPreview({ kind, st, today }: { kind: Exclude<StatementKind, "t
     );
   }
   if (kind === "balance") {
-    const totalEquity = st.equity.reduce((a, l) => a + l.amount, 0) + st.retained;
     return (
       <>
         <p className="text-xs dm-text-secondary mb-3">Statement of financial position as at {formatDate(today)}</p>
@@ -798,22 +633,24 @@ function StatementPreview({ kind, st, today }: { kind: Exclude<StatementKind, "t
           { label: "Equity", heading: true },
           ...st.equity.map((l) => ({ label: l.label, amount: l.amount })),
           { label: "Retained surplus & reserves", amount: st.retained },
-          { label: "Total equity", amount: totalEquity, bold: true },
-          { label: "Total liabilities & equity", amount: st.totalLiabilities + totalEquity, heading: true },
+          { label: "Total equity", amount: st.totalEquity, bold: true },
+          { label: "Total liabilities & equity", amount: st.totalLiabilities + st.totalEquity, heading: true },
         ]} />
       </>
     );
   }
-  const sections = Array.from(new Set(st.cash.map((l) => l.section)));
+  // Same rows as the PDF (cashFlowTable), so screen and download agree line for line.
+  const cf = cashFlowTable(st);
+  const last = cf.rows.length - 1;
   return (
     <>
-      <p className="text-xs dm-text-secondary mb-3">For the period {formatDate(PERIOD_START)} to {formatDate(today)}</p>
-      <StatementTable rows={[
-        ...sections.flatMap((s) => [{ label: s, heading: true }, ...st.cash.filter((l) => l.section === s).map((l) => ({ label: l.label, amount: l.amount }))]),
-        { label: "Net increase/(decrease) in cash", amount: st.netCash, bold: true },
-        { label: `Cash at ${formatDate(OPENING_DATE)}`, amount: st.openingCash },
-        { label: "Cash at end of period", amount: st.openingCash + st.netCash, heading: true },
-      ]} />
+      <p className="text-xs dm-text-secondary mb-3">FY 2026 · for the period {formatDate(FY_START)} to {formatDate(today)}</p>
+      <StatementTable rows={cf.rows.map(([label, amount], i): StRow => ({
+        label,
+        amount: amount === "" ? undefined : amount,
+        heading: cf.headingRows.includes(i) || i === last,
+        bold: cf.boldRows.includes(i),
+      }))} />
     </>
   );
 }

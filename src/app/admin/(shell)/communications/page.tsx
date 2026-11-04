@@ -6,12 +6,13 @@ import {
   FileText, Inbox, Mail, Megaphone, MessageSquare, Plus, Search, Send, Trash2, Users,
 } from "lucide-react";
 import Modal, { Button, ConfirmDialog, FormField, SelectInput, TextAreaInput, TextInput } from "@/components/Modal";
-import { Badge, EmptyState, PageHeader, StatCard, Tabs } from "@/components/ui";
+import { Badge, EmptyState, PageHeader, StatCard } from "@/components/ui";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { exportToCsv } from "@/lib/export";
 import { ADMIN_KPI, ADMIN_MEMBERS_LIST, ADMIN_NOTIFICATIONS } from "@/lib/mock-data";
-import { cn, formatDateTime, formatNumber, timeAgo, uid, useHydrated } from "@/lib/utils";
+import { cn, formatDateTime, formatNumber, timeAgo, uid } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
 
 /* ============================================================
  * Types & seed data
@@ -232,10 +233,16 @@ function MessageFields({ draft, onChange }: { draft: MessageDraft; onChange: (d:
         />
         {isSms && (
           <div className="flex flex-wrap justify-between gap-2 text-[11px] mt-1">
-            <span className={cn(draft.message.length > SMS_SEGMENT ? "text-[#d97706]" : "dm-text-secondary")}>
-              {draft.message.length}/{SMS_SEGMENT * segments} characters · {segments} SMS segment{segments === 1 ? "" : "s"}
-              {segments > 1 && " (billed per segment)"}
-            </span>
+            {draft.message.length > SMS_MAX ? (
+              <span className="text-[#ef4444] font-medium" role="alert">
+                {draft.message.length}/{SMS_MAX} characters · {draft.message.length - SMS_MAX} over the SMS limit — shorten the message or switch to Email
+              </span>
+            ) : (
+              <span className={cn(draft.message.length > SMS_SEGMENT ? "text-[#d97706]" : "dm-text-secondary")}>
+                {draft.message.length}/{SMS_SEGMENT * segments} characters · {segments} SMS segment{segments === 1 ? "" : "s"}
+                {segments > 1 && " (billed per segment)"}
+              </span>
+            )}
             <span className="dm-text-secondary">
               ≈ {formatNumber(segments * recipients)} SMS credits · max {SMS_MAX} chars
             </span>
@@ -246,9 +253,40 @@ function MessageFields({ draft, onChange }: { draft: MessageDraft; onChange: (d:
   );
 }
 
+/**
+ * Tab bar that wraps instead of scrolling, with shorter labels on phones, so every
+ * tab stays visible and tappable at 390px.
+ */
+function CommsTabs<T extends string>({ tabs, active, onChange }: { tabs: { id: T; label: string; short: string; count?: number }[]; active: T; onChange: (t: T) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1 dm-surface-hover rounded-xl p-1" role="tablist">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="tab"
+          aria-selected={active === t.id}
+          aria-label={t.label}
+          onClick={() => onChange(t.id)}
+          className={cn(
+            "px-3 sm:px-4 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap",
+            active === t.id ? "dm-surface dm-text shadow-sm" : "dm-text-secondary hover:dm-text"
+          )}
+        >
+          <span className="sm:hidden">{t.short}</span>
+          <span className="hidden sm:inline">{t.label}</span>
+          {typeof t.count === "number" && <span className="ml-1.5 opacity-60">{t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function draftError(d: MessageDraft): string | null {
   if (!d.title.trim()) return "Add a title or subject.";
   if (!d.message.trim()) return "Write a message.";
+  // maxLength only limits typing; text carried over from Email/Push can still exceed it.
+  if (d.channel === "SMS" && d.message.length > SMS_MAX) return `SMS messages are limited to ${SMS_MAX} characters (currently ${d.message.length}).`;
   if (d.audience === "member" && !d.member_sv) return "Choose a member.";
   return null;
 }
@@ -282,6 +320,7 @@ function CommunicationsInner() {
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [editDraft, setEditDraft] = useState<MessageDraft>(EMPTY_DRAFT);
   const [editErr, setEditErr] = useState<string | null>(null);
+  const [editSendAt, setEditSendAt] = useState("");
   const [toDelete, setToDelete] = useState<Announcement | null>(null);
 
   // Compose tab
@@ -346,6 +385,7 @@ function CommunicationsInner() {
   const openEdit = (a: Announcement) => {
     setEditing(a);
     setEditDraft({ title: a.title, message: a.message, channel: a.channel, audience: a.audience, member_sv: a.member_sv ?? EMPTY_DRAFT.member_sv });
+    setEditSendAt(a.scheduled_for ?? "");
     setEditErr(null);
   };
 
@@ -353,10 +393,18 @@ function CommunicationsInner() {
     if (!editing) return;
     const err = draftError(editDraft);
     if (err) return setEditErr(err);
+    const isScheduled = editing.status === "scheduled";
+    if (isScheduled) {
+      if (!editSendAt) return setEditErr("Pick a date and time to send the message.");
+      if (new Date(editSendAt).getTime() <= Date.now()) return setEditErr("The scheduled time must be in the future.");
+    }
     setAnnouncements((prev) =>
       prev.map((x) =>
         x.id === editing.id
-          ? { ...x, ...editDraft, title: editDraft.title.trim(), member_sv: editDraft.audience === "member" ? editDraft.member_sv : null }
+          ? {
+              ...x, ...editDraft, title: editDraft.title.trim(), member_sv: editDraft.audience === "member" ? editDraft.member_sv : null,
+              ...(isScheduled ? { scheduled_for: editSendAt } : {}),
+            }
           : x
       )
     );
@@ -448,11 +496,11 @@ function CommunicationsInner() {
   const sortedNotifs = [...notifs].sort((a, b) => b.time.localeCompare(a.time));
 
   const tabs = [
-    { id: "announcements" as const, label: "Announcements", count: announcements.length },
-    { id: "compose" as const, label: "Compose" },
-    { id: "templates" as const, label: "Templates", count: templates.length },
-    { id: "history" as const, label: "History", count: log.length },
-    { id: "notifications" as const, label: "Notifications", count: stats.unread },
+    { id: "announcements" as const, label: "Announcements", short: "Posts", count: announcements.length },
+    { id: "compose" as const, label: "Compose", short: "Compose" },
+    { id: "templates" as const, label: "Templates", short: "Templates", count: templates.length },
+    { id: "history" as const, label: "History", short: "History", count: log.length },
+    { id: "notifications" as const, label: "Notifications", short: "Alerts", count: stats.unread },
   ];
 
   return (
@@ -474,7 +522,7 @@ function CommunicationsInner() {
         <StatCard label="Unread notifications" value={stats.unread} sub={`${notifs.length} total`} icon={BellRing} color="#a855f7" />
       </div>
 
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      <CommsTabs tabs={tabs} active={tab} onChange={setTab} />
 
       {/* ================= Announcements ================= */}
       {tab === "announcements" && (
@@ -737,6 +785,13 @@ function CommunicationsInner() {
         }
       >
         <MessageFields draft={editDraft} onChange={(d) => { setEditDraft(d); setEditErr(null); }} />
+        {editing?.status === "scheduled" && (
+          <div className="max-w-xs mt-4">
+            <FormField label="Send at" required hint="Local time (EAT). Must be in the future.">
+              <TextInput type="datetime-local" value={editSendAt} onChange={(v) => { setEditSendAt(v); setEditErr(null); }} />
+            </FormField>
+          </div>
+        )}
         {editErr && <p className="text-xs text-[#ef4444] mt-3" role="alert">{editErr}</p>}
       </Modal>
 

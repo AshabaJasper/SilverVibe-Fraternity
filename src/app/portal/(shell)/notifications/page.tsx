@@ -8,7 +8,8 @@ import {
 import { NOTIFICATIONS_DATA, type MemberNotification } from "@/lib/mock-data";
 import { KEYS } from "@/lib/keys";
 import { usePersistedState, showToast } from "@/lib/storage";
-import { cn, daysUntil, formatDate, useHydrated } from "@/lib/utils";
+import { cn, daysUntil, formatDate } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, PageHeader } from "@/components/ui";
 import LoanStatusNotifier from "../_components/LoanStatusNotifier";

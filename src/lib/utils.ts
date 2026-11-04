@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { useSyncExternalStore } from "react";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -109,13 +108,4 @@ export function getInitials(name: string): string {
 /** Short unique id for demo records. */
 export function uid(prefix = "id"): string {
   return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-}
-
-const noopSubscribe = () => () => {};
-/**
- * `true` only after hydration on the client. Use it to gate anything that differs
- * between server and browser (time-of-day greeting, Date.now(), localStorage).
- */
-export function useHydrated(): boolean {
-  return useSyncExternalStore(noopSubscribe, () => true, () => false);
 }

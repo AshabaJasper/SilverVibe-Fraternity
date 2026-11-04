@@ -95,6 +95,16 @@ interface AuditEntry {
   severity: "info" | "important" | "warning";
 }
 
+/** Audit timestamps are local wall-clock "YYYY-MM-DDTHH:MM:SS" (no zone), like the seeds. */
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const localStamp = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+/** Parsed time for sorting; zone-less strings parse as local time, older "…Z" entries as UTC. */
+const stampTime = (ts: string) => {
+  const t = new Date(ts).getTime();
+  return Number.isNaN(t) ? 0 : t;
+};
+
 const SEED_AUDIT: AuditEntry[] = [
   { id: "au-01", timestamp: "2026-11-04T09:15:00", user: "System", module: "Savings", action: "Deposit posted", detail: "UGX 500,000 to Regular Savings for Fatima Nankya (SV-0056)", severity: "info" },
   { id: "au-02", timestamp: "2026-11-04T08:45:00", user: "Diana Acan", module: "Members", action: "Member registered", detail: "Martha Apio (SV-0078) — KYC pending", severity: "info" },
@@ -104,7 +114,7 @@ const SEED_AUDIT: AuditEntry[] = [
   { id: "au-06", timestamp: "2026-11-03T15:20:00", user: "Rose Namulema", module: "Communications", action: "Message scheduled", detail: "Loan arrears reminder (SMS) to defaulters for 10 Nov 2026", severity: "info" },
   { id: "au-07", timestamp: "2026-11-02T14:05:00", user: "Sarah Nakamya", module: "Loans", action: "Loan approved", detail: "Emergency Loan UGX 2,000,000 for Samuel Byaruhanga (SV-0089)", severity: "important" },
   { id: "au-08", timestamp: "2026-11-01T22:14:00", user: "Unknown", module: "Auth", action: "Failed login", detail: "3 failed attempts for diana.acan@silvervibe.coop from 41.202.230.7", severity: "warning" },
-  { id: "au-09", timestamp: "2026-11-01T10:00:00", user: "John Mugisha", module: "Accounting", action: "Journal posted", detail: "JE-2026-0456 October salary provision UGX 11,800,000", severity: "info" },
+  { id: "au-09", timestamp: "2026-10-28T16:40:00", user: "Sarah Nakamya", module: "Accounting", action: "Journal posted", detail: "JE-2026-0146 Staff salaries — October 2026 UGX 11,800,000", severity: "info" },
   { id: "au-10", timestamp: "2026-10-28T11:05:00", user: "Sarah Nakamya", module: "Reports", action: "Report exported", detail: "Member Register (CSV)", severity: "info" },
   { id: "au-11", timestamp: "2026-10-20T10:15:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: "AGM 2026 notice (Email) to 847 members", severity: "important" },
   { id: "au-12", timestamp: "2026-10-14T16:30:00", user: "Sarah Nakamya", module: "Settings", action: "User deactivated", detail: "Diana Acan set to inactive (extended leave)", severity: "important" },
@@ -382,7 +392,7 @@ function SettingsInner() {
   const roleName = (id: string) => roleById[id]?.name ?? "Unassigned";
 
   const log = (module: string, action: string, detail: string, severity: AuditEntry["severity"] = "info") =>
-    setAudit((prev) => [{ id: uid("au"), timestamp: new Date().toISOString(), user: actor, module, action, detail, severity }, ...prev]);
+    setAudit((prev) => [{ id: uid("au"), timestamp: localStamp(new Date()), user: actor, module, action, detail, severity }, ...prev]);
 
   /* ---------------- Users ---------------- */
   const [userQuery, setUserQuery] = useState("");
@@ -496,7 +506,7 @@ function SettingsInner() {
   const shownAudit = useMemo(() => {
     const q = auditQuery.trim().toLowerCase();
     return [...audit]
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .sort((a, b) => stampTime(b.timestamp) - stampTime(a.timestamp))
       .filter((a) => (auditModule === "all" || a.module === auditModule) && (auditUser === "all" || a.user === auditUser))
       .filter((a) => !q || `${a.action} ${a.detail} ${a.user}`.toLowerCase().includes(q));
   }, [audit, auditQuery, auditModule, auditUser]);

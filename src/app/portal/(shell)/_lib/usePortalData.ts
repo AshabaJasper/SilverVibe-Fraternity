@@ -22,7 +22,8 @@ import {
   RECENT_TRANSACTIONS,
   SAVINGS_HISTORY,
 } from "@/lib/mock-data";
-import { daysUntil, todayISO, uid, useHydrated } from "@/lib/utils";
+import { daysUntil, todayISO, uid } from "@/lib/utils";
+import { useHydrated } from "@/lib/use-hydrated";
 
 // ---------------------------------------------------------------- types
 

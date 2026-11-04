@@ -84,6 +84,18 @@ try {
   await page.waitForURL((u) => u.pathname === "/portal", { timeout: 8000 }).catch(() => fail("/portal/login", "sign in failed"));
   // Member login replaces the admin session (one session at a time), so re-login admin per pass below.
 
+  console.log("Landing and 404");
+  {
+    const res = await page.goto(BASE + "/", { waitUntil: "networkidle" });
+    if (res?.status() !== 200) fail("/", `HTTP ${res?.status()}`);
+    for (const t of ["Savings. Loans. Shares.", "Demo access", "admin@silvervibe.coop", "SV-0042"]) {
+      if (!(await page.getByText(t, { exact: false }).first().isVisible().catch(() => false))) fail("/", `missing "${t}"`);
+    }
+    const nf = await page.goto(BASE + "/this-page-does-not-exist", { waitUntil: "networkidle" });
+    if (nf?.status() !== 404) fail("/404", `expected 404, got ${nf?.status()}`);
+    if (!(await page.getByText("Page not found").isVisible().catch(() => false))) fail("/404", "branded 404 not shown");
+  }
+
   const routes = only ? [only] : [...ADMIN, ...PORTAL];
   for (const theme of ["light", "dark"]) {
     await setTheme(page, theme);

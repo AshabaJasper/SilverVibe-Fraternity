@@ -23,6 +23,8 @@ interface Module {
   title: string;
   icon: LucideIcon;
   color: string;
+  /** Shown above the feature list when the module is expanded. */
+  note?: string;
   features: Feature[];
 }
 
@@ -113,7 +115,7 @@ const MODULES: Module[] = [
   {
     title: "Administration",
     icon: Settings,
-    color: "#1e293b",
+    color: "#64748b",
     features: [
       { name: "System users with 2FA, reset password, activate/deactivate", status: "done", href: "/admin/settings?tab=users" },
       { name: "Roles and permission matrix", status: "done", href: "/admin/settings?tab=roles" },
@@ -125,6 +127,7 @@ const MODULES: Module[] = [
     title: "Member Portal",
     icon: Smartphone,
     color: "#4A90D9",
+    note: "“Try it” links open the member portal, which needs the member sign-in: SV-0042 / member123.",
     features: [
       { name: "Sign in with password or phone OTP", status: "done", href: "/portal/login" },
       { name: "Dashboard: net worth, health score, quick deposit", status: "done", href: "/portal" },
@@ -165,6 +168,14 @@ const MODULES: Module[] = [
 ];
 
 type Filter = "all" | Status;
+
+/** Module subtitle that matches the active filter: "7 planned", "6 working", "6 of 6 working". */
+function moduleCount(filter: Filter, done: number, total: number) {
+  if (filter === "planned") return `${total} planned`;
+  if (filter === "done") return `${total} working`;
+  if (done === 0) return `${total} planned`;
+  return `${done} of ${total} working`;
+}
 
 export default function ChecklistPage() {
   const [filter, setFilter] = useState<Filter>("all");
@@ -248,12 +259,13 @@ export default function ChecklistPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold dm-text">{m.title}</p>
-                    <p className="text-xs dm-text-secondary">
-                      {mDone} of {m.features.length} {filter === "planned" ? "planned" : "working"}
-                    </p>
+                    <p className="text-xs dm-text-secondary">{moduleCount(filter, mDone, m.features.length)}</p>
                   </div>
                   <ChevronDown className={cn("w-4 h-4 dm-text-secondary transition-transform", isOpen && "rotate-180")} />
                 </button>
+                {isOpen && m.note && (
+                  <p className="border-t dm-border px-5 py-2.5 text-xs dm-text-secondary bg-[#f8f9fa]">{m.note}</p>
+                )}
                 {isOpen && (
                   <ul className="border-t dm-border divide-y divide-[#e2e8f0]">
                     {m.features.map((f) => (
