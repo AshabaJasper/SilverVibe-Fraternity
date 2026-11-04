@@ -1,420 +1,560 @@
 "use client";
-import { useState } from "react";
-import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
-import { ADMIN_MEMBERS_LIST } from "@/lib/mock-data";
-import { usePersistedState, showToast } from "@/lib/storage";
-import Modal from "@/components/Modal";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
-  Search, Download, UserPlus, Eye, Edit2,
-  CheckCircle, XCircle, Clock, Shield, Phone, Mail,
-  Save, Trash2, AlertTriangle, Users, CreditCard, PiggyBank,
+  Search, Download, UserPlus, Eye, Edit2, CheckCircle, XCircle, Clock, Shield, Phone, Mail,
+  Save, Trash2, AlertTriangle, Users, CreditCard, PiggyBank, FileText, Loader2, BadgeCheck, X,
 } from "lucide-react";
+import { formatCurrency, formatDate, getInitials, todayISO } from "@/lib/utils";
+import { ADMIN_KPI, ADMIN_MEMBERS_LIST, DEMO_MEMBER, RECENT_TRANSACTIONS } from "@/lib/mock-data";
+import { usePersistedState, showToast } from "@/lib/storage";
+import { KEYS } from "@/lib/keys";
+import { exportToCsv } from "@/lib/export";
+import { generateMemberStatement, type StatementTxn } from "@/lib/pdf-reports";
+import Modal, { Button, ConfirmDialog, FormField, SelectInput, TextInput } from "@/components/Modal";
+import { Badge, EmptyState, PageHeader, Tabs } from "@/components/ui";
+
+/* ------------------------------------------------------------------ */
+/* Types, constants and pure helpers (module level on purpose)        */
+/* ------------------------------------------------------------------ */
 
 type StatusFilter = "all" | "active" | "dormant" | "suspended" | "pending";
 
-interface Member {
-  sv_number: string;
-  name: string;
-  phone: string;
-  email: string;
-  status: string;
-  kyc: string;
-  savings: number;
-  loans: number;
-  shares: number;
-  joined: string;
+type Member = (typeof ADMIN_MEMBERS_LIST)[number];
+
+type FormErrors = Partial<Record<"name" | "phone" | "email" | "sv_number" | "joined", string>>;
+
+const STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "dormant", label: "Dormant" },
+  { value: "suspended", label: "Suspended" },
+];
+const KYC_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "incomplete", label: "Incomplete" },
+  { value: "verified", label: "Verified" },
+];
+
+const KYC_ICON: Record<string, typeof CheckCircle> = { verified: CheckCircle, pending: Clock, incomplete: XCircle };
+
+const CSV_COLUMNS = [
+  { key: "sv_number", label: "SV Number" },
+  { key: "name", label: "Name" },
+  { key: "phone", label: "Phone" },
+  { key: "email", label: "Email" },
+  { key: "status", label: "Status" },
+  { key: "kyc", label: "KYC" },
+  { key: "savings", label: "Savings (UGX)" },
+  { key: "loans", label: "Loans (UGX)" },
+  { key: "shares", label: "Shares (UGX)" },
+  { key: "joined", label: "Date Joined" },
+];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function emptyMember(): Member {
+  return {
+    sv_number: "", name: "", phone: "+256 ", email: "", status: "pending", kyc: "pending",
+    savings: 0, loans: 0, shares: 0, joined: todayISO(),
+  };
 }
 
-const EMPTY_MEMBER: Member = {
-  sv_number: "",
-  name: "",
-  phone: "+256 ",
-  email: "",
-  status: "pending",
-  kyc: "pending",
-  savings: 0,
-  loans: 0,
-  shares: 0,
-  joined: new Date().toISOString().slice(0, 10),
-};
+/** Next free SV number, e.g. SV-0096. */
+function nextSvNumber(members: Member[]): string {
+  const max = members.reduce((m, x) => Math.max(m, parseInt(x.sv_number.replace(/\D/g, ""), 10) || 0), 0);
+  return `SV-${String(max + 1).padStart(4, "0")}`;
+}
 
-export default function AdminMembersPage() {
-  const [members, setMembers] = usePersistedState<Member[]>("admin_members", ADMIN_MEMBERS_LIST);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [selectedMember, setSelectedMember] = useState<string | null>(null);
+function validateMember(form: Member, members: Member[], isEdit: boolean): FormErrors {
+  const errors: FormErrors = {};
+  if (form.name.trim().length < 3) errors.name = "Enter the member's full name";
 
-  // Modal states
-  const [registerOpen, setRegisterOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // Ugandan numbers: +256 followed by 9 digits (spaces allowed).
+  const digits = form.phone.replace(/\D/g, "");
+  if (!form.phone.trim().startsWith("+256")) errors.phone = "Phone must start with +256";
+  else if (digits.length - 3 < 9) errors.phone = "Enter 9 digits after +256, e.g. +256 770 123 456";
+  else if (digits.length - 3 > 9) errors.phone = "Too many digits — expected 9 after +256";
 
-  // Form state
-  const [form, setForm] = useState<Member>(EMPTY_MEMBER);
+  const email = form.email.trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) errors.email = "Enter a valid email address";
+  else if (members.some((m) => m.email.toLowerCase() === email && m.sv_number !== form.sv_number))
+    errors.email = "Another member already uses this email";
 
-  const filtered = members.filter((m) => {
-    const matchSearch =
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.sv_number.toLowerCase().includes(search.toLowerCase()) ||
-      m.phone.includes(search) ||
-      m.email.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || m.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  if (isEdit && !members.some((m) => m.sv_number === form.sv_number)) errors.sv_number = "Member no longer exists";
+  if (!isEdit && form.sv_number && members.some((m) => m.sv_number === form.sv_number))
+    errors.sv_number = "SV number already in use";
 
-  const statusCounts = {
-    all: members.length,
-    active: members.filter((m) => m.status === "active").length,
-    dormant: members.filter((m) => m.status === "dormant").length,
-    suspended: members.filter((m) => m.status === "suspended").length,
-    pending: members.filter((m) => m.status === "pending").length,
-  };
+  if (!form.joined) errors.joined = "Pick the date joined";
+  return errors;
+}
 
-  const statusColors: Record<string, { bg: string; text: string }> = {
-    active: { bg: "bg-[#22c55e]/10", text: "text-[#22c55e]" },
-    dormant: { bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]" },
-    suspended: { bg: "bg-[#ef4444]/10", text: "text-[#ef4444]" },
-    pending: { bg: "bg-[#64748b]/10", text: "text-[#64748b]" },
-  };
+/**
+ * Statement lines for a member. James Mukasa uses the real portal transactions; for
+ * everyone else a short, deterministic history is derived from their balances.
+ */
+function statementFor(m: Member): StatementTxn[] {
+  if (m.sv_number === DEMO_MEMBER.sv_number) {
+    return [...RECENT_TRANSACTIONS].sort((a, b) => a.date.localeCompare(b.date));
+  }
+  const round = (n: number) => Math.max(10_000, Math.round(n / 10_000) * 10_000);
+  const deposit = round(m.savings * 0.015);
+  const txns: StatementTxn[] = [
+    { date: "2026-08-05", type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: "Mobile Money" },
+    { date: "2026-09-05", type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: "Mobile Money" },
+    { date: "2026-09-18", type: "Share Purchase", account: "Share Capital", amount: round(m.shares * 0.05), direction: "debit", channel: "Cash" },
+    { date: "2026-10-05", type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: "Bank Transfer" },
+  ];
+  if (m.loans > 0) {
+    const repay = round(m.loans / 10);
+    txns.push(
+      { date: "2026-09-01", type: "Loan Repayment", account: "Loan Account", amount: repay, direction: "debit", channel: "Bank Transfer" },
+      { date: "2026-10-01", type: "Loan Repayment", account: "Loan Account", amount: repay, direction: "debit", channel: "Bank Transfer" }
+    );
+  }
+  txns.push({ date: "2026-10-31", type: "Interest", account: "Regular Savings", amount: round(m.savings * 0.01), direction: "credit", channel: "System" });
+  return txns.sort((a, b) => a.date.localeCompare(b.date));
+}
 
-  const kycColors: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
-    verified: { bg: "bg-[#22c55e]/10", text: "text-[#22c55e]", icon: CheckCircle },
-    pending: { bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]", icon: Clock },
-    incomplete: { bg: "bg-[#ef4444]/10", text: "text-[#ef4444]", icon: XCircle },
-  };
+/* ------------------------------------------------------------------ */
+/* Module-level form components (never declare these inside the page) */
+/* ------------------------------------------------------------------ */
 
-  const selected = selectedMember ? members.find((m) => m.sv_number === selectedMember) : null;
-
-  // Generate next SV number
-  const getNextSV = () => {
-    const nums = members.map((m) => parseInt(m.sv_number.replace("SV-", "")));
-    const max = Math.max(...nums, 0);
-    return `SV-${String(max + 1).padStart(4, "0")}`;
-  };
-
-  // Register new member
-  const handleRegister = () => {
-    const sv = getNextSV();
-    const newMember: Member = { ...form, sv_number: sv };
-    setMembers((prev) => [...prev, newMember]);
-    setRegisterOpen(false);
-    setForm(EMPTY_MEMBER);
-    showToast(`Member ${newMember.name} registered as ${sv}`);
-  };
-
-  // Edit member
-  const openEdit = (m: Member) => {
-    setForm({ ...m });
-    setEditOpen(true);
-  };
-
-  const handleSaveEdit = () => {
-    setMembers((prev) => prev.map((m) => (m.sv_number === form.sv_number ? { ...form } : m)));
-    setEditOpen(false);
-    showToast(`Member ${form.name} updated successfully`);
-  };
-
-  // Change status
-  const handleChangeStatus = (svNum: string, newStatus: string) => {
-    setMembers((prev) => prev.map((m) => (m.sv_number === svNum ? { ...m, status: newStatus } : m)));
-    showToast(`Member status changed to ${newStatus}`);
-  };
-
-  // KYC verify
-  const handleVerifyKYC = (svNum: string) => {
-    setMembers((prev) => prev.map((m) => (m.sv_number === svNum ? { ...m, kyc: "verified" } : m)));
-    showToast("KYC status updated to verified");
-  };
-
-  // Delete member
-  const handleDelete = () => {
-    if (!selectedMember) return;
-    setMembers((prev) => prev.filter((m) => m.sv_number !== selectedMember));
-    setSelectedMember(null);
-    setDeleteConfirmOpen(false);
-    showToast("Member removed successfully", "info");
-  };
-
-  // Form field helper
-  const FormField = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div>
-      <label className="block text-xs font-medium text-[#64748b] mb-1.5">{label}</label>
-      {children}
-    </div>
-  );
-
-  const inputClass =
-    "w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
-
-  const MemberForm = ({ isEdit }: { isEdit: boolean }) => (
+function MemberForm({
+  form, onChange, errors, isEdit,
+}: {
+  form: Member;
+  onChange: (patch: Partial<Member>) => void;
+  errors: FormErrors;
+  isEdit: boolean;
+}) {
+  return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField label="Full Name *">
-          <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. James Mukasa" />
+        <FormField label="Full name" required error={errors.name}>
+          <TextInput value={form.name} onChange={(v) => onChange({ name: v })} placeholder="e.g. James Mukasa" />
         </FormField>
-        {isEdit && (
-          <FormField label="SV Number">
-            <input className={`${inputClass} bg-[#f8f9fa] cursor-not-allowed`} value={form.sv_number} disabled />
-          </FormField>
-        )}
-        <FormField label="Phone Number *">
-          <input className={inputClass} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+256 7XX XXX XXX" />
+        <FormField label="SV number" hint={isEdit ? "SV numbers cannot be changed" : "Assigned automatically"} error={errors.sv_number}>
+          <TextInput value={form.sv_number} onChange={() => undefined} disabled />
         </FormField>
-        <FormField label="Email">
-          <input className={inputClass} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="member@email.com" />
+        <FormField label="Phone number" required error={errors.phone}>
+          <TextInput type="tel" value={form.phone} onChange={(v) => onChange({ phone: v })} placeholder="+256 7XX XXX XXX" />
         </FormField>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <FormField label="Email" required error={errors.email}>
+          <TextInput type="email" value={form.email} onChange={(v) => onChange({ email: v })} placeholder="member@email.com" />
+        </FormField>
         <FormField label="Status">
-          <select className={inputClass} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            <option value="pending">Pending</option>
-            <option value="active">Active</option>
-            <option value="dormant">Dormant</option>
-            <option value="suspended">Suspended</option>
-          </select>
+          <SelectInput value={form.status} onChange={(v) => onChange({ status: v })} options={STATUS_OPTIONS} />
         </FormField>
-        <FormField label="KYC Status">
-          <select className={inputClass} value={form.kyc} onChange={(e) => setForm({ ...form, kyc: e.target.value })}>
-            <option value="pending">Pending</option>
-            <option value="incomplete">Incomplete</option>
-            <option value="verified">Verified</option>
-          </select>
+        <FormField label="KYC status">
+          <SelectInput value={form.kyc} onChange={(v) => onChange({ kyc: v })} options={KYC_OPTIONS} />
         </FormField>
       </div>
       {isEdit && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <FormField label="Savings Balance">
-            <input className={inputClass} type="number" value={form.savings} onChange={(e) => setForm({ ...form, savings: Number(e.target.value) })} />
+          <FormField label="Savings balance (UGX)">
+            <TextInput type="number" min={0} value={String(form.savings)} onChange={(v) => onChange({ savings: Math.max(0, Number(v) || 0) })} />
           </FormField>
-          <FormField label="Loan Balance">
-            <input className={inputClass} type="number" value={form.loans} onChange={(e) => setForm({ ...form, loans: Number(e.target.value) })} />
+          <FormField label="Loan balance (UGX)">
+            <TextInput type="number" min={0} value={String(form.loans)} onChange={(v) => onChange({ loans: Math.max(0, Number(v) || 0) })} />
           </FormField>
-          <FormField label="Shares Value">
-            <input className={inputClass} type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: Number(e.target.value) })} />
+          <FormField label="Shares value (UGX)">
+            <TextInput type="number" min={0} value={String(form.shares)} onChange={(v) => onChange({ shares: Math.max(0, Number(v) || 0) })} />
           </FormField>
         </div>
       )}
-      <FormField label="Date Joined">
-        <input className={inputClass} type="date" value={form.joined} onChange={(e) => setForm({ ...form, joined: e.target.value })} />
+      <FormField label="Date joined" required error={errors.joined}>
+        <TextInput type="date" value={form.joined} onChange={(v) => onChange({ joined: v })} />
       </FormField>
     </div>
   );
+}
+
+function KycBadge({ kyc }: { kyc: string }) {
+  const Icon = KYC_ICON[kyc] ?? Clock;
+  const tone = kyc === "verified" ? "green" : kyc === "incomplete" ? "red" : "amber";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
+      tone === "green" ? "bg-[#22c55e]/10 text-[#16a34a]" : tone === "red" ? "bg-[#ef4444]/10 text-[#dc2626]" : "bg-[#f59e0b]/10 text-[#d97706]"
+    }`}>
+      <Icon className="w-3 h-3" /> {kyc}
+    </span>
+  );
+}
+
+function MetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="dm-surface-hover rounded-lg p-3">
+      <p className="text-[10px] dm-text-secondary">{label}</p>
+      <p className="text-sm font-bold dm-text">{value}</p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
+export default function AdminMembersPage() {
+  // useSearchParams needs a Suspense boundary on a statically prerendered page.
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto py-16 text-center text-sm dm-text-secondary">Loading members…</div>}>
+      <MembersInner />
+    </Suspense>
+  );
+}
+
+function MembersInner() {
+  const params = useSearchParams();
+  const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [selectedSv, setSelectedSv] = useState<string | null>(null);
+  const [checked, setChecked] = useState<string[]>([]);
+
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [form, setForm] = useState<Member>(emptyMember);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const openRegister = () => {
+    setForm(emptyMember());
+    setErrors({});
+    setRegisterOpen(true);
+  };
+
+  // Deep links (?q=SV-0078, ?action=register). Re-applied whenever the query string
+  // changes, e.g. when the header search navigates here while the page is open.
+  const paramKey = params.toString();
+  const [appliedParams, setAppliedParams] = useState<string | null>(null);
+  if (appliedParams !== paramKey) {
+    setAppliedParams(paramKey);
+    const q = params.get("q");
+    if (q) {
+      setSearch(q);
+      setStatusFilter("all");
+      if (/^SV-\d{4}$/i.test(q)) setSelectedSv(q.toUpperCase());
+    }
+    if (params.get("action") === "register") openRegister();
+  }
+
+  const term = search.trim().toLowerCase();
+  const filtered = members.filter((m) => {
+    const matchSearch =
+      !term ||
+      m.name.toLowerCase().includes(term) ||
+      m.sv_number.toLowerCase().includes(term) ||
+      m.phone.replace(/\s/g, "").includes(term.replace(/\s/g, "")) ||
+      m.email.toLowerCase().includes(term);
+    return matchSearch && (statusFilter === "all" || m.status === statusFilter);
+  });
+
+  const count = (s: string) => members.filter((m) => m.status === s).length;
+  const tabs: { id: StatusFilter; label: string; count: number }[] = [
+    { id: "all", label: "All", count: members.length },
+    { id: "active", label: "Active", count: count("active") },
+    { id: "dormant", label: "Dormant", count: count("dormant") },
+    { id: "suspended", label: "Suspended", count: count("suspended") },
+    { id: "pending", label: "Pending", count: count("pending") },
+  ];
+
+  // Society-wide total (seed 847) moves with members added/removed in the demo register.
+  const societyTotal = ADMIN_KPI.total_members.value + (members.length - ADMIN_MEMBERS_LIST.length);
+  const selected = selectedSv ? members.find((m) => m.sv_number === selectedSv) ?? null : null;
+  const nextSv = nextSvNumber(members);
+
+  // Bulk selection only counts rows that are still visible.
+  const visibleChecked = checked.filter((sv) => filtered.some((m) => m.sv_number === sv));
+  const allVisibleChecked = filtered.length > 0 && visibleChecked.length === filtered.length;
+
+  const toggleChecked = (sv: string) =>
+    setChecked((prev) => (prev.includes(sv) ? prev.filter((x) => x !== sv) : [...prev, sv]));
+  const toggleAll = () => setChecked(allVisibleChecked ? [] : filtered.map((m) => m.sv_number));
+
+  /* ---------- actions ---------- */
+
+  const handleRegister = () => {
+    const candidate = { ...form, sv_number: nextSv, name: form.name.trim(), email: form.email.trim() };
+    const errs = validateMember(candidate, members, false);
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    setMembers((prev) => [...prev, candidate]);
+    setRegisterOpen(false);
+    setSearch("");
+    setStatusFilter("all");
+    setSelectedSv(candidate.sv_number);
+    showToast(`${candidate.name} registered as ${candidate.sv_number}`);
+  };
+
+  const openEdit = (m: Member) => {
+    setForm({ ...m });
+    setErrors({});
+    setProfileOpen(false);
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    const candidate = { ...form, name: form.name.trim(), email: form.email.trim() };
+    const errs = validateMember(candidate, members, true);
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    setMembers((prev) => prev.map((m) => (m.sv_number === candidate.sv_number ? candidate : m)));
+    setEditOpen(false);
+    showToast(`${candidate.name}'s details updated`);
+  };
+
+  const changeStatus = (sv: string, status: string) => {
+    setMembers((prev) => prev.map((m) => (m.sv_number === sv ? { ...m, status } : m)));
+    showToast(`${sv} marked ${status}`);
+  };
+
+  const verifyKyc = (svs: string[]) => {
+    setMembers((prev) => prev.map((m) => (svs.includes(m.sv_number) ? { ...m, kyc: "verified" } : m)));
+    showToast(svs.length === 1 ? `KYC verified for ${svs[0]}` : `KYC verified for ${svs.length} members`);
+  };
+
+  const handleDelete = () => {
+    if (!selected) return;
+    setMembers((prev) => prev.filter((m) => m.sv_number !== selected.sv_number));
+    setChecked((prev) => prev.filter((sv) => sv !== selected.sv_number));
+    setSelectedSv(null);
+    setProfileOpen(false);
+    showToast(`${selected.name} (${selected.sv_number}) removed from the register`, "info");
+  };
+
+  const exportRows = (rows: Member[], label: string) => {
+    if (!rows.length) {
+      showToast("No members to export", "error");
+      return;
+    }
+    exportToCsv(`silvervibe-members-${label}-${todayISO()}`, rows, CSV_COLUMNS);
+    showToast(`Exported ${rows.length} member${rows.length === 1 ? "" : "s"} to CSV`);
+  };
+
+  const downloadStatement = async (m: Member) => {
+    setPdfBusy(true);
+    try {
+      await generateMemberStatement({ name: m.name, sv: m.sv_number, email: m.email, phone: m.phone }, statementFor(m), [
+        { label: "Savings", amount: m.savings },
+        { label: "Share capital", amount: m.shares },
+        { label: "Loan outstanding", amount: m.loans },
+      ]);
+      showToast(`Statement for ${m.name} downloaded`);
+    } catch {
+      showToast("Could not generate PDF", "error");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  /* ---------- render ---------- */
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Members</h1>
-          <p className="text-[#64748b] text-sm">{members.length} registered members</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
-            <Download className="w-4 h-4" /> Export
-          </button>
-          <button
-            onClick={() => { setForm(EMPTY_MEMBER); setRegisterOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors"
-          >
-            <UserPlus className="w-4 h-4" /> Register New
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Members"
+        subtitle={`Showing ${filtered.length} of ${societyTotal} members (demo subset of ${members.length} records)`}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => exportRows(filtered, statusFilter)}>
+              <Download className="w-4 h-4" /> Export
+            </Button>
+            <Button onClick={openRegister}>
+              <UserPlus className="w-4 h-4" /> Register New
+            </Button>
+          </>
+        }
+      />
 
-      {/* Status tabs */}
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1">
-        {(["all", "active", "dormant", "suspended", "pending"] as StatusFilter[]).map((s) => (
-          <button key={s} onClick={() => setStatusFilter(s)}
-            className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-              statusFilter === s ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
-            }`}>
-            {s} ({statusCounts[s]})
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={tabs} active={statusFilter} onChange={setStatusFilter} />
 
-      {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#C0C0C0]" />
-        <input type="text" placeholder="Search by name, SV number, phone, or email..."
-          value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9]" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 dm-text-secondary" />
+        <input
+          type="search"
+          aria-label="Search members"
+          placeholder="Search by name, SV number, phone, or email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-10 pr-10 py-3 border rounded-xl text-sm dm-input focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9]"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch("")} aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-[#f1f5f9]">
+            <X className="w-4 h-4 dm-text-secondary" />
+          </button>
+        )}
       </div>
+
+      {/* Bulk actions bar */}
+      {visibleChecked.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 rounded-xl border border-[#4A90D9]/30 bg-[#4A90D9]/5">
+          <span className="text-sm font-medium dm-text mr-auto">{visibleChecked.length} selected</span>
+          <Button variant="secondary" className="py-1.5 text-xs"
+            onClick={() => exportRows(members.filter((m) => visibleChecked.includes(m.sv_number)), "selected")}>
+            <Download className="w-3.5 h-3.5" /> Export selected
+          </Button>
+          <Button variant="success" className="py-1.5 text-xs" onClick={() => { verifyKyc(visibleChecked); setChecked([]); }}>
+            <BadgeCheck className="w-3.5 h-3.5" /> Mark verified
+          </Button>
+          <Button variant="secondary" className="py-1.5 text-xs" onClick={() => setChecked([])}>Clear</Button>
+        </div>
+      )}
 
       <div className="flex gap-6">
-        {/* Table */}
-        <div className={`flex-1 bg-white rounded-xl border border-[#e2e8f0] overflow-hidden ${selected ? "hidden lg:block" : ""}`}>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Contact</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">KYC</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Savings</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Loans</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shares</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((m) => {
-                  const sc = statusColors[m.status] || statusColors.active;
-                  const kc = kycColors[m.kyc] || kycColors.pending;
-                  const KycIcon = kc.icon;
-                  return (
-                    <tr key={m.sv_number}
-                      className={`border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors cursor-pointer ${
-                        selectedMember === m.sv_number ? "bg-[#4A90D9]/5" : ""
-                      }`}
-                      onClick={() => setSelectedMember(m.sv_number)}>
+        <div className={`flex-1 min-w-0 glass-card rounded-xl overflow-hidden ${selected ? "hidden lg:block" : ""}`}>
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="No members match"
+              hint={term ? `Nothing matches “${search}” in ${statusFilter === "all" ? "any status" : statusFilter + " members"}.` : "No members have this status."}
+              action={<Button variant="secondary" onClick={() => { setSearch(""); setStatusFilter("all"); }}>Clear filters</Button>}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
+                    <th className="px-4 py-3 w-8">
+                      <input type="checkbox" aria-label="Select all visible members" checked={allVisibleChecked}
+                        onChange={toggleAll} className="w-4 h-4 accent-[#4A90D9] cursor-pointer" />
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Contact</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">KYC</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Savings</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Loans</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shares</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((m) => (
+                    <tr
+                      key={m.sv_number}
+                      className={`border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors cursor-pointer ${selectedSv === m.sv_number ? "bg-[#4A90D9]/5" : ""}`}
+                      onClick={() => setSelectedSv(m.sv_number)}
+                    >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" aria-label={`Select ${m.name}`} checked={checked.includes(m.sv_number)}
+                          onChange={() => toggleChecked(m.sv_number)} className="w-4 h-4 accent-[#4A90D9] cursor-pointer" />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-full bg-[#4A90D9] flex items-center justify-center shrink-0">
                             <span className="text-white text-[10px] font-bold">{getInitials(m.name)}</span>
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-[#1A1A1A]">{m.name}</p>
-                            <p className="text-[10px] text-[#C0C0C0]">{m.sv_number}</p>
+                            <p className="text-sm font-medium dm-text whitespace-nowrap">{m.name}</p>
+                            <p className="text-[10px] dm-text-secondary">{m.sv_number}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-xs text-[#1A1A1A]">{m.phone}</p>
-                        <p className="text-[10px] text-[#C0C0C0] truncate max-w-[140px]">{m.email}</p>
+                        <p className="text-xs dm-text whitespace-nowrap">{m.phone}</p>
+                        <p className="text-[10px] dm-text-secondary truncate max-w-[160px]">{m.email}</p>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`${sc.bg} ${sc.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>
-                          {m.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`${kc.bg} ${kc.text} inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>
-                          <KycIcon className="w-3 h-3" /> {m.kyc}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(m.savings)}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(m.loans)}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(m.shares)}</td>
+                      <td className="px-4 py-3"><Badge status={m.status} tone={m.status === "dormant" ? "amber" : undefined} /></td>
+                      <td className="px-4 py-3"><KycBadge kyc={m.kyc} /></td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.savings)}</td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.loans)}</td>
+                      <td className="px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.shares)}</td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <button className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="View profile"
-                            onClick={(e) => { e.stopPropagation(); setSelectedMember(m.sv_number); setProfileOpen(true); }}>
-                            <Eye className="w-3.5 h-3.5 text-[#64748b]" />
+                          <button type="button" className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="View profile" aria-label={`View ${m.name}'s profile`}
+                            onClick={(e) => { e.stopPropagation(); setSelectedSv(m.sv_number); setProfileOpen(true); }}>
+                            <Eye className="w-3.5 h-3.5 dm-text-secondary" />
                           </button>
-                          <button className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="Edit member"
+                          <button type="button" className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="Edit member" aria-label={`Edit ${m.name}`}
                             onClick={(e) => { e.stopPropagation(); openEdit(m); }}>
-                            <Edit2 className="w-3.5 h-3.5 text-[#64748b]" />
+                            <Edit2 className="w-3.5 h-3.5 dm-text-secondary" />
                           </button>
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-[#64748b]">No members found.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {/* Detail Panel */}
-        {selected && !profileOpen && (
-          <div className="w-full lg:w-80 bg-white rounded-xl border border-[#e2e8f0] p-5 animate-fade-in flex-shrink-0">
+        {/* Detail panel */}
+        {selected && (
+          <div className="w-full lg:w-80 glass-card rounded-xl p-5 animate-fade-in flex-shrink-0 self-start">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-[#1A1A1A]">Member Details</h3>
-              <button onClick={() => setSelectedMember(null)} className="text-xs text-[#64748b] hover:text-[#1A1A1A]">Close</button>
+              <h3 className="text-sm font-semibold dm-text">Member Details</h3>
+              <button type="button" onClick={() => setSelectedSv(null)} className="text-xs dm-text-secondary hover:underline">Close</button>
             </div>
             <div className="text-center mb-5">
-              <div className="w-14 h-14 rounded-full bg-[#1A1A1A] flex items-center justify-center mx-auto mb-2">
+              <div className="w-14 h-14 rounded-full bg-[#4A90D9] flex items-center justify-center mx-auto mb-2">
                 <span className="text-white text-lg font-bold">{getInitials(selected.name)}</span>
               </div>
-              <h4 className="font-semibold text-[#1A1A1A]">{selected.name}</h4>
-              <p className="text-xs text-[#C0C0C0]">{selected.sv_number}</p>
-              <span className={`${statusColors[selected.status]?.bg} ${statusColors[selected.status]?.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize mt-2 inline-block`}>
-                {selected.status}
-              </span>
+              <h4 className="font-semibold dm-text">{selected.name}</h4>
+              <p className="text-xs dm-text-secondary mb-2">{selected.sv_number}</p>
+              <Badge status={selected.status} tone={selected.status === "dormant" ? "amber" : undefined} />
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs">
-                <Phone className="w-3.5 h-3.5 text-[#C0C0C0]" />
-                <span className="text-[#1A1A1A]">{selected.phone}</span>
+                <Phone className="w-3.5 h-3.5 dm-text-secondary" />
+                <span className="dm-text">{selected.phone}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <Mail className="w-3.5 h-3.5 text-[#C0C0C0]" />
-                <span className="text-[#1A1A1A]">{selected.email}</span>
+                <Mail className="w-3.5 h-3.5 dm-text-secondary" />
+                <span className="dm-text break-all">{selected.email}</span>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <Shield className="w-3.5 h-3.5 text-[#C0C0C0]" />
-                <span className={`${kycColors[selected.kyc]?.text} capitalize font-medium`}>KYC: {selected.kyc}</span>
+                <Shield className="w-3.5 h-3.5 dm-text-secondary" />
+                <KycBadge kyc={selected.kyc} />
                 {selected.kyc !== "verified" && (
-                  <button onClick={() => handleVerifyKYC(selected.sv_number)}
+                  <button type="button" onClick={() => verifyKyc([selected.sv_number])}
                     className="ml-auto text-[10px] px-2 py-0.5 bg-[#22c55e] text-white rounded-lg hover:bg-[#16a34a] transition-colors">
-                    Verify
+                    Verify KYC
                   </button>
                 )}
               </div>
 
-              <hr className="border-[#e2e8f0]" />
+              <hr className="dm-border" />
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Total Savings</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(selected.savings)}</p>
-                </div>
-                <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Active Loans</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(selected.loans)}</p>
-                </div>
-                <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Shares</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatCurrency(selected.shares)}</p>
-                </div>
-                <div className="bg-[#f8f9fa] rounded-lg p-3">
-                  <p className="text-[10px] text-[#64748b]">Joined</p>
-                  <p className="text-sm font-bold text-[#1A1A1A]">{formatDate(selected.joined)}</p>
-                </div>
+                <MetricTile label="Total Savings" value={formatCurrency(selected.savings)} />
+                <MetricTile label="Loan Balance" value={formatCurrency(selected.loans)} />
+                <MetricTile label="Shares" value={formatCurrency(selected.shares)} />
+                <MetricTile label="Joined" value={formatDate(selected.joined)} />
               </div>
 
-              {/* Quick Actions */}
               <div className="pt-2 space-y-2">
                 <div className="flex gap-2">
-                  <button onClick={() => setProfileOpen(true)}
-                    className="flex-1 py-2 bg-[#4A90D9] text-white rounded-lg text-xs font-medium hover:bg-[#3a7bc8] transition-colors">
-                    View Full Profile
-                  </button>
-                  <button onClick={() => openEdit(selected)}
-                    className="flex-1 py-2 border border-[#e2e8f0] text-[#1A1A1A] rounded-lg text-xs font-medium hover:bg-[#f1f5f9] transition-colors">
-                    Edit
-                  </button>
+                  <Button variant="accent" className="flex-1 py-2 text-xs" onClick={() => setProfileOpen(true)}>View Full Profile</Button>
+                  <Button variant="secondary" className="flex-1 py-2 text-xs" onClick={() => openEdit(selected)}>Edit</Button>
                 </div>
-                {/* Status change quick actions */}
                 <div className="flex gap-1 flex-wrap">
                   {selected.status !== "active" && (
-                    <button onClick={() => handleChangeStatus(selected.sv_number, "active")}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-[#22c55e]/10 text-[#22c55e] rounded-lg hover:bg-[#22c55e]/20 transition-colors">
+                    <button type="button" onClick={() => changeStatus(selected.sv_number, "active")}
+                      className="px-2.5 py-1 text-[10px] font-medium bg-[#22c55e]/10 text-[#16a34a] rounded-lg hover:bg-[#22c55e]/20">
                       Activate
                     </button>
                   )}
                   {selected.status !== "suspended" && (
-                    <button onClick={() => handleChangeStatus(selected.sv_number, "suspended")}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#ef4444] rounded-lg hover:bg-[#ef4444]/20 transition-colors">
+                    <button type="button" onClick={() => changeStatus(selected.sv_number, "suspended")}
+                      className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#dc2626] rounded-lg hover:bg-[#ef4444]/20">
                       Suspend
                     </button>
                   )}
                   {selected.status !== "dormant" && (
-                    <button onClick={() => handleChangeStatus(selected.sv_number, "dormant")}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-[#f59e0b]/10 text-[#f59e0b] rounded-lg hover:bg-[#f59e0b]/20 transition-colors">
+                    <button type="button" onClick={() => changeStatus(selected.sv_number, "dormant")}
+                      className="px-2.5 py-1 text-[10px] font-medium bg-[#f59e0b]/10 text-[#d97706] rounded-lg hover:bg-[#f59e0b]/20">
                       Mark Dormant
                     </button>
                   )}
-                  <button onClick={() => setDeleteConfirmOpen(true)}
-                    className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#ef4444] rounded-lg hover:bg-[#ef4444]/20 transition-colors">
-                    Remove
+                  <button type="button" onClick={() => setDeleteOpen(true)}
+                    className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#dc2626] rounded-lg hover:bg-[#ef4444]/20 inline-flex items-center gap-1">
+                    <Trash2 className="w-3 h-3" /> Remove
                   </button>
                 </div>
               </div>
@@ -424,163 +564,151 @@ export default function AdminMembersPage() {
       </div>
 
       {/* ======== REGISTER MODAL ======== */}
-      <Modal open={registerOpen} onClose={() => setRegisterOpen(false)} title="Register New Member" size="lg"
+      <Modal
+        open={registerOpen}
+        onClose={() => setRegisterOpen(false)}
+        title="Register New Member"
+        size="lg"
         footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setRegisterOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleRegister} disabled={!form.name || !form.phone}
-              className="px-5 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-              <UserPlus className="w-4 h-4" /> Register Member
-            </button>
-          </div>
-        }>
+          <>
+            <Button variant="secondary" onClick={() => setRegisterOpen(false)}>Cancel</Button>
+            <Button onClick={handleRegister}><UserPlus className="w-4 h-4" /> Register Member</Button>
+          </>
+        }
+      >
         <div className="mb-4 p-3 bg-[#4A90D9]/5 rounded-xl border border-[#4A90D9]/20">
-          <p className="text-xs text-[#4A90D9]">
-            The member will be assigned SV number <b>{getNextSV()}</b> automatically.
-          </p>
+          <p className="text-xs text-[#4A90D9]">The member will be assigned SV number <b>{nextSv}</b> automatically.</p>
         </div>
-        <MemberForm isEdit={false} />
+        <MemberForm
+          form={{ ...form, sv_number: nextSv }}
+          onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+          errors={errors}
+          isEdit={false}
+        />
       </Modal>
 
       {/* ======== EDIT MODAL ======== */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={`Edit Member — ${form.sv_number}`} size="lg"
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title={`Edit Member — ${form.sv_number}`}
+        size="lg"
         footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setEditOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleSaveEdit}
-              className="px-5 py-2.5 bg-[#4A90D9] text-white rounded-xl text-sm font-medium hover:bg-[#3a7bc8] transition-colors flex items-center gap-2">
-              <Save className="w-4 h-4" /> Save Changes
-            </button>
-          </div>
-        }>
-        <MemberForm isEdit={true} />
+          <>
+            <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button variant="accent" onClick={handleSaveEdit}><Save className="w-4 h-4" /> Save Changes</Button>
+          </>
+        }
+      >
+        <MemberForm form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} errors={errors} isEdit />
       </Modal>
 
       {/* ======== FULL PROFILE MODAL ======== */}
-      <Modal open={profileOpen && !!selected} onClose={() => setProfileOpen(false)}
-        title={`Member Profile — ${selected?.name || ""}`} size="xl">
+      <Modal
+        open={profileOpen && !!selected}
+        onClose={() => setProfileOpen(false)}
+        title={`Member Profile — ${selected?.name ?? ""}`}
+        size="xl"
+        footer={
+          selected && (
+            <>
+              <Button variant="secondary" onClick={() => openEdit(selected)}><Edit2 className="w-4 h-4" /> Edit</Button>
+              <Button variant="accent" disabled={pdfBusy} onClick={() => downloadStatement(selected)}>
+                {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                {pdfBusy ? "Generating…" : "Download statement"}
+              </Button>
+            </>
+          )
+        }
+      >
         {selected && (
           <div className="space-y-6">
-            {/* Profile Header */}
-            <div className="flex items-center gap-5">
-              <div className="w-20 h-20 rounded-2xl bg-[#1A1A1A] flex items-center justify-center">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+              <div className="w-20 h-20 rounded-2xl bg-[#4A90D9] flex items-center justify-center shrink-0">
                 <span className="text-white text-2xl font-bold">{getInitials(selected.name)}</span>
               </div>
               <div className="flex-1">
-                <h3 className="text-xl font-bold text-[#1A1A1A]">{selected.name}</h3>
-                <p className="text-sm text-[#C0C0C0] mb-2">{selected.sv_number}</p>
-                <div className="flex gap-2 flex-wrap">
-                  <span className={`${statusColors[selected.status]?.bg} ${statusColors[selected.status]?.text} px-3 py-1 rounded-full text-xs font-semibold capitalize`}>
-                    {selected.status}
-                  </span>
-                  <span className={`${kycColors[selected.kyc]?.bg} ${kycColors[selected.kyc]?.text} px-3 py-1 rounded-full text-xs font-semibold capitalize inline-flex items-center gap-1`}>
-                    {(() => { const KycIcon = kycColors[selected.kyc]?.icon || Clock; return <KycIcon className="w-3 h-3" />; })()}
-                    KYC: {selected.kyc}
-                  </span>
+                <h3 className="text-xl font-bold dm-text">{selected.name}</h3>
+                <p className="text-sm dm-text-secondary mb-2">{selected.sv_number}</p>
+                <div className="flex gap-2 flex-wrap items-center">
+                  <Badge status={selected.status} tone={selected.status === "dormant" ? "amber" : undefined} />
+                  <KycBadge kyc={selected.kyc} />
+                  {selected.kyc !== "verified" && (
+                    <button type="button" onClick={() => verifyKyc([selected.sv_number])} className="text-xs text-[#16a34a] hover:underline">
+                      Verify KYC
+                    </button>
+                  )}
                 </div>
               </div>
-              <button onClick={() => { setProfileOpen(false); openEdit(selected); }}
-                className="px-4 py-2 border border-[#e2e8f0] rounded-xl text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors flex items-center gap-1.5">
-                <Edit2 className="w-3.5 h-3.5" /> Edit
-              </button>
             </div>
 
-            {/* Contact Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-[#f8f9fa] rounded-xl p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#4A90D9]/10 flex items-center justify-center">
-                  <Phone className="w-5 h-5 text-[#4A90D9]" />
-                </div>
+              <div className="dm-surface-hover rounded-xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#4A90D9]/10 flex items-center justify-center"><Phone className="w-5 h-5 text-[#4A90D9]" /></div>
                 <div>
-                  <p className="text-[10px] text-[#64748b]">Phone Number</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selected.phone}</p>
+                  <p className="text-[10px] dm-text-secondary">Phone Number</p>
+                  <p className="text-sm font-semibold dm-text">{selected.phone}</p>
                 </div>
               </div>
-              <div className="bg-[#f8f9fa] rounded-xl p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#4A90D9]/10 flex items-center justify-center">
-                  <Mail className="w-5 h-5 text-[#4A90D9]" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-[#64748b]">Email Address</p>
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{selected.email}</p>
+              <div className="dm-surface-hover rounded-xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#4A90D9]/10 flex items-center justify-center"><Mail className="w-5 h-5 text-[#4A90D9]" /></div>
+                <div className="min-w-0">
+                  <p className="text-[10px] dm-text-secondary">Email Address</p>
+                  <p className="text-sm font-semibold dm-text break-all">{selected.email}</p>
                 </div>
               </div>
             </div>
 
-            {/* Financial Summary */}
             <div>
-              <h4 className="text-sm font-semibold text-[#1A1A1A] mb-3">Financial Summary</h4>
+              <h4 className="text-sm font-semibold dm-text mb-3">Financial Summary</h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <PiggyBank className="w-4 h-4 text-[#22c55e]" />
-                    <span className="text-[10px] text-[#64748b]">Savings</span>
+                {[
+                  { icon: PiggyBank, color: "#22c55e", label: "Savings", value: formatCurrency(selected.savings) },
+                  { icon: CreditCard, color: "#ef4444", label: "Loans", value: formatCurrency(selected.loans) },
+                  { icon: Users, color: "#4A90D9", label: "Shares", value: formatCurrency(selected.shares) },
+                  { icon: Clock, color: "#a855f7", label: "Member Since", value: formatDate(selected.joined) },
+                ].map(({ icon: Icon, color, label, value }) => (
+                  <div key={label} className="glass-card rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className="w-4 h-4" style={{ color }} />
+                      <span className="text-[10px] dm-text-secondary">{label}</span>
+                    </div>
+                    <p className="text-base font-bold dm-text">{value}</p>
                   </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(selected.savings)}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CreditCard className="w-4 h-4 text-[#ef4444]" />
-                    <span className="text-[10px] text-[#64748b]">Loans</span>
-                  </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(selected.loans)}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4 text-[#4A90D9]" />
-                    <span className="text-[10px] text-[#64748b]">Shares</span>
-                  </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(selected.shares)}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-[#e2e8f0]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-4 h-4 text-[#a855f7]" />
-                    <span className="text-[10px] text-[#64748b]">Member Since</span>
-                  </div>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatDate(selected.joined)}</p>
-                </div>
+                ))}
               </div>
             </div>
 
-            {/* Net Worth */}
-            <div className="bg-gradient-to-r from-[#1A1A1A] to-[#333] rounded-xl p-5 text-white">
-              <p className="text-xs text-[#C0C0C0] mb-1">Estimated Net Worth (Savings + Shares - Loans)</p>
-              <p className="text-2xl font-bold">{formatCurrency(selected.savings + selected.shares - selected.loans)}</p>
+            <div className="rounded-xl p-5 bg-[#4A90D9]/10 border border-[#4A90D9]/20">
+              <p className="text-xs dm-text-secondary mb-1">Estimated net position (Savings + Shares − Loans)</p>
+              <p className="text-2xl font-bold dm-text">{formatCurrency(selected.savings + selected.shares - selected.loans)}</p>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* ======== DELETE CONFIRM MODAL ======== */}
-      <Modal open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Confirm Removal" size="sm"
-        footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setDeleteConfirmOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleDelete}
-              className="px-5 py-2.5 bg-[#ef4444] text-white rounded-xl text-sm font-medium hover:bg-[#dc2626] transition-colors flex items-center gap-2">
-              <Trash2 className="w-4 h-4" /> Remove Member
-            </button>
+      {/* ======== DELETE CONFIRM ======== */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+        danger
+        title="Remove member?"
+        confirmLabel="Remove member"
+        message={
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-[#ef4444] flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="dm-text">
+                Remove <b>{selected?.name}</b> ({selected?.sv_number}) from the member register?
+              </p>
+              <p className="text-xs mt-1">
+                Their record disappears from member lists and search. In a live system, members with balances are closed rather than deleted.
+              </p>
+            </div>
           </div>
-        }>
-        <div className="flex items-start gap-3 p-3 bg-[#ef4444]/5 rounded-xl">
-          <AlertTriangle className="w-5 h-5 text-[#ef4444] flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-[#1A1A1A]">
-              Are you sure you want to remove <b>{selected?.name}</b> ({selected?.sv_number})?
-            </p>
-            <p className="text-xs text-[#64748b] mt-1">This action can be reversed by re-registering the member. All balances will be reset.</p>
-          </div>
-        </div>
-      </Modal>
+        }
+      />
     </div>
   );
 }

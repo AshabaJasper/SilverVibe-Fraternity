@@ -1,421 +1,819 @@
 "use client";
-import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
-import { usePersistedState, showToast } from "@/lib/storage";
-import Modal from "@/components/Modal";
+import { Suspense, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  BookOpen, ArrowUpRight, ArrowDownRight, FileSpreadsheet,
-  Download, Plus, Calendar, Filter, TrendingUp, DollarSign,
-  BarChart3, Scale, CheckCircle, XCircle, Save, Eye,
+  BookOpen, ArrowUpRight, ArrowDownRight, FileSpreadsheet, Download, Plus, TrendingUp, Scale,
+  CheckCircle, Eye, RotateCcw, Trash2, Search, Loader2, Landmark, FileText,
 } from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, PieChart, Pie, Cell,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { formatCurrency, formatCompact, formatDate, todayISO, useHydrated, cn } from "@/lib/utils";
+import { DEMO_TODAY } from "@/lib/mock-data";
+import { usePersistedState, showToast } from "@/lib/storage";
+import { exportToCsv } from "@/lib/export";
+import {
+  generateIncomeStatement, generateBalanceSheet, generateTrialBalance, generateTablePdf, type StatementLine,
+} from "@/lib/pdf-reports";
+import Modal, { FormField, TextInput, SelectInput, Button, ConfirmDialog } from "@/components/Modal";
+import { EmptyState, Badge, PageHeader, StatCard, Tabs } from "@/components/ui";
 
-interface JournalEntry {
-  id: string; date: string; description: string; debit: string; credit: string;
-  amount: number; status: string; by: string;
+// ------------------------------------------------------------------
+// Chart of accounts. Opening balances are FY 2026 year-to-date as at 30 Sep 2026
+// (positive = the account's normal side). October onwards comes from the journal.
+// ------------------------------------------------------------------
+type AccountType = "asset" | "liability" | "equity" | "income" | "expense";
+interface Account {
+  code: string;
+  name: string;
+  type: AccountType;
+  /** Contra accounts (e.g. loan-loss allowance) sit under assets but carry a credit balance. */
+  normal: "debit" | "credit";
+  opening: number;
 }
 
-const INCOME_EXPENSE = [
-  { month: "Aug", income: 38000000, expense: 22000000 },
-  { month: "Sep", income: 42000000, expense: 24000000 },
-  { month: "Oct", income: 45000000, expense: 23000000 },
-  { month: "Nov", income: 48000000, expense: 26000000 },
-  { month: "Dec", income: 52000000, expense: 28000000 },
-  { month: "Jan", income: 55000000, expense: 25000000 },
+const OPENING_DATE = "2026-09-30";
+const PERIOD_START = "2026-10-01";
+
+const BASE_ACCOUNTS: Account[] = [
+  { code: "1000", name: "Cash on hand", type: "asset", normal: "debit", opening: 45_000_000 },
+  { code: "1100", name: "Bank — current account", type: "asset", normal: "debit", opening: 520_000_000 },
+  { code: "1150", name: "Mobile money float", type: "asset", normal: "debit", opening: 38_000_000 },
+  { code: "1200", name: "Loans to members", type: "asset", normal: "debit", opening: 2_125_000_000 },
+  { code: "1250", name: "Allowance for loan losses", type: "asset", normal: "credit", opening: 43_000_000 },
+  { code: "1300", name: "Investments & fixed deposits", type: "asset", normal: "debit", opening: 1_960_000_000 },
+  { code: "1400", name: "Property & equipment (net)", type: "asset", normal: "debit", opening: 340_000_000 },
+  { code: "1500", name: "Interest receivable", type: "asset", normal: "debit", opening: 28_000_000 },
+  { code: "2000", name: "Member savings deposits", type: "liability", normal: "credit", opening: 4_758_000_000 },
+  { code: "2100", name: "Interest payable on savings", type: "liability", normal: "credit", opening: 42_000_000 },
+  { code: "2200", name: "Accrued expenses", type: "liability", normal: "credit", opening: 18_000_000 },
+  { code: "2300", name: "Dividends payable", type: "liability", normal: "credit", opening: 0 },
+  { code: "3000", name: "Share capital", type: "equity", normal: "credit", opening: 1_266_000_000 },
+  { code: "3100", name: "General reserves (b/f)", type: "equity", normal: "credit", opening: 0 }, // balancing figure, set below
+  { code: "4000", name: "Interest income — loans", type: "income", normal: "credit", opening: 310_000_000 },
+  { code: "4100", name: "Investment income", type: "income", normal: "credit", opening: 72_000_000 },
+  { code: "4200", name: "Fees & commissions", type: "income", normal: "credit", opening: 37_000_000 },
+  { code: "5000", name: "Operating expenses", type: "expense", normal: "debit", opening: 48_000_000 },
+  { code: "5100", name: "Staff costs", type: "expense", normal: "debit", opening: 106_500_000 },
+  { code: "5200", name: "Interest on member savings", type: "expense", normal: "debit", opening: 126_000_000 },
+  { code: "5300", name: "Loan loss provision expense", type: "expense", normal: "debit", opening: 16_000_000 },
+  { code: "5400", name: "Depreciation", type: "expense", normal: "debit", opening: 18_000_000 },
 ];
 
-const EXPENSE_BREAKDOWN = [
-  { name: "Staff Costs", value: 12000000, color: "#4A90D9" },
-  { name: "Administrative", value: 5000000, color: "#22c55e" },
-  { name: "Loan Provisions", value: 4000000, color: "#ef4444" },
-  { name: "Rent & Utilities", value: 2500000, color: "#f59e0b" },
-  { name: "IT & Systems", value: 1500000, color: "#a855f7" },
-];
+/** Signed opening balance: debit positive, credit negative. */
+const signedOpening = (a: Account) => (a.normal === "debit" ? a.opening : -a.opening);
 
-const TRIAL_BALANCE = [
-  { account: "1000 - Cash & Bank", debit: 850000000, credit: 0 },
-  { account: "1100 - Member Savings", debit: 0, credit: 1200000000 },
-  { account: "1200 - Loan Portfolio", debit: 890000000, credit: 0 },
-  { account: "1300 - Share Capital", debit: 0, credit: 450000000 },
-  { account: "1400 - Fixed Assets", debit: 120000000, credit: 0 },
-  { account: "2000 - Interest Income", debit: 0, credit: 180000000 },
-  { account: "2100 - Fee Income", debit: 0, credit: 35000000 },
-  { account: "3000 - Staff Expenses", debit: 48000000, credit: 0 },
-  { account: "3100 - Admin Expenses", debit: 20000000, credit: 0 },
-  { account: "3200 - Provision for Bad Debts", debit: 15000000, credit: 0 },
-  { account: "4000 - Retained Earnings", debit: 0, credit: 78000000 },
+// Reserves b/f is whatever makes the opening trial balance balance.
+const ACCOUNTS: Account[] = (() => {
+  const net = BASE_ACCOUNTS.filter((a) => a.code !== "3100").reduce((s, a) => s + signedOpening(a), 0);
+  return BASE_ACCOUNTS.map((a) => (a.code === "3100" ? { ...a, opening: net } : a));
+})();
+const ACCOUNT_BY_CODE = Object.fromEntries(ACCOUNTS.map((a) => [a.code, a]));
+const accountLabel = (code: string) => `${code} · ${ACCOUNT_BY_CODE[code]?.name ?? "Unknown"}`;
+const ACCOUNT_OPTIONS = ACCOUNTS.map((a) => ({ value: a.code, label: accountLabel(a.code) }));
+const CASH_CODES = ["1000", "1100", "1150"];
+
+// Monthly income/expense Jan–Sep 2026; sums equal the income (419M) and expense (314.5M) opening balances.
+const HISTORY = [
+  { month: "Jan", income: 42_000_000, expense: 33_000_000 },
+  { month: "Feb", income: 43_500_000, expense: 34_000_000 },
+  { month: "Mar", income: 44_000_000, expense: 34_500_000 },
+  { month: "Apr", income: 45_500_000, expense: 34_000_000 },
+  { month: "May", income: 46_000_000, expense: 35_000_000 },
+  { month: "Jun", income: 47_000_000, expense: 35_500_000 },
+  { month: "Jul", income: 48_500_000, expense: 36_000_000 },
+  { month: "Aug", income: 50_000_000, expense: 36_000_000 },
+  { month: "Sep", income: 52_500_000, expense: 36_500_000 },
 ];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const EXPENSE_COLORS = ["#4A90D9", "#22c55e", "#f59e0b", "#a855f7", "#C0C0C0"];
+
+// ------------------------------------------------------------------
+// Journal
+// ------------------------------------------------------------------
+interface JournalEntry {
+  id: string;
+  date: string;
+  description: string;
+  debit: string; // account code
+  credit: string; // account code
+  amount: number;
+  reference: string;
+  status: "draft" | "posted";
+  by: string;
+  reversalOf?: string;
+  reversedBy?: string;
+}
+
+const je = (n: number, date: string, description: string, debit: string, credit: string, amount: number, reference: string, status: "draft" | "posted", by = "Sarah Nakamya"): JournalEntry =>
+  ({ id: `JE-2026-${String(n).padStart(4, "0")}`, date, description, debit, credit, amount, reference, status, by });
 
 const DEFAULT_JOURNAL: JournalEntry[] = [
-  { id: "JE-0456", date: "2025-01-15", description: "Monthly salary provision", debit: "Staff Expenses", credit: "Accrued Liabilities", amount: 12000000, status: "posted", by: "Sarah N." },
-  { id: "JE-0457", date: "2025-01-15", description: "Loan interest accrual", debit: "Interest Receivable", credit: "Interest Income", amount: 8500000, status: "posted", by: "System" },
-  { id: "JE-0458", date: "2025-01-14", description: "Depreciation - Office equipment", debit: "Depreciation Expense", credit: "Accumulated Depreciation", amount: 1200000, status: "posted", by: "System" },
-  { id: "JE-0459", date: "2025-01-14", description: "Mobile money collections", debit: "Mobile Money Float", credit: "Member Savings", amount: 4500000, status: "pending", by: "System" },
-  { id: "JE-0460", date: "2025-01-13", description: "Dividend provision FY2024", debit: "Retained Earnings", credit: "Dividends Payable", amount: 54000000, status: "draft", by: "Sarah N." },
+  je(156, "2026-11-04", "Mobile money collections swept to bank", "1100", "1150", 40_000_000, "SWP-1104", "draft"),
+  je(155, "2026-11-03", "Loan loss provision top-up (PAR review)", "5300", "1250", 1_800_000, "PAR-OCT", "draft"),
+  je(154, "2026-11-03", "Monthly interest accrual on loans", "1500", "4000", 9_500_000, "SYS-INT-11", "posted", "System"),
+  je(153, "2026-11-02", "Internet & IT subscriptions — November", "5000", "1100", 2_600_000, "INV-7781", "posted"),
+  je(152, "2026-11-02", "Fixed deposit interest — Stanbic", "1100", "4100", 8_000_000, "BNK-FD-221", "posted", "System"),
+  je(151, "2026-11-01", "Loan interest received — November", "1100", "4000", 39_500_000, "LN-INT-11", "posted", "System"),
+  je(150, "2026-11-01", "Loan processing fees reclassification", "1150", "4200", 1_500_000, "MJ-0045", "draft"),
+  je(149, "2026-10-31", "Interest on member savings accrued — October", "5200", "2100", 14_000_000, "SYS-SAV-10", "posted", "System"),
+  je(148, "2026-10-31", "Depreciation — October", "5400", "1400", 2_000_000, "DEP-10", "posted", "System"),
+  je(147, "2026-10-31", "Office rent & utilities — October", "5000", "1100", 4_200_000, "INV-7702", "posted"),
+  je(146, "2026-10-28", "Staff salaries — October 2026", "5100", "1100", 11_800_000, "PAY-10", "posted"),
+  je(145, "2026-10-20", "Share capital subscriptions — October", "1100", "3000", 14_000_000, "SHR-10", "posted"),
+  je(144, "2026-10-15", "Member savings deposits via mobile money", "1150", "2000", 62_000_000, "MM-BATCH-10", "posted", "System"),
+  je(143, "2026-10-05", "Loan disbursements — October batch", "1200", "1100", 175_000_000, "DISB-10", "posted"),
+  je(142, "2026-10-01", "Loan interest received — October", "1100", "4000", 38_000_000, "LN-INT-10", "posted", "System"),
+  je(141, "2026-10-01", "Loan principal repayments — October", "1100", "1200", 150_000_000, "LN-PRN-10", "posted", "System"),
 ];
 
-const ACCOUNTS = [
-  "Cash & Bank", "Member Savings", "Loan Portfolio", "Share Capital", "Fixed Assets",
-  "Interest Income", "Fee Income", "Staff Expenses", "Admin Expenses", "Provision for Bad Debts",
-  "Retained Earnings", "Accrued Liabilities", "Interest Receivable", "Accumulated Depreciation",
-  "Mobile Money Float", "Dividends Payable", "Depreciation Expense",
-];
+type TabId = "overview" | "journal" | "trial" | "statements";
+const TAB_IDS: TabId[] = ["overview", "journal", "trial", "statements"];
+type StatementKind = "income" | "balance" | "cashflow" | "trial";
 
-const inputClass = "w-full px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 text-[#1A1A1A]";
+const th = "text-left px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap";
+const td = "px-4 py-3 text-xs whitespace-nowrap";
+
+const nextJeId = (entries: JournalEntry[]) => {
+  const max = entries.reduce((m, e) => Math.max(m, Number(e.id.split("-").pop()) || 0), 0);
+  return `JE-2026-${String(max + 1).padStart(4, "0")}`;
+};
+
+interface TbRow { code: string; name: string; type: AccountType; normal: "debit" | "credit"; net: number; movement: number; debit: number; credit: number }
+
+/** Trial balance from opening balances + POSTED entries. `net`/`movement` are signed (debit +). */
+function buildTrialBalance(entries: JournalEntry[]): TbRow[] {
+  const movement: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.status !== "posted") continue;
+    movement[e.debit] = (movement[e.debit] ?? 0) + e.amount;
+    movement[e.credit] = (movement[e.credit] ?? 0) - e.amount;
+  }
+  return ACCOUNTS.map((a) => {
+    const mv = movement[a.code] ?? 0;
+    const net = signedOpening(a) + mv;
+    return { code: a.code, name: a.name, type: a.type, normal: a.normal, net, movement: mv, debit: net > 0 ? net : 0, credit: net < 0 ? -net : 0 };
+  });
+}
+
+/** Balance shown on the account's normal side (positive when normal). */
+const normalBal = (r: TbRow) => (r.normal === "debit" ? r.net : -r.net);
+
+function buildStatements(tb: TbRow[]) {
+  const by = (code: string) => tb.find((r) => r.code === code);
+  const income: StatementLine[] = tb.filter((r) => r.type === "income").map((r) => ({ label: r.name, amount: normalBal(r) }));
+  const expenses: StatementLine[] = tb.filter((r) => r.type === "expense").map((r) => ({ label: r.name, amount: normalBal(r) }));
+  const totalIncome = income.reduce((a, l) => a + l.amount, 0);
+  const totalExpenses = expenses.reduce((a, l) => a + l.amount, 0);
+  const surplus = totalIncome - totalExpenses;
+
+  // Asset lines are debit-signed so the contra allowance shows as a deduction.
+  const assets: StatementLine[] = tb.filter((r) => r.type === "asset").map((r) => ({ label: r.normal === "credit" ? `Less: ${r.name.toLowerCase()}` : r.name, amount: r.net }));
+  const liabilities: StatementLine[] = tb.filter((r) => r.type === "liability").map((r) => ({ label: r.name, amount: normalBal(r) }));
+  const equity: StatementLine[] = tb.filter((r) => r.type === "equity").map((r) => ({ label: r.name, amount: normalBal(r) }));
+  const totalAssets = assets.reduce((a, l) => a + l.amount, 0);
+  const totalLiabilities = liabilities.reduce((a, l) => a + l.amount, 0);
+  const equityBase = equity.reduce((a, l) => a + l.amount, 0);
+  // Same balancing line generateBalanceSheet() adds, so preview and PDF agree.
+  const retained = totalAssets - totalLiabilities - equityBase;
+
+  // Cash flow since the opening date (indirect method). Every non-cash account
+  // contributes −(its movement), so the total always equals the change in cash.
+  const mv = (...codes: string[]) => codes.reduce((a, c) => a + (by(c)?.movement ?? 0), 0);
+  const incomeExpenseCodes = tb.filter((r) => r.type === "income" || r.type === "expense").map((r) => r.code);
+  const cash: { section: string; label: string; amount: number }[] = [
+    { section: "Operating activities", label: "Net surplus for the period", amount: -mv(...incomeExpenseCodes) },
+    { section: "Operating activities", label: "Add: depreciation", amount: mv("5400") },
+    { section: "Operating activities", label: "Add: loan loss provisions", amount: -mv("1250") },
+    { section: "Operating activities", label: "(Increase)/decrease in interest receivable", amount: -mv("1500") },
+    { section: "Operating activities", label: "Increase in interest payable & accruals", amount: -mv("2100", "2200") },
+    { section: "Operating activities", label: "Increase in member savings deposits", amount: -mv("2000") },
+    { section: "Investing activities", label: "Net loans (disbursed)/repaid", amount: -mv("1200") },
+    { section: "Investing activities", label: "Investments & fixed deposits", amount: -mv("1300") },
+    { section: "Investing activities", label: "Purchase of property & equipment", amount: -mv("1400") - mv("5400") },
+    { section: "Financing activities", label: "Share capital subscriptions", amount: -mv("3000") },
+    { section: "Financing activities", label: "Dividends & reserve movements", amount: -mv("2300", "3100") },
+  ];
+  const openingCash = CASH_CODES.reduce((a, c) => a + signedOpening(ACCOUNT_BY_CODE[c]), 0);
+  const netCash = cash.reduce((a, l) => a + l.amount, 0);
+
+  return { income, expenses, totalIncome, totalExpenses, surplus, assets, liabilities, equity, totalAssets, totalLiabilities, retained, cash, openingCash, netCash };
+}
+type Statements = ReturnType<typeof buildStatements>;
 
 export default function AdminAccountingPage() {
-  const [activeTab, setActiveTab] = useState<"overview" | "journal" | "trial-balance" | "statements">("overview");
+  return (
+    <Suspense>
+      <AccountingInner />
+    </Suspense>
+  );
+}
+
+function AccountingInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const hydrated = useHydrated();
+  const tabParam = params.get("tab") as TabId | null;
+  const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "overview";
+  const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
+  const today = hydrated ? todayISO() : DEMO_TODAY;
+
   const [entries, setEntries] = usePersistedState<JournalEntry[]>("admin_journal_entries", DEFAULT_JOURNAL);
 
-  /* modal states */
-  const [newEntryOpen, setNewEntryOpen] = useState(false);
-  const [viewEntry, setViewEntry] = useState<JournalEntry | null>(null);
-  const EMPTY_ENTRY = { description: "", debit: ACCOUNTS[0], credit: ACCOUNTS[1], amount: 0 };
-  const [entryForm, setEntryForm] = useState(EMPTY_ENTRY);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [newOpen, setNewOpen] = useState(false);
+  const [form, setForm] = useState({ date: DEMO_TODAY, description: "", debit: "5000", credit: "1100", amount: "", reference: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [viewId, setViewId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<null | { action: "post" | "reverse" | "delete"; id: string }>(null);
+  const [preview, setPreview] = useState<StatementKind | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const handleNewEntry = () => {
-    if (!entryForm.description || entryForm.amount <= 0) return;
-    const id = `JE-${String(entries.length + 461).padStart(4, "0")}`;
-    const newEntry: JournalEntry = {
-      id, date: new Date().toISOString().slice(0, 10),
-      description: entryForm.description, debit: entryForm.debit,
-      credit: entryForm.credit, amount: entryForm.amount,
-      status: "draft", by: "Admin",
-    };
-    setEntries((prev) => [newEntry, ...prev]);
-    showToast(`Journal entry ${id} created`);
-    setEntryForm(EMPTY_ENTRY);
-    setNewEntryOpen(false);
+  const tb = useMemo(() => buildTrialBalance(entries), [entries]);
+  const st = useMemo(() => buildStatements(tb), [tb]);
+  const tbTotals = useMemo(() => ({ debit: tb.reduce((a, r) => a + r.debit, 0), credit: tb.reduce((a, r) => a + r.credit, 0) }), [tb]);
+  const balanced = tbTotals.debit === tbTotals.credit;
+
+  // Chart: Jan–Sep history + posted journal activity per month (Oct onwards).
+  const chart = useMemo(() => {
+    const rows = HISTORY.map((h) => ({ ...h }));
+    for (const e of entries) {
+      if (e.status !== "posted") continue;
+      const m = MONTHS[Number(e.date.slice(5, 7)) - 1];
+      let row = rows.find((r) => r.month === m);
+      if (!row) {
+        row = { month: m, income: 0, expense: 0 };
+        rows.push(row);
+      }
+      // Debit to income reduces it (reversals); credit increases it. Opposite for expenses.
+      for (const [code, sign] of [[e.debit, 1], [e.credit, -1]] as const) {
+        const t = ACCOUNT_BY_CODE[code]?.type;
+        if (t === "income") row.income -= sign * e.amount;
+        if (t === "expense") row.expense += sign * e.amount;
+      }
+    }
+    return rows.sort((a, b) => MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month));
+  }, [entries]);
+
+  const expensePie = st.expenses.filter((l) => l.amount > 0).map((l, i) => ({ name: l.label, value: l.amount, color: EXPENSE_COLORS[i % EXPENSE_COLORS.length] }));
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return [...entries]
+      .sort((a, b) => b.id.localeCompare(a.id))
+      .filter((e) => {
+        const shown = e.reversedBy ? "reversed" : e.status;
+        if (statusFilter !== "all" && shown !== statusFilter) return false;
+        if (!q) return true;
+        return [e.id, e.description, e.reference, accountLabel(e.debit), accountLabel(e.credit)].some((s) => s.toLowerCase().includes(q));
+      });
+  }, [entries, statusFilter, search]);
+
+  const viewEntry = entries.find((e) => e.id === viewId) ?? null;
+
+  // ---------------- Handlers ----------------
+  const openNew = () => {
+    setForm({ date: today, description: "", debit: "5000", credit: "1100", amount: "", reference: "" });
+    setErrors({});
+    setNewOpen(true);
   };
 
-  const handlePostEntry = (id: string) => {
-    setEntries((prev) => prev.map((e) => e.id === id ? { ...e, status: "posted" } : e));
-    showToast(`Entry ${id} posted`);
+  const submitNew = (post: boolean) => {
+    const e: Record<string, string> = {};
+    const amount = Number(form.amount);
+    if (!form.description.trim()) e.description = "Description is required";
+    if (!form.date) e.date = "Pick a date";
+    else if (form.date < PERIOD_START) e.date = `Periods before ${formatDate(PERIOD_START)} are closed`;
+    else if (form.date > today) e.date = "Entries cannot be future-dated";
+    if (form.debit === form.credit) e.credit = "Debit and credit accounts must differ";
+    if (!(amount > 0)) e.amount = "Enter an amount greater than zero";
+    setErrors(e);
+    if (Object.keys(e).length) return;
+    const id = nextJeId(entries);
+    setEntries((prev) => [
+      { id, date: form.date, description: form.description.trim(), debit: form.debit, credit: form.credit, amount: Math.round(amount), reference: form.reference.trim(), status: post ? "posted" : "draft", by: "Sarah Nakamya" },
+      ...prev,
+    ]);
+    showToast(post ? `${id} posted to the ledger` : `${id} saved as draft`);
+    setNewOpen(false);
   };
 
-  const totalDebit = TRIAL_BALANCE.reduce((a, b) => a + b.debit, 0);
-  const totalCredit = TRIAL_BALANCE.reduce((a, b) => a + b.credit, 0);
+  const runConfirm = () => {
+    if (!confirm) return;
+    const entry = entries.find((e) => e.id === confirm.id);
+    if (!entry) return;
+    if (confirm.action === "post") {
+      setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, status: "posted" } : e)));
+      showToast(`${entry.id} posted — trial balance updated`);
+    } else if (confirm.action === "delete") {
+      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+      showToast(`Draft ${entry.id} deleted`, "info");
+    } else {
+      // Reversal = a new posted entry with debit/credit swapped; the original stays posted but flagged.
+      const id = nextJeId(entries);
+      setEntries((prev) => [
+        { id, date: todayISO(), description: `Reversal of ${entry.id}: ${entry.description}`, debit: entry.credit, credit: entry.debit, amount: entry.amount, reference: entry.reference, status: "posted", by: "Sarah Nakamya", reversalOf: entry.id },
+        ...prev.map((e) => (e.id === entry.id ? { ...e, reversedBy: id } : e)),
+      ]);
+      showToast(`${entry.id} reversed by ${id}`, "info");
+    }
+    setViewId(null);
+  };
+
+  const tbExportRows = tb.map((r) => ({ code: r.code, name: r.name, debit: r.debit, credit: r.credit }));
+  const exportJournal = () => {
+    if (!filtered.length) return showToast("No journal entries to export", "info");
+    exportToCsv(`journal-${todayISO()}`, filtered.map((e) => ({ ...e, debit: accountLabel(e.debit), credit: accountLabel(e.credit), status: e.reversedBy ? "reversed" : e.status })), [
+      { key: "id", label: "Entry" }, { key: "date", label: "Date" }, { key: "description", label: "Description" },
+      { key: "debit", label: "Debit account" }, { key: "credit", label: "Credit account" }, { key: "amount", label: "Amount (UGX)" },
+      { key: "reference", label: "Reference" }, { key: "status", label: "Status" }, { key: "by", label: "Prepared by" },
+    ]);
+    showToast(`${filtered.length} journal entries exported`);
+  };
+  const exportTb = () => {
+    exportToCsv(`trial-balance-${todayISO()}`, [...tbExportRows, { code: "", name: "Totals", debit: tbTotals.debit, credit: tbTotals.credit }], [
+      { key: "code", label: "Code" }, { key: "name", label: "Account" }, { key: "debit", label: "Debit (UGX)" }, { key: "credit", label: "Credit (UGX)" },
+    ]);
+    showToast("Trial balance exported");
+  };
+
+  const downloadPdf = async (kind: StatementKind) => {
+    setBusy(kind);
+    try {
+      if (kind === "income") await generateIncomeStatement(st.income, st.expenses);
+      else if (kind === "balance") await generateBalanceSheet(st.assets, st.liabilities, st.equity);
+      else if (kind === "trial") await generateTrialBalance(tbExportRows);
+      else {
+        // generateCashFlow() only prints fixed demo figures, so build the table from the ledger instead.
+        const rows: (string | number)[][] = [];
+        const bold: number[] = [];
+        let section = "";
+        for (const l of st.cash) {
+          if (l.section !== section) {
+            section = l.section;
+            bold.push(rows.length);
+            rows.push([section, ""]);
+          }
+          rows.push([`   ${l.label}`, l.amount]);
+        }
+        bold.push(rows.length, rows.length + 2);
+        rows.push(["Net increase/(decrease) in cash", st.netCash], ["Cash at 30 Sep 2026", st.openingCash], ["Cash at end of period", st.openingCash + st.netCash]);
+        await generateTablePdf({
+          title: "Cash Flow Statement",
+          subtitle: `For the period ${formatDate(PERIOD_START)} to ${formatDate(todayISO())}`,
+          filename: `cash-flow-${todayISO()}`,
+          summary: [["Net increase in cash", formatCurrency(st.netCash)], ["Closing cash & bank", formatCurrency(st.openingCash + st.netCash)]],
+          sections: [{ columns: ["Item", "Amount (UGX)"], rows, boldRows: bold, numericCols: [1] }],
+        });
+      }
+      showToast("PDF downloaded");
+    } catch {
+      showToast("Could not generate PDF", "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const STATEMENT_CARDS: { kind: StatementKind; title: string; desc: string; icon: typeof BookOpen; figure: string }[] = [
+    { kind: "income", title: "Income Statement", desc: "Revenue and expenses, FY 2026 year to date", icon: TrendingUp, figure: `Surplus ${formatCompact(st.surplus)}` },
+    { kind: "balance", title: "Balance Sheet", desc: "Assets, liabilities and equity", icon: Scale, figure: `Assets ${formatCompact(st.totalAssets)}` },
+    { kind: "cashflow", title: "Cash Flow Statement", desc: `Cash movements since ${formatDate(PERIOD_START)}`, icon: Landmark, figure: `Net ${formatCompact(st.netCash)}` },
+    { kind: "trial", title: "Trial Balance", desc: "Closing balances of every account", icon: FileSpreadsheet, figure: balanced ? "Balanced" : "Out of balance" },
+  ];
+
+  const drafts = entries.filter((e) => e.status === "draft").length;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Accounting</h1>
-          <p className="text-[#64748b] text-sm">Financial records, journal entries, and statements</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
-            <Download className="w-4 h-4" /> Export
-          </button>
-          <button onClick={() => { setEntryForm(EMPTY_ENTRY); setNewEntryOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors">
-            <Plus className="w-4 h-4" /> New Entry
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Accounting"
+        subtitle="Financial records, journal entries, and statements"
+        actions={
+          <>
+            <Button variant="secondary" onClick={activeTab === "journal" ? exportJournal : exportTb}>
+              <Download className="w-4 h-4" /> {activeTab === "journal" ? "Export journal" : "Export trial balance"}
+            </Button>
+            <Button onClick={openNew}><Plus className="w-4 h-4" /> New Entry</Button>
+          </>
+        }
+      />
 
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1 overflow-x-auto">
-        {(["overview", "journal", "trial-balance", "statements"] as const).map((t) => (
-          <button key={t} onClick={() => setActiveTab(t)}
-            className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize whitespace-nowrap ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
-            }`}>{t.replace("-", " ")}</button>
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { id: "overview" as TabId, label: "Overview" },
+          { id: "journal" as TabId, label: "Journal", count: entries.length },
+          { id: "trial" as TabId, label: "Trial Balance" },
+          { id: "statements" as TabId, label: "Statements" },
+        ]}
+        active={activeTab}
+        onChange={setTab}
+      />
 
       {activeTab === "overview" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center mb-3"><ArrowUpRight className="w-5 h-5 text-[#22c55e]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Monthly Revenue</p>
-              <p className="text-xl font-bold text-[#22c55e]">{formatCurrency(55000000)}</p>
-              <span className="text-xs text-[#22c55e]">+12% vs last month</span>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#ef4444]/10 flex items-center justify-center mb-3"><ArrowDownRight className="w-5 h-5 text-[#ef4444]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Monthly Expenses</p>
-              <p className="text-xl font-bold text-[#ef4444]">{formatCurrency(25000000)}</p>
-              <span className="text-xs text-[#22c55e]">-3% vs last month</span>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center mb-3"><TrendingUp className="w-5 h-5 text-[#4A90D9]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Net Income</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(30000000)}</p>
-              <span className="text-xs text-[#64748b]">54.5% margin</span>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#a855f7]/10 flex items-center justify-center mb-3"><Scale className="w-5 h-5 text-[#a855f7]" /></div>
-              <p className="text-xs text-[#64748b] mb-1">Total Assets</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(1860000000)}</p>
-            </div>
+            <StatCard label="Total Income (YTD)" value={formatCompact(st.totalIncome)} icon={ArrowUpRight} color="#22c55e" sub="FY 2026, posted entries" />
+            <StatCard label="Total Expenses (YTD)" value={formatCompact(st.totalExpenses)} icon={ArrowDownRight} color="#ef4444" sub={`${drafts} draft entr${drafts === 1 ? "y" : "ies"} not yet posted`} />
+            <StatCard label="Net Surplus" value={formatCompact(st.surplus)} icon={TrendingUp} color={st.surplus >= 0 ? "#4A90D9" : "#ef4444"}
+              sub={st.totalIncome ? `${((st.surplus / st.totalIncome) * 100).toFixed(1)}% margin` : "—"} />
+            <StatCard label="Total Assets" value={formatCompact(st.totalAssets)} icon={Scale} color="#a855f7" sub="Net of loan-loss allowance" />
           </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Income vs Expenses (6 Months)</h3>
+            <div className="lg:col-span-2 glass-card rounded-xl p-6">
+              <h3 className="font-semibold dm-text mb-1 text-sm">Income vs Expenses — FY 2026</h3>
+              <p className="text-xs dm-text-secondary mb-4">Oct onwards is computed live from posted journal entries</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={INCOME_EXPENSE}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <BarChart data={chart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.25} />
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`} />
-                    <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))}
-                      contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", fontSize: "12px" }} />
-                    <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} name="Income" />
-                    <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expense" />
+                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${(Number(v) / 1e6).toFixed(0)}M`} />
+                    <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="income" name="Income" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="expense" name="Expenses" fill="#4A90D9" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Expense Breakdown</h3>
-              <div className="h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={EXPENSE_BREAKDOWN} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={2}>
-                      {EXPENSE_BREAKDOWN.map((e, i) => <Cell key={i} fill={e.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))}
-                      contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", fontSize: "12px" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-1.5">
-                {EXPENSE_BREAKDOWN.map((d) => (
-                  <div key={d.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                      <span className="text-[#64748b]">{d.name}</span>
-                    </div>
-                    <span className="font-medium text-[#1A1A1A]">{formatCurrency(d.value)}</span>
+            <div className="glass-card rounded-xl p-6">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Expense Breakdown (YTD)</h3>
+              {expensePie.length === 0 ? (
+                <EmptyState title="No expenses recorded" />
+              ) : (
+                <>
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={expensePie} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={38} outerRadius={66} paddingAngle={2}>
+                          {expensePie.map((e) => <Cell key={e.name} fill={e.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-1.5">
+                    {expensePie.map((e) => (
+                      <div key={e.name} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="flex items-center gap-1.5 dm-text-secondary min-w-0"><span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: e.color }} /><span className="truncate">{e.name}</span></span>
+                        <span className="font-medium dm-text">{formatCompact(e.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </>
       )}
 
       {activeTab === "journal" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Ref</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Date</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Description</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Debit A/C</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Credit A/C</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Amount</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">By</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((j) => {
-                  const sc: Record<string, { bg: string; text: string }> = {
-                    posted: { bg: "bg-[#22c55e]/10", text: "text-[#22c55e]" },
-                    pending: { bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]" },
-                    draft: { bg: "bg-[#64748b]/10", text: "text-[#64748b]" },
-                  };
-                  const s = sc[j.status] || sc.posted;
-                  return (
-                    <tr key={j.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
-                      <td className="px-4 py-3 text-xs font-mono text-[#C0C0C0]">{j.id}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{j.date}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{j.description}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{j.debit}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{j.credit}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium text-[#1A1A1A]">{formatCurrency(j.amount)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`${s.bg} ${s.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>{j.status}</span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{j.by}</td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => setViewEntry(j)} className="p-1 rounded-lg hover:bg-[#f1f5f9]">
-                            <Eye className="w-3.5 h-3.5 text-[#64748b]" />
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="p-4 flex flex-col md:flex-row gap-3 md:items-center border-b dm-border">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 dm-text-secondary" />
+              <TextInput value={search} onChange={setSearch} placeholder="Search entry, description, account or reference…" className="pl-9" aria-label="Search journal" />
+            </div>
+            <SelectInput className="md:w-44" value={statusFilter} onChange={setStatusFilter}
+              options={[{ value: "all", label: "All statuses" }, { value: "draft", label: "Draft" }, { value: "posted", label: "Posted" }, { value: "reversed", label: "Reversed" }]} />
+          </div>
+          {filtered.length === 0 ? (
+            <EmptyState icon={BookOpen} title="No journal entries match" hint="Change the filters or create a new entry."
+              action={<Button variant="secondary" onClick={() => { setSearch(""); setStatusFilter("all"); }}>Clear filters</Button>} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
+                    <th className={th}>Entry</th>
+                    <th className={th}>Date</th>
+                    <th className={th}>Description</th>
+                    <th className={th}>Debit</th>
+                    <th className={th}>Credit</th>
+                    <th className={cn(th, "text-right")}>Amount</th>
+                    <th className={th}>Status</th>
+                    <th className={cn(th, "text-right")}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((e) => (
+                    <tr key={e.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors">
+                      <td className={cn(td, "font-mono dm-text-secondary")}>{e.id}</td>
+                      <td className={cn(td, "dm-text-secondary")}>{formatDate(e.date)}</td>
+                      <td className={cn(td, "dm-text max-w-xs truncate")} title={e.description}>{e.description}</td>
+                      <td className={cn(td, "dm-text-secondary")}>{accountLabel(e.debit)}</td>
+                      <td className={cn(td, "dm-text-secondary")}>{accountLabel(e.credit)}</td>
+                      <td className={cn(td, "text-right font-medium dm-text")}>{formatCurrency(e.amount)}</td>
+                      <td className={td}><Badge status={e.reversedBy ? "reversed" : e.status} /></td>
+                      <td className={cn(td, "text-right")}>
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => setViewId(e.id)} className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" aria-label={`View ${e.id}`} title="View">
+                            <Eye className="w-3.5 h-3.5 dm-text-secondary" />
                           </button>
-                          {j.status !== "posted" && (
-                            <button onClick={() => handlePostEntry(j.id)}
-                              className="px-2 py-0.5 bg-[#22c55e] text-white rounded-lg text-[10px] font-medium hover:bg-[#16a34a]">Post</button>
+                          {e.status === "draft" && (
+                            <>
+                              <button onClick={() => setConfirm({ action: "post", id: e.id })}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-[#22c55e] text-white rounded-lg text-[10px] font-medium hover:bg-[#16a34a]">
+                                <CheckCircle className="w-3 h-3" /> Post
+                              </button>
+                              <button onClick={() => setConfirm({ action: "delete", id: e.id })} className="p-1.5 rounded-lg hover:bg-[#ef4444]/10 text-[#ef4444]" aria-label={`Delete ${e.id}`} title="Delete draft">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                          {e.status === "posted" && !e.reversedBy && !e.reversalOf && (
+                            <button onClick={() => setConfirm({ action: "reverse", id: e.id })}
+                              className="inline-flex items-center gap-1 px-2 py-1 border border-[#ef4444]/40 text-[#ef4444] rounded-lg text-[10px] font-medium hover:bg-[#ef4444]/10">
+                              <RotateCcw className="w-3 h-3" /> Reverse
+                            </button>
                           )}
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="px-4 py-3 text-xs dm-text-secondary border-t dm-border">
+            Showing {filtered.length} of {entries.length} entries · only posted entries affect the trial balance
           </div>
         </div>
       )}
 
-      {activeTab === "trial-balance" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
-          <div className="p-4 border-b border-[#e2e8f0] flex items-center justify-between">
+      {activeTab === "trial" && (
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b dm-border">
             <div>
-              <h3 className="font-semibold text-[#1A1A1A] text-sm">Trial Balance</h3>
-              <p className="text-xs text-[#64748b]">As at January 15, 2025</p>
+              <h3 className="font-semibold dm-text text-sm">Trial Balance</h3>
+              <p className="text-xs dm-text-secondary">As at {formatDate(today)} · opening balances at {formatDate(OPENING_DATE)} + posted entries</p>
             </div>
-            <div className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 ${
-              totalDebit === totalCredit ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#ef4444]/10 text-[#ef4444]"
-            }`}>
-              {totalDebit === totalCredit ? <><CheckCircle className="w-3.5 h-3.5" /> Balanced</> : <><XCircle className="w-3.5 h-3.5" /> Unbalanced</>}
+            <div className="flex flex-wrap gap-2 items-center">
+              <Badge status={balanced ? "Balanced" : "Out of balance"} tone={balanced ? "green" : "red"} />
+              <Button variant="secondary" onClick={exportTb}><Download className="w-4 h-4" /> CSV</Button>
+              <Button onClick={() => downloadPdf("trial")} disabled={busy === "trial"}>
+                {busy === "trial" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />} Download PDF
+              </Button>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Account</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Debit (UGX)</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Credit (UGX)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TRIAL_BALANCE.map((t) => (
-                  <tr key={t.account} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa]">
-                    <td className="px-4 py-3 text-xs text-[#1A1A1A]">{t.account}</td>
-                    <td className="px-4 py-3 text-right text-xs text-[#1A1A1A]">{t.debit > 0 ? formatCurrency(t.debit) : "—"}</td>
-                    <td className="px-4 py-3 text-right text-xs text-[#1A1A1A]">{t.credit > 0 ? formatCurrency(t.credit) : "—"}</td>
-                  </tr>
-                ))}
-                <tr className="bg-[#1A1A1A]">
-                  <td className="px-4 py-3 text-xs font-bold text-white">Total</td>
-                  <td className="px-4 py-3 text-right text-xs font-bold text-white">{formatCurrency(totalDebit)}</td>
-                  <td className="px-4 py-3 text-right text-xs font-bold text-white">{formatCurrency(totalCredit)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <TrialBalanceTable tb={tb} totals={tbTotals} />
         </div>
       )}
 
       {activeTab === "statements" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { title: "Income Statement", desc: "Revenue, expenses, and net income for the period", icon: TrendingUp, color: "#22c55e" },
-            { title: "Balance Sheet", desc: "Assets, liabilities, and equity snapshot", icon: Scale, color: "#4A90D9" },
-            { title: "Cash Flow Statement", desc: "Operating, investing, and financing cash flows", icon: DollarSign, color: "#a855f7" },
-            { title: "Member Equity Statement", desc: "Changes in member shares and retained earnings", icon: BarChart3, color: "#f59e0b" },
-          ].map((s) => (
-            <div key={s.title} className="bg-white rounded-xl p-6 border border-[#e2e8f0] hover:shadow-sm transition-all cursor-pointer group">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: `${s.color}12` }}>
-                <s.icon className="w-6 h-6" style={{ color: s.color }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {STATEMENT_CARDS.map((s) => (
+            <div key={s.kind} className="glass-card rounded-xl p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center mb-3">
+                  <s.icon className="w-5 h-5 text-[#4A90D9]" />
+                </div>
+                <span className="text-xs font-semibold dm-text">{s.figure}</span>
               </div>
-              <h3 className="font-semibold text-[#1A1A1A] mb-1">{s.title}</h3>
-              <p className="text-xs text-[#64748b] mb-4">{s.desc}</p>
+              <h3 className="font-semibold dm-text mb-1">{s.title}</h3>
+              <p className="text-xs dm-text-secondary mb-4">{s.desc}</p>
               <div className="flex gap-2">
-                <button className="px-3 py-1.5 bg-[#1A1A1A] text-white rounded-lg text-xs font-medium hover:bg-[#333] transition-colors">
-                  Generate
-                </button>
-                <button className="px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-                  <Download className="w-3 h-3 inline mr-1" /> PDF
-                </button>
+                <Button className="px-3 py-1.5 text-xs" onClick={() => setPreview(s.kind)}>
+                  <Eye className="w-3.5 h-3.5" /> Generate
+                </Button>
+                <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => downloadPdf(s.kind)} disabled={busy === s.kind}>
+                  {busy === s.kind ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+                </Button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ======== NEW JOURNAL ENTRY MODAL ======== */}
-      <Modal open={newEntryOpen} onClose={() => setNewEntryOpen(false)} title="Create Journal Entry" size="lg"
+      {/* ======== NEW ENTRY ======== */}
+      <Modal open={newOpen} onClose={() => setNewOpen(false)} title="New Journal Entry" size="lg"
         footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setNewEntryOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Cancel</button>
-            <button onClick={handleNewEntry} disabled={!entryForm.description || entryForm.amount <= 0}
-              className="px-5 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Create Entry
-            </button>
-          </div>
+          <>
+            <Button variant="secondary" onClick={() => setNewOpen(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => submitNew(false)}>Save as draft</Button>
+            <Button onClick={() => submitNew(true)}><CheckCircle className="w-4 h-4" /> Save & post</Button>
+          </>
         }>
         <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Description *</label>
-            <input className={inputClass} value={entryForm.description} onChange={(e) => setEntryForm({ ...entryForm, description: e.target.value })} placeholder="e.g. Monthly salary provision" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <FormField label="Date" required error={errors.date}>
+              <TextInput type="date" value={form.date} min={PERIOD_START} max={today} onChange={(v) => setForm({ ...form, date: v })} />
+            </FormField>
+            <div className="sm:col-span-2">
+              <FormField label="Description" required error={errors.description}>
+                <TextInput value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="e.g. Office stationery — November" maxLength={120} />
+              </FormField>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Debit Account</label>
-              <select className={inputClass} value={entryForm.debit} onChange={(e) => setEntryForm({ ...entryForm, debit: e.target.value })}>
-                {ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Credit Account</label>
-              <select className={inputClass} value={entryForm.credit} onChange={(e) => setEntryForm({ ...entryForm, credit: e.target.value })}>
-                {ACCOUNTS.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </div>
+            <FormField label="Debit account" required>
+              <SelectInput value={form.debit} onChange={(v) => setForm({ ...form, debit: v })} options={ACCOUNT_OPTIONS} />
+            </FormField>
+            <FormField label="Credit account" required error={errors.credit}>
+              <SelectInput value={form.credit} onChange={(v) => setForm({ ...form, credit: v })} options={ACCOUNT_OPTIONS} />
+            </FormField>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Amount (UGX) *</label>
-            <input className={inputClass} type="number" value={entryForm.amount || ""} onChange={(e) => setEntryForm({ ...entryForm, amount: Number(e.target.value) })} placeholder="0" />
-          </div>
-          <div className="bg-[#f8f9fa] rounded-xl p-3 text-xs text-[#64748b]">
-            Entry will be saved as <span className="font-semibold text-[#64748b]">Draft</span>. You can post it from the journal tab.
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Amount (UGX)" required error={errors.amount}>
+              <TextInput type="number" min={0} value={form.amount} onChange={(v) => setForm({ ...form, amount: v })} placeholder="0" />
+            </FormField>
+            <FormField label="Reference" hint="Invoice, receipt or voucher number">
+              <TextInput value={form.reference} onChange={(v) => setForm({ ...form, reference: v })} placeholder="e.g. INV-7790" maxLength={30} />
+            </FormField>
           </div>
         </div>
       </Modal>
 
-      {/* ======== VIEW ENTRY MODAL ======== */}
-      <Modal open={!!viewEntry} onClose={() => setViewEntry(null)} title={`Journal Entry — ${viewEntry?.id || ""}`} size="md"
+      {/* ======== VIEW ENTRY ======== */}
+      <Modal open={viewEntry !== null} onClose={() => setViewId(null)} title={viewEntry ? `Journal Entry ${viewEntry.id}` : "Journal Entry"}
         footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setViewEntry(null)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">Close</button>
-            {viewEntry && viewEntry.status !== "posted" && (
-              <button onClick={() => { handlePostEntry(viewEntry.id); setViewEntry(null); }}
-                className="px-5 py-2.5 bg-[#22c55e] text-white rounded-xl text-sm font-medium hover:bg-[#16a34a] transition-colors flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" /> Post Entry
-              </button>
+          <>
+            <Button variant="secondary" onClick={() => setViewId(null)}>Close</Button>
+            {viewEntry?.status === "draft" && <Button variant="success" onClick={() => setConfirm({ action: "post", id: viewEntry.id })}><CheckCircle className="w-4 h-4" /> Post</Button>}
+            {viewEntry?.status === "posted" && !viewEntry.reversedBy && !viewEntry.reversalOf && (
+              <Button variant="danger" onClick={() => setConfirm({ action: "reverse", id: viewEntry.id })}><RotateCcw className="w-4 h-4" /> Reverse</Button>
             )}
-          </div>
+          </>
         }>
         {viewEntry && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-[#64748b]">Date</p>
-                <p className="text-sm font-medium text-[#1A1A1A]">{viewEntry.date}</p>
-              </div>
-              <div>
-                <p className="text-xs text-[#64748b]">Status</p>
-                <p className={`text-sm font-semibold capitalize ${viewEntry.status === "posted" ? "text-[#22c55e]" : viewEntry.status === "pending" ? "text-[#f59e0b]" : "text-[#64748b]"}`}>{viewEntry.status}</p>
-              </div>
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-3">
+              <Detail label="Date" value={formatDate(viewEntry.date)} />
+              <Detail label="Status" value={<Badge status={viewEntry.reversedBy ? "reversed" : viewEntry.status} />} />
+              <Detail label="Reference" value={viewEntry.reference || "—"} />
+              <Detail label="Prepared by" value={viewEntry.by} />
             </div>
-            <div>
-              <p className="text-xs text-[#64748b]">Description</p>
-              <p className="text-sm text-[#1A1A1A]">{viewEntry.description}</p>
+            <Detail label="Description" value={viewEntry.description} />
+            <div className="overflow-x-auto rounded-xl border dm-border">
+              <table className="w-full">
+                <thead><tr className="bg-[#f8f9fa]"><th className={th}>Account</th><th className={cn(th, "text-right")}>Debit</th><th className={cn(th, "text-right")}>Credit</th></tr></thead>
+                <tbody>
+                  <tr className="border-t dm-border"><td className={cn(td, "dm-text")}>{accountLabel(viewEntry.debit)}</td><td className={cn(td, "text-right dm-text")}>{formatCurrency(viewEntry.amount)}</td><td className={cn(td, "text-right dm-text-secondary")}>—</td></tr>
+                  <tr className="border-t dm-border"><td className={cn(td, "dm-text")}>{accountLabel(viewEntry.credit)}</td><td className={cn(td, "text-right dm-text-secondary")}>—</td><td className={cn(td, "text-right dm-text")}>{formatCurrency(viewEntry.amount)}</td></tr>
+                </tbody>
+              </table>
             </div>
-            <div className="bg-[#f8f9fa] rounded-xl p-4 space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="text-[#64748b]">Debit</span>
-                <span className="font-medium text-[#1A1A1A]">{viewEntry.debit}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-[#64748b]">Credit</span>
-                <span className="font-medium text-[#1A1A1A]">{viewEntry.credit}</span>
-              </div>
-              <div className="border-t border-[#e2e8f0] pt-2 flex justify-between text-sm">
-                <span className="font-semibold text-[#64748b]">Amount</span>
-                <span className="font-bold text-[#1A1A1A]">{formatCurrency(viewEntry.amount)}</span>
-              </div>
-            </div>
-            <div className="flex justify-between text-xs text-[#64748b]">
-              <span>Created by: {viewEntry.by}</span>
-            </div>
+            {viewEntry.reversedBy && <p className="text-xs dm-text-secondary">Reversed by {viewEntry.reversedBy}.</p>}
+            {viewEntry.reversalOf && <p className="text-xs dm-text-secondary">This entry reverses {viewEntry.reversalOf}.</p>}
           </div>
         )}
       </Modal>
+
+      {/* ======== STATEMENT PREVIEW ======== */}
+      <Modal open={preview !== null} onClose={() => setPreview(null)} size="xl"
+        title={STATEMENT_CARDS.find((c) => c.kind === preview)?.title ?? "Statement"}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPreview(null)}>Close</Button>
+            {preview && (
+              <Button onClick={() => downloadPdf(preview)} disabled={busy === preview}>
+                {busy === preview ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download PDF
+              </Button>
+            )}
+          </>
+        }>
+        {preview === "trial" && (
+          <>
+            <p className="text-xs dm-text-secondary mb-3">As at {formatDate(today)}</p>
+            <TrialBalanceTable tb={tb} totals={tbTotals} />
+          </>
+        )}
+        {preview && preview !== "trial" && <StatementPreview kind={preview} st={st} today={today} />}
+      </Modal>
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        onConfirm={runConfirm}
+        danger={confirm?.action !== "post"}
+        title={confirm?.action === "post" ? "Post journal entry" : confirm?.action === "delete" ? "Delete draft" : "Reverse journal entry"}
+        confirmLabel={confirm?.action === "post" ? "Post" : confirm?.action === "delete" ? "Delete" : "Reverse"}
+        message={(() => {
+          const e = entries.find((x) => x.id === confirm?.id);
+          if (!e || !confirm) return null;
+          if (confirm.action === "post") return `Post ${e.id} (${formatCurrency(e.amount)}) to the ledger? Posted entries can only be undone by reversal.`;
+          if (confirm.action === "delete") return `Delete draft ${e.id}? This cannot be undone.`;
+          return `Create a reversing entry for ${e.id}: Dr ${accountLabel(e.credit)} / Cr ${accountLabel(e.debit)}, ${formatCurrency(e.amount)}, dated today.`;
+        })()}
+      />
     </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Presentational helpers (module level so they never remount inputs)
+// ------------------------------------------------------------------
+function Detail({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs dm-text-secondary">{label}</p>
+      <div className="dm-text font-medium mt-0.5">{value}</div>
+    </div>
+  );
+}
+
+function TrialBalanceTable({ tb, totals }: { tb: TbRow[]; totals: { debit: number; credit: number } }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
+            <th className={th}>Code</th>
+            <th className={th}>Account</th>
+            <th className={cn(th, "text-right")}>Debit</th>
+            <th className={cn(th, "text-right")}>Credit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tb.map((r) => (
+            <tr key={r.code} className="border-b border-[#e2e8f0]">
+              <td className={cn(td, "font-mono dm-text-secondary")}>{r.code}</td>
+              <td className={cn(td, "dm-text")}>{r.name}</td>
+              <td className={cn(td, "text-right dm-text")}>{r.debit ? formatCurrency(r.debit) : "—"}</td>
+              <td className={cn(td, "text-right dm-text")}>{r.credit ? formatCurrency(r.credit) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="font-bold bg-[#f8f9fa]">
+            <td className={td} />
+            <td className={cn(td, "dm-text")}>Totals</td>
+            <td className={cn(td, "text-right dm-text")}>{formatCurrency(totals.debit)}</td>
+            <td className={cn(td, "text-right dm-text")}>{formatCurrency(totals.credit)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+function StatementTable({ rows }: { rows: { label: string; amount?: number; bold?: boolean; heading?: boolean }[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border dm-border">
+      <table className="w-full">
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className={cn("border-b border-[#e2e8f0] last:border-0", r.heading && "bg-[#f8f9fa]")}>
+              <td className={cn(td, r.heading ? "font-semibold dm-text" : r.bold ? "font-bold dm-text" : "dm-text-secondary pl-8")}>{r.label}</td>
+              <td className={cn(td, "text-right", r.bold || r.heading ? "font-bold dm-text" : "dm-text")}>{r.amount === undefined ? "" : formatCurrency(r.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function StatementPreview({ kind, st, today }: { kind: Exclude<StatementKind, "trial">; st: Statements; today: string }) {
+  if (kind === "income") {
+    return (
+      <>
+        <p className="text-xs dm-text-secondary mb-3">FY 2026 · for the period ended {formatDate(today)}</p>
+        <StatementTable rows={[
+          { label: "Income", heading: true },
+          ...st.income.map((l) => ({ label: l.label, amount: l.amount })),
+          { label: "Total income", amount: st.totalIncome, bold: true },
+          { label: "Expenses", heading: true },
+          ...st.expenses.map((l) => ({ label: l.label, amount: l.amount })),
+          { label: "Total expenses", amount: st.totalExpenses, bold: true },
+          { label: "Net surplus", amount: st.surplus, heading: true },
+        ]} />
+      </>
+    );
+  }
+  if (kind === "balance") {
+    const totalEquity = st.equity.reduce((a, l) => a + l.amount, 0) + st.retained;
+    return (
+      <>
+        <p className="text-xs dm-text-secondary mb-3">Statement of financial position as at {formatDate(today)}</p>
+        <StatementTable rows={[
+          { label: "Assets", heading: true },
+          ...st.assets.map((l) => ({ label: l.label, amount: l.amount })),
+          { label: "Total assets", amount: st.totalAssets, bold: true },
+          { label: "Liabilities", heading: true },
+          ...st.liabilities.map((l) => ({ label: l.label, amount: l.amount })),
+          { label: "Total liabilities", amount: st.totalLiabilities, bold: true },
+          { label: "Equity", heading: true },
+          ...st.equity.map((l) => ({ label: l.label, amount: l.amount })),
+          { label: "Retained surplus & reserves", amount: st.retained },
+          { label: "Total equity", amount: totalEquity, bold: true },
+          { label: "Total liabilities & equity", amount: st.totalLiabilities + totalEquity, heading: true },
+        ]} />
+      </>
+    );
+  }
+  const sections = Array.from(new Set(st.cash.map((l) => l.section)));
+  return (
+    <>
+      <p className="text-xs dm-text-secondary mb-3">For the period {formatDate(PERIOD_START)} to {formatDate(today)}</p>
+      <StatementTable rows={[
+        ...sections.flatMap((s) => [{ label: s, heading: true }, ...st.cash.filter((l) => l.section === s).map((l) => ({ label: l.label, amount: l.amount }))]),
+        { label: "Net increase/(decrease) in cash", amount: st.netCash, bold: true },
+        { label: `Cash at ${formatDate(OPENING_DATE)}`, amount: st.openingCash },
+        { label: "Cash at end of period", amount: st.openingCash + st.netCash, heading: true },
+      ]} />
+    </>
   );
 }

@@ -1,195 +1,402 @@
 "use client";
-import { useState } from "react";
-import { formatCurrency } from "@/lib/utils";
-import { ADMIN_KPI, ADMIN_SAVINGS_GROWTH, ADMIN_PRODUCT_DISTRIBUTION } from "@/lib/mock-data";
-import { usePersistedState, showToast } from "@/lib/storage";
-import Modal from "@/components/Modal";
+import { Suspense, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  PiggyBank, TrendingUp, CreditCard, Settings2, Plus, Download,
-  ArrowUpRight, ArrowDownRight, RefreshCcw, Percent, Users, BarChart3,
-  Save, CheckCircle,
+  PiggyBank, CreditCard, Settings2, Plus, Download, ArrowUpRight, ArrowDownRight,
+  Percent, Users, CheckCircle, RotateCcw, XCircle, Search, Scale,
 } from "lucide-react";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid, PieChart, Pie, Cell, BarChart, Bar,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell,
 } from "recharts";
+import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, useHydrated, cn } from "@/lib/utils";
+import { ADMIN_SAVINGS_GROWTH, ADMIN_MEMBERS_LIST, DEMO_TODAY } from "@/lib/mock-data";
+import { usePersistedState, showToast } from "@/lib/storage";
+import { exportToCsv } from "@/lib/export";
+import Modal, { FormField, TextInput, SelectInput, TextAreaInput, Button, ConfirmDialog } from "@/components/Modal";
+import { EmptyState, Badge, PageHeader, StatCard, Tabs } from "@/components/ui";
 
+// ------------------------------------------------------------------
+// Types & seed data
+// ------------------------------------------------------------------
 interface SavingsProduct {
-  name: string; code: string; rate: string; min: number; members: number; balance: number; status: string; description: string;
+  code: string;
+  name: string;
+  rate: number; // % p.a.
+  min: number; // minimum balance (UGX)
+  members: number;
+  balance: number;
+  status: "active" | "draft" | "suspended";
+  description: string;
+  color: string;
 }
+
+type TxnType = "Deposit" | "Withdrawal" | "Transfer";
+type TxnStatus = "posted" | "pending" | "reversed" | "rejected";
 
 interface SavingsTxn {
-  id: string; member: string; type: string; product: string; amount: number; date: string; channel: string; status: string;
+  id: string;
+  sv: string;
+  member: string;
+  type: TxnType;
+  product: string; // product code
+  toProduct?: string; // transfers only
+  amount: number;
+  date: string;
+  channel: string;
+  reference: string;
+  status: TxnStatus;
 }
 
+/** Withdrawals above this amount need a second officer to post them. */
+const APPROVAL_THRESHOLD = 2_000_000;
+
+const PRODUCT_COLORS = ["#4A90D9", "#C0C0C0", "#22c55e", "#a855f7", "#f59e0b", "#ef4444", "#14b8a6"];
+
+// Names and balances match ADMIN_PRODUCT_DISTRIBUTION (total UGX 4.82B = dashboard KPI).
 const DEFAULT_PRODUCTS: SavingsProduct[] = [
-  { name: "Regular Savings", code: "SAV-REG", rate: "4.0%", min: 10000, members: 342, balance: 890000000, status: "active", description: "Standard mandatory savings account with monthly contributions" },
-  { name: "Flexi Save", code: "SAV-FLX", rate: "5.5%", min: 5000, members: 289, balance: 450000000, status: "active", description: "Voluntary savings with flexible deposit and withdrawal" },
-  { name: "Fixed Deposit", code: "SAV-FXD", rate: "10.0%", min: 500000, members: 87, balance: 320000000, status: "active", description: "Fixed-term savings with higher returns, min 3 months" },
-  { name: "Loan Guarantee", code: "SAV-LGR", rate: "3.0%", min: 0, members: 196, balance: 280000000, status: "active", description: "Savings used as collateral for loan applications" },
-  { name: "Junior Saver", code: "SAV-JNR", rate: "6.0%", min: 2000, members: 45, balance: 25000000, status: "draft", description: "Savings account for dependents under 18 years" },
+  { code: "SV-REG", name: "Regular Savings", rate: 5, min: 50_000, members: 789, balance: 2_100_000_000, status: "active", color: "#4A90D9", description: "Mandatory monthly savings that build members' borrowing power." },
+  { code: "SV-FLEX", name: "Flexi/Wallet", rate: 3, min: 0, members: 512, balance: 850_000_000, status: "active", color: "#C0C0C0", description: "Voluntary wallet with free deposits and withdrawals via mobile money." },
+  { code: "SV-FIX", name: "Fixed Savings", rate: 12, min: 1_000_000, members: 143, balance: 1_200_000_000, status: "active", color: "#22c55e", description: "Locked 6–24 month deposits earning a higher fixed rate." },
+  { code: "SV-YSV", name: "Young Savers", rate: 6, min: 10_000, members: 96, balance: 180_000_000, status: "active", color: "#a855f7", description: "Savings for members' children under 18, managed by a parent." },
+  { code: "SV-LGS", name: "Loan Guarantee", rate: 3, min: 0, members: 274, balance: 490_000_000, status: "active", color: "#f59e0b", description: "Savings held under lien as security for member loans." },
 ];
 
+// Names/SV numbers match ADMIN_MEMBERS_LIST; several mirror dashboard activity and approvals.
 const DEFAULT_TXN: SavingsTxn[] = [
-  { id: "TXN-4501", member: "James Mukasa (SV-0042)", type: "Deposit", product: "Regular Savings", amount: 150000, date: "2025-01-15", channel: "Mobile Money", status: "posted" },
-  { id: "TXN-4502", member: "Sarah Namuli (SV-0089)", type: "Withdrawal", product: "Flexi Save", amount: 500000, date: "2025-01-15", channel: "Bank Transfer", status: "pending" },
-  { id: "TXN-4503", member: "David Ssempijja (SV-0023)", type: "Deposit", product: "Fixed Deposit", amount: 2000000, date: "2025-01-14", channel: "Cash", status: "posted" },
-  { id: "TXN-4504", member: "Grace Atim (SV-0156)", type: "Deposit", product: "Regular Savings", amount: 100000, date: "2025-01-14", channel: "Mobile Money", status: "posted" },
-  { id: "TXN-4505", member: "Moses Kato (SV-0067)", type: "Withdrawal", product: "Loan Guarantee", amount: 350000, date: "2025-01-14", channel: "Cash", status: "rejected" },
-  { id: "TXN-4506", member: "Patricia Auma (SV-0134)", type: "Transfer", product: "Flexi Save", amount: 200000, date: "2025-01-13", channel: "Internal", status: "posted" },
+  { id: "TXN-4821", sv: "SV-0056", member: "Fatima Nankya", type: "Deposit", product: "SV-REG", amount: 500_000, date: "2026-11-04", channel: "Mobile Money", reference: "MM-882134", status: "posted" },
+  { id: "TXN-4820", sv: "SV-0012", member: "Robert Kizza", type: "Withdrawal", product: "SV-FLEX", amount: 2_000_000, date: "2026-11-04", channel: "Bank", reference: "BNK-55102", status: "posted" },
+  { id: "TXN-4819", sv: "SV-0034", member: "David Ssempala", type: "Withdrawal", product: "SV-REG", amount: 3_000_000, date: "2026-11-03", channel: "Cash", reference: "CSH-20931", status: "pending" },
+  { id: "TXN-4818", sv: "SV-0042", member: "James Mukasa", type: "Deposit", product: "SV-REG", amount: 200_000, date: "2026-11-02", channel: "Mobile Money", reference: "MM-880017", status: "posted" },
+  { id: "TXN-4817", sv: "SV-0089", member: "Samuel Byaruhanga", type: "Deposit", product: "SV-FIX", amount: 5_000_000, date: "2026-11-01", channel: "Bank", reference: "BNK-55087", status: "posted" },
+  { id: "TXN-4816", sv: "SV-0001", member: "Alice Namugga", type: "Deposit", product: "SV-YSV", amount: 150_000, date: "2026-10-28", channel: "Cash", reference: "CSH-20877", status: "posted" },
+  { id: "TXN-4815", sv: "SV-0023", member: "Grace Nabirye", type: "Transfer", product: "SV-FLEX", toProduct: "SV-LGS", amount: 1_000_000, date: "2026-10-22", channel: "Internal", reference: "TRF-1093", status: "posted" },
+  { id: "TXN-4814", sv: "SV-0042", member: "James Mukasa", type: "Deposit", product: "SV-FLEX", amount: 500_000, date: "2026-10-18", channel: "Mobile Money", reference: "MM-861120", status: "posted" },
+  { id: "TXN-4813", sv: "SV-0078", member: "Martha Apio", type: "Deposit", product: "SV-REG", amount: 300_000, date: "2026-10-15", channel: "Cash", reference: "CSH-20790", status: "posted" },
+  { id: "TXN-4812", sv: "SV-0042", member: "James Mukasa", type: "Withdrawal", product: "SV-FLEX", amount: 1_000_000, date: "2026-10-09", channel: "Bank", reference: "BNK-54920", status: "posted" },
+  { id: "TXN-4811", sv: "SV-0067", member: "Peter Okello", type: "Withdrawal", product: "SV-REG", amount: 400_000, date: "2026-10-05", channel: "Cash", reference: "CSH-20702", status: "rejected" },
 ];
+
+type TabId = "overview" | "products" | "transactions";
+const TAB_IDS: TabId[] = ["overview", "products", "transactions"];
+
+const MEMBER_OPTIONS = [
+  { value: "", label: "Select a member…" },
+  ...ADMIN_MEMBERS_LIST.map((m) => ({ value: m.sv_number, label: `${m.name} (${m.sv_number})${m.status !== "active" ? ` — ${m.status}` : ""}` })),
+];
+
+const EMPTY_TXN_FORM = { sv: "", type: "Deposit" as TxnType, product: "SV-REG", toProduct: "SV-FLEX", amount: "", channel: "Mobile Money", reference: "" };
+const EMPTY_PRODUCT_FORM = { code: "", name: "", rate: "", min: "", status: "active" as SavingsProduct["status"], description: "" };
+
+const th = "text-left px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap";
+const td = "px-4 py-3 text-xs whitespace-nowrap";
+
+/** Apply (sign = 1) or undo (sign = -1) a posted transaction on product balances. */
+function applyToProducts(products: SavingsProduct[], t: SavingsTxn, sign: 1 | -1): SavingsProduct[] {
+  return products.map((p) => {
+    let delta = 0;
+    if (t.type === "Deposit" && p.code === t.product) delta = t.amount;
+    if (t.type === "Withdrawal" && p.code === t.product) delta = -t.amount;
+    if (t.type === "Transfer") {
+      if (p.code === t.product) delta = -t.amount;
+      if (p.code === t.toProduct) delta = t.amount;
+    }
+    return delta ? { ...p, balance: p.balance + sign * delta } : p;
+  });
+}
+
+function nextTxnId(txns: SavingsTxn[]): string {
+  const max = txns.reduce((m, t) => Math.max(m, Number(t.id.replace(/\D/g, "")) || 0), 4800);
+  return `TXN-${max + 1}`;
+}
 
 export default function AdminSavingsPage() {
-  const [activeTab, setActiveTab] = useState<"overview" | "products" | "transactions">("overview");
+  return (
+    <Suspense>
+      <SavingsInner />
+    </Suspense>
+  );
+}
+
+function SavingsInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const hydrated = useHydrated();
+  const tabParam = params.get("tab") as TabId | null;
+  const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "overview";
+  const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
+
   const [products, setProducts] = usePersistedState<SavingsProduct[]>("admin_savings_products", DEFAULT_PRODUCTS);
   const [transactions, setTransactions] = usePersistedState<SavingsTxn[]>("admin_savings_txn", DEFAULT_TXN);
 
-  // Modal states
-  const [newTxnOpen, setNewTxnOpen] = useState(false);
-  const [configureOpen, setConfigureOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<SavingsProduct | null>(null);
+  // Filters
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
-  // New transaction form
-  const [txnForm, setTxnForm] = useState({ member: "", type: "Deposit", product: "Regular Savings", amount: 0, channel: "Mobile Money" });
+  // Modals
+  const [txnOpen, setTxnOpen] = useState(false);
+  const [txnForm, setTxnForm] = useState(EMPTY_TXN_FORM);
+  const [txnErrors, setTxnErrors] = useState<Record<string, string>>({});
+  const [productModal, setProductModal] = useState<null | { mode: "add" | "edit" }>(null);
+  const [productForm, setProductForm] = useState(EMPTY_PRODUCT_FORM);
+  const [productErrors, setProductErrors] = useState<Record<string, string>>({});
+  const [confirm, setConfirm] = useState<null | { action: "post" | "reverse" | "reject"; txn: SavingsTxn }>(null);
 
-  // Product config form
-  const [productForm, setProductForm] = useState<SavingsProduct>(DEFAULT_PRODUCTS[0]);
+  const productName = (code?: string) => products.find((p) => p.code === code)?.name ?? code ?? "—";
+  const activeProducts = products.filter((p) => p.status === "active");
 
-  const handleNewTxn = () => {
-    const newTxn: SavingsTxn = {
-      id: `TXN-${4500 + transactions.length + 1}`,
-      member: txnForm.member,
+  // ---------------- Overview metrics (computed from state) ----------------
+  // Before hydration use the fixed demo date so server and client markup match.
+  const month = (hydrated ? todayISO() : DEMO_TODAY).slice(0, 7);
+  const metrics = useMemo(() => {
+    const monthPosted = transactions.filter((t) => t.status === "posted" && t.date.startsWith(month));
+    const dep = monthPosted.filter((t) => t.type === "Deposit");
+    const wd = monthPosted.filter((t) => t.type === "Withdrawal");
+    const deposits = dep.reduce((a, t) => a + t.amount, 0);
+    const withdrawals = wd.reduce((a, t) => a + t.amount, 0);
+    const total = products.reduce((a, p) => a + p.balance, 0);
+    const weightedRate = total ? products.reduce((a, p) => a + p.rate * p.balance, 0) / total : 0;
+    return {
+      deposits, withdrawals, depCount: dep.length, wdCount: wd.length, net: deposits - withdrawals, total, weightedRate,
+      pending: transactions.filter((t) => t.status === "pending").length,
+    };
+  }, [transactions, products, month]);
+
+  // Growth chart: history from mock data, latest month replaced by the live total.
+  const growth = useMemo(
+    () => ADMIN_SAVINGS_GROWTH.map((g, i, arr) => (i === arr.length - 1 ? { ...g, amount: metrics.total } : g)),
+    [metrics.total]
+  );
+  const pieData = products.filter((p) => p.balance > 0);
+
+  // ---------------- Transactions filtering ----------------
+  const filteredTxns = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return transactions.filter((t) => {
+      if (typeFilter !== "all" && t.type !== typeFilter) return false;
+      if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (!q) return true;
+      return [t.id, t.member, t.sv, t.reference].some((s) => s.toLowerCase().includes(q));
+    });
+  }, [transactions, typeFilter, statusFilter, search]);
+
+  // ---------------- Handlers ----------------
+  const openNewTxn = () => {
+    setTxnForm({ ...EMPTY_TXN_FORM, product: activeProducts[0]?.code ?? "", toProduct: activeProducts[1]?.code ?? "" });
+    setTxnErrors({});
+    setTxnOpen(true);
+  };
+
+  const submitTxn = () => {
+    const errors: Record<string, string> = {};
+    const member = ADMIN_MEMBERS_LIST.find((m) => m.sv_number === txnForm.sv);
+    const amount = Number(txnForm.amount);
+    if (!member) errors.sv = "Choose a member";
+    else if (member.status === "suspended") errors.sv = `${member.name} is suspended — transactions are blocked`;
+    if (!txnForm.product) errors.product = "Choose a product";
+    if (!amount || amount <= 0) errors.amount = "Enter an amount greater than zero";
+    else if (amount < 1_000) errors.amount = "Minimum transaction is UGX 1,000";
+    if (member && txnForm.type !== "Deposit" && amount > member.savings)
+      errors.amount = `Exceeds ${member.name}'s savings of ${formatCurrency(member.savings)}`;
+    if (txnForm.type === "Transfer" && txnForm.toProduct === txnForm.product) errors.toProduct = "Pick a different destination product";
+    setTxnErrors(errors);
+    if (Object.keys(errors).length || !member) return;
+
+    const needsApproval = txnForm.type === "Withdrawal" && amount > APPROVAL_THRESHOLD;
+    const id = nextTxnId(transactions);
+    const channel = txnForm.type === "Transfer" ? "Internal" : txnForm.channel;
+    const txn: SavingsTxn = {
+      id,
+      sv: member.sv_number,
+      member: member.name,
       type: txnForm.type,
       product: txnForm.product,
-      amount: txnForm.amount,
-      date: new Date().toISOString().slice(0, 10),
-      channel: txnForm.channel,
-      status: "pending",
+      toProduct: txnForm.type === "Transfer" ? txnForm.toProduct : undefined,
+      amount,
+      date: todayISO(),
+      channel,
+      reference: txnForm.reference.trim() || `${channel === "Mobile Money" ? "MM" : channel === "Bank" ? "BNK" : channel === "Cash" ? "CSH" : "TRF"}-${id.slice(4)}`,
+      status: needsApproval ? "pending" : "posted",
     };
-    setTransactions((prev) => [newTxn, ...prev]);
-    setNewTxnOpen(false);
-    setTxnForm({ member: "", type: "Deposit", product: "Regular Savings", amount: 0, channel: "Mobile Money" });
-    showToast(`${txnForm.type} of ${formatCurrency(txnForm.amount)} recorded`);
+    setTransactions((prev) => [txn, ...prev]);
+    if (!needsApproval) setProducts((prev) => applyToProducts(prev, txn, 1));
+    setTxnOpen(false);
+    showToast(
+      needsApproval
+        ? `${id}: withdrawal above ${formatCompact(APPROVAL_THRESHOLD)} sent for approval`
+        : `${txn.type} of ${formatCurrency(amount)} posted for ${member.name}`,
+      needsApproval ? "info" : "success"
+    );
   };
 
-  const handleSaveProduct = () => {
-    setProducts((prev) => prev.map((p) => (p.code === productForm.code ? { ...productForm } : p)));
-    setConfigureOpen(false);
-    showToast(`${productForm.name} settings updated`);
+  const runConfirm = () => {
+    if (!confirm) return;
+    const { action, txn } = confirm;
+    if (action === "post") {
+      setTransactions((prev) => prev.map((x) => (x.id === txn.id ? { ...x, status: "posted" } : x)));
+      setProducts((prev) => applyToProducts(prev, txn, 1));
+      showToast(`${txn.id} approved and posted`);
+    } else if (action === "reverse") {
+      setTransactions((prev) => prev.map((x) => (x.id === txn.id ? { ...x, status: "reversed" } : x)));
+      setProducts((prev) => applyToProducts(prev, txn, -1));
+      showToast(`${txn.id} reversed — balances restored`, "info");
+    } else {
+      setTransactions((prev) => prev.map((x) => (x.id === txn.id ? { ...x, status: "rejected" } : x)));
+      showToast(`${txn.id} rejected`, "info");
+    }
   };
 
-  const inputClass =
-    "w-full px-3 py-2.5 border border-[#e2e8f0] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#4A90D9]/20 focus:border-[#4A90D9] transition-colors";
+  const openProduct = (mode: "add" | "edit", p?: SavingsProduct) => {
+    setProductForm(
+      p
+        ? { code: p.code, name: p.name, rate: String(p.rate), min: String(p.min), status: p.status, description: p.description }
+        : EMPTY_PRODUCT_FORM
+    );
+    setProductErrors({});
+    setProductModal({ mode });
+  };
+
+  const saveProduct = () => {
+    if (!productModal) return;
+    const errors: Record<string, string> = {};
+    const code = productForm.code.trim().toUpperCase();
+    const name = productForm.name.trim();
+    const rate = Number(productForm.rate);
+    const min = Number(productForm.min || 0);
+    if (!name) errors.name = "Name is required";
+    else if (products.some((p) => p.name.toLowerCase() === name.toLowerCase() && p.code !== code)) errors.name = "Another product already uses this name";
+    if (productModal.mode === "add") {
+      if (!/^[A-Z0-9-]{3,12}$/.test(code)) errors.code = "3–12 letters, digits or dashes (e.g. SV-HOL)";
+      else if (products.some((p) => p.code === code)) errors.code = "Code already exists";
+    }
+    if (productForm.rate === "" || Number.isNaN(rate) || rate < 0 || rate > 30) errors.rate = "Enter a rate between 0 and 30%";
+    if (Number.isNaN(min) || min < 0) errors.min = "Minimum balance cannot be negative";
+    setProductErrors(errors);
+    if (Object.keys(errors).length) return;
+
+    const fields = { name, rate, min, status: productForm.status, description: productForm.description.trim() };
+    if (productModal.mode === "edit") {
+      setProducts((prev) => prev.map((p) => (p.code === code ? { ...p, ...fields } : p)));
+      showToast(`${name} configuration saved`);
+    } else {
+      setProducts((prev) => [...prev, { code, members: 0, balance: 0, color: PRODUCT_COLORS[prev.length % PRODUCT_COLORS.length], ...fields }]);
+      showToast(`${name} product added`);
+    }
+    setProductModal(null);
+  };
+
+  const exportTxns = () => {
+    if (!filteredTxns.length) return showToast("No transactions to export", "info");
+    exportToCsv(
+      `savings-transactions-${todayISO()}`,
+      filteredTxns.map((t) => ({ ...t, product: productName(t.product), toProduct: t.toProduct ? productName(t.toProduct) : "" })),
+      [
+        { key: "id", label: "Ref" }, { key: "date", label: "Date" }, { key: "sv", label: "SV No." }, { key: "member", label: "Member" },
+        { key: "type", label: "Type" }, { key: "product", label: "Product" }, { key: "toProduct", label: "To product" },
+        { key: "amount", label: "Amount (UGX)" }, { key: "channel", label: "Channel" }, { key: "reference", label: "Reference" }, { key: "status", label: "Status" },
+      ]
+    );
+    showToast(`${filteredTxns.length} transactions exported`);
+  };
+
+  const exportProducts = () => {
+    exportToCsv(`savings-products-${todayISO()}`, products.map((p) => ({ ...p })), [
+      { key: "code", label: "Code" }, { key: "name", label: "Product" }, { key: "rate", label: "Rate (% p.a.)" },
+      { key: "min", label: "Minimum balance (UGX)" }, { key: "members", label: "Members" }, { key: "balance", label: "Balance (UGX)" },
+      { key: "status", label: "Status" }, { key: "description", label: "Description" },
+    ]);
+    showToast(`${products.length} products exported`);
+  };
+
+  const pendingAmount = Number(txnForm.amount);
+  const willNeedApproval = txnForm.type === "Withdrawal" && pendingAmount > APPROVAL_THRESHOLD;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Savings Management</h1>
-          <p className="text-[#64748b] text-sm">Manage savings products, process transactions, and monitor growth</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2.5 border border-[#e2e8f0] text-[#1A1A1A] rounded-xl text-sm font-medium hover:bg-[#f1f5f9] transition-colors">
-            <Download className="w-4 h-4" /> Export
-          </button>
-          <button onClick={() => setNewTxnOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors">
-            <Plus className="w-4 h-4" /> New Transaction
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Savings Management"
+        subtitle="Manage savings products, process transactions, and monitor growth"
+        actions={
+          <>
+            <Button variant="secondary" onClick={activeTab === "transactions" ? exportTxns : exportProducts}>
+              <Download className="w-4 h-4" /> {activeTab === "transactions" ? "Export transactions" : "Export products"}
+            </Button>
+            <Button onClick={openNewTxn}>
+              <Plus className="w-4 h-4" /> New Transaction
+            </Button>
+          </>
+        }
+      />
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1">
-        {(["overview", "products", "transactions"] as const).map((t) => (
-          <button key={t} onClick={() => setActiveTab(t)}
-            className={`px-5 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-              activeTab === t ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
-            }`}>{t}</button>
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { id: "overview" as TabId, label: "Overview" },
+          { id: "products" as TabId, label: "Products", count: products.length },
+          { id: "transactions" as TabId, label: "Transactions", count: transactions.length },
+        ]}
+        active={activeTab}
+        onChange={setTab}
+      />
 
       {activeTab === "overview" && (
         <>
-          {/* KPI Row */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center mb-3">
-                <PiggyBank className="w-5 h-5 text-[#22c55e]" />
-              </div>
-              <p className="text-xs text-[#64748b] mb-1">Total Savings Balance</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(ADMIN_KPI.total_savings.value)}</p>
-              <span className="text-xs text-[#22c55e] flex items-center gap-0.5 mt-1">
-                <TrendingUp className="w-3 h-3" /> {ADMIN_KPI.total_savings.change}% growth
-              </span>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#4A90D9]/10 flex items-center justify-center mb-3">
-                <ArrowUpRight className="w-5 h-5 text-[#4A90D9]" />
-              </div>
-              <p className="text-xs text-[#64748b] mb-1">Deposits This Month</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(45000000)}</p>
-              <span className="text-xs text-[#64748b] mt-1">186 transactions</span>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/10 flex items-center justify-center mb-3">
-                <ArrowDownRight className="w-5 h-5 text-[#f59e0b]" />
-              </div>
-              <p className="text-xs text-[#64748b] mb-1">Withdrawals This Month</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">{formatCurrency(12000000)}</p>
-              <span className="text-xs text-[#64748b] mt-1">43 transactions</span>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-xl bg-[#a855f7]/10 flex items-center justify-center mb-3">
-                <Percent className="w-5 h-5 text-[#a855f7]" />
-              </div>
-              <p className="text-xs text-[#64748b] mb-1">Average Interest Rate</p>
-              <p className="text-xl font-bold text-[#1A1A1A]">5.6%</p>
-              <span className="text-xs text-[#64748b] mt-1">Across all products</span>
-            </div>
+            <StatCard label="Total Savings Balance" value={formatCompact(metrics.total)} icon={PiggyBank} color="#22c55e"
+              sub={`Weighted rate ${metrics.weightedRate.toFixed(1)}% p.a.`} />
+            <StatCard label="Deposits This Month" value={formatCompact(metrics.deposits)} icon={ArrowUpRight} color="#4A90D9"
+              sub={`${metrics.depCount} posted deposit${metrics.depCount === 1 ? "" : "s"}`} />
+            <StatCard label="Withdrawals This Month" value={formatCompact(metrics.withdrawals)} icon={ArrowDownRight} color="#f59e0b"
+              sub={`${metrics.wdCount} posted · ${metrics.pending} pending approval`} />
+            <StatCard label="Net Flow This Month" value={formatCompact(metrics.net)} icon={Scale} color={metrics.net >= 0 ? "#22c55e" : "#ef4444"}
+              sub="Deposits minus withdrawals" />
           </div>
 
-          {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Savings Growth Trend</h3>
+            <div className="lg:col-span-2 glass-card rounded-xl p-6">
+              <h3 className="font-semibold dm-text mb-1 text-sm">Savings Growth Trend</h3>
+              <p className="text-xs dm-text-secondary mb-4">Dec 2025 – Nov 2026 · latest month reflects live product balances</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={ADMIN_SAVINGS_GROWTH}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <AreaChart data={growth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.25} />
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${(v / 1e9).toFixed(1)}B`} />
-                    <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))}
-                      contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", fontSize: "12px" }} />
-                    <Area type="monotone" dataKey="amount" stroke="#22c55e" fill="#22c55e" fillOpacity={0.08} strokeWidth={2} />
+                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${(Number(v) / 1e9).toFixed(1)}B`} />
+                    <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
+                    <Area type="monotone" dataKey="amount" name="Savings" stroke="#22c55e" fill="#22c55e" fillOpacity={0.12} strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-              <h3 className="font-semibold text-[#1A1A1A] mb-4 text-sm">Product Distribution</h3>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={ADMIN_PRODUCT_DISTRIBUTION} dataKey="value" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2}>
-                      {ADMIN_PRODUCT_DISTRIBUTION.map((e, i) => <Cell key={i} fill={e.color} />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))}
-                      contentStyle={{ backgroundColor: "#fff", border: "1px solid #e2e8f0", borderRadius: "12px", fontSize: "12px" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-1.5">
-                {ADMIN_PRODUCT_DISTRIBUTION.map((d) => (
-                  <div key={d.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                      <span className="text-[#64748b]">{d.name}</span>
-                    </div>
-                    <span className="font-medium text-[#1A1A1A]">{formatCurrency(d.value)}</span>
+            <div className="glass-card rounded-xl p-6">
+              <h3 className="font-semibold dm-text mb-4 text-sm">Product Distribution</h3>
+              {pieData.length === 0 ? (
+                <EmptyState icon={PiggyBank} title="No balances yet" hint="Post a deposit to see the distribution." />
+              ) : (
+                <>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={pieData} dataKey="balance" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2}>
+                          {pieData.map((p) => <Cell key={p.code} fill={p.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-1.5">
+                    {pieData.map((p) => (
+                      <div key={p.code} className="flex items-center justify-between text-xs gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                          <span className="dm-text-secondary truncate">{p.name}</span>
+                        </div>
+                        <span className="font-medium dm-text">{formatCompact(p.balance)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </>
@@ -197,37 +404,39 @@ export default function AdminSavingsPage() {
 
       {activeTab === "products" && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button variant="accent" onClick={() => openProduct("add")}>
+              <Plus className="w-4 h-4" /> Add product
+            </Button>
+          </div>
+          {products.length === 0 && (
+            <div className="glass-card rounded-xl">
+              <EmptyState icon={PiggyBank} title="No savings products" hint="Add your first product to start accepting deposits." />
+            </div>
+          )}
           {products.map((p) => (
-            <div key={p.code} className="bg-white rounded-xl p-5 border border-[#e2e8f0] hover:shadow-sm transition-all">
+            <div key={p.code} className="glass-card rounded-xl p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-[#1A1A1A]">{p.name}</h3>
-                    <span className="text-[10px] font-mono text-[#C0C0C0]">{p.code}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize ${
-                      p.status === "active" ? "bg-[#22c55e]/10 text-[#22c55e]" : "bg-[#64748b]/10 text-[#64748b]"
-                    }`}>{p.status}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                    <h3 className="font-semibold dm-text">{p.name}</h3>
+                    <span className="text-[10px] font-mono dm-text-secondary">{p.code}</span>
+                    <Badge status={p.status} />
                   </div>
-                  <p className="text-xs text-[#64748b] mb-3">{p.description}</p>
-                  <div className="flex flex-wrap gap-4">
-                    <div className="flex items-center gap-1.5 text-xs text-[#64748b]">
-                      <Percent className="w-3.5 h-3.5" /> Interest: <span className="font-semibold text-[#1A1A1A]">{p.rate}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#64748b]">
-                      <CreditCard className="w-3.5 h-3.5" /> Min: <span className="font-semibold text-[#1A1A1A]">{formatCurrency(p.min)}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[#64748b]">
-                      <Users className="w-3.5 h-3.5" /> Members: <span className="font-semibold text-[#1A1A1A]">{p.members}</span>
-                    </div>
+                  <p className="text-xs dm-text-secondary mb-3">{p.description || "No description"}</p>
+                  <div className="flex flex-wrap gap-4 text-xs dm-text-secondary">
+                    <span className="flex items-center gap-1.5"><Percent className="w-3.5 h-3.5" /> Interest: <b className="dm-text">{p.rate}% p.a.</b></span>
+                    <span className="flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5" /> Min balance: <b className="dm-text">{formatCurrency(p.min)}</b></span>
+                    <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Accounts: <b className="dm-text">{formatNumber(p.members)}</b></span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-[#64748b]">Total Balance</p>
-                  <p className="text-lg font-bold text-[#1A1A1A]">{formatCurrency(p.balance)}</p>
-                  <button onClick={() => { setProductForm({ ...p }); setConfigureOpen(true); }}
-                    className="mt-2 px-3 py-1.5 border border-[#e2e8f0] rounded-lg text-xs font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-                    <Settings2 className="w-3 h-3 inline mr-1" /> Configure
-                  </button>
+                <div className="sm:text-right">
+                  <p className="text-xs dm-text-secondary">Total Balance</p>
+                  <p className="text-lg font-bold dm-text">{formatCurrency(p.balance)}</p>
+                  <Button variant="secondary" className="mt-2 px-3 py-1.5 text-xs" onClick={() => openProduct("edit", p)}>
+                    <Settings2 className="w-3.5 h-3.5" /> Configure
+                  </Button>
                 </div>
               </div>
             </div>
@@ -236,167 +445,207 @@ export default function AdminSavingsPage() {
       )}
 
       {activeTab === "transactions" && (
-        <div className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Ref</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Type</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Product</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Amount</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Channel</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Date</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((t) => {
-                  const typeColors: Record<string, string> = { Deposit: "text-[#22c55e]", Withdrawal: "text-[#ef4444]", Transfer: "text-[#4A90D9]" };
-                  const statusColors: Record<string, { bg: string; text: string }> = {
-                    posted: { bg: "bg-[#22c55e]/10", text: "text-[#22c55e]" },
-                    pending: { bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]" },
-                    rejected: { bg: "bg-[#ef4444]/10", text: "text-[#ef4444]" },
-                  };
-                  const sc = statusColors[t.status] || statusColors.posted;
-                  return (
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="p-4 flex flex-col md:flex-row gap-3 md:items-center border-b dm-border">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 dm-text-secondary" />
+              <TextInput value={search} onChange={setSearch} placeholder="Search member, SV number, ref or reference…" className="pl-9" aria-label="Search transactions" />
+            </div>
+            <SelectInput className="md:w-40" value={typeFilter} onChange={setTypeFilter}
+              options={[{ value: "all", label: "All types" }, { value: "Deposit", label: "Deposits" }, { value: "Withdrawal", label: "Withdrawals" }, { value: "Transfer", label: "Transfers" }]} />
+            <SelectInput className="md:w-40" value={statusFilter} onChange={setStatusFilter}
+              options={[{ value: "all", label: "All statuses" }, { value: "posted", label: "Posted" }, { value: "pending", label: "Pending" }, { value: "reversed", label: "Reversed" }, { value: "rejected", label: "Rejected" }]} />
+          </div>
+          {filteredTxns.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No transactions match"
+              hint="Try a different search or clear the filters."
+              action={<Button variant="secondary" onClick={() => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); }}>Clear filters</Button>}
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
+                    <th className={th}>Ref</th>
+                    <th className={th}>Member</th>
+                    <th className={th}>Type</th>
+                    <th className={th}>Product</th>
+                    <th className={cn(th, "text-right")}>Amount</th>
+                    <th className={th}>Channel / Reference</th>
+                    <th className={th}>Status</th>
+                    <th className={th}>Date</th>
+                    <th className={cn(th, "text-right")}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTxns.map((t) => (
                     <tr key={t.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors">
-                      <td className="px-4 py-3 text-xs font-mono text-[#C0C0C0]">{t.id}</td>
-                      <td className="px-4 py-3 text-xs text-[#1A1A1A]">{t.member}</td>
-                      <td className={`px-4 py-3 text-xs font-semibold ${typeColors[t.type]}`}>{t.type}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{t.product}</td>
-                      <td className="px-4 py-3 text-xs text-right font-medium text-[#1A1A1A]">{formatCurrency(t.amount)}</td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{t.channel}</td>
-                      <td className="px-4 py-3">
-                        <span className={`${sc.bg} ${sc.text} px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize`}>{t.status}</span>
+                      <td className={cn(td, "font-mono dm-text-secondary")}>{t.id}</td>
+                      <td className={td}>
+                        <p className="dm-text font-medium">{t.member}</p>
+                        <p className="dm-text-secondary text-[11px]">{t.sv}</p>
                       </td>
-                      <td className="px-4 py-3 text-xs text-[#64748b]">{t.date}</td>
-                      <td className="px-4 py-3 text-center">
-                        {t.status === "pending" && (
-                          <button onClick={() => {
-                            setTransactions((prev) => prev.map((x) => x.id === t.id ? { ...x, status: "posted" } : x));
-                            showToast(`Transaction ${t.id} approved`);
-                          }} className="px-2 py-1 bg-[#22c55e] text-white rounded-lg text-[10px] font-medium hover:bg-[#16a34a] transition-colors">
-                            <CheckCircle className="w-3 h-3 inline mr-0.5" /> Post
-                          </button>
-                        )}
+                      <td className={cn(td, "font-semibold", t.type === "Deposit" ? "text-[#22c55e]" : t.type === "Withdrawal" ? "text-[#ef4444]" : "text-[#4A90D9]")}>{t.type}</td>
+                      <td className={cn(td, "dm-text-secondary")}>
+                        {productName(t.product)}
+                        {t.toProduct && <> → {productName(t.toProduct)}</>}
+                      </td>
+                      <td className={cn(td, "text-right font-medium dm-text")}>{formatCurrency(t.amount)}</td>
+                      <td className={cn(td, "dm-text-secondary")}>
+                        {t.channel}
+                        <span className="block font-mono text-[10px]">{t.reference}</span>
+                      </td>
+                      <td className={td}><Badge status={t.status} /></td>
+                      <td className={cn(td, "dm-text-secondary")}>{formatDate(t.date)}</td>
+                      <td className={cn(td, "text-right")}>
+                        <div className="flex justify-end gap-1.5">
+                          {t.status === "pending" && (
+                            <>
+                              <button onClick={() => setConfirm({ action: "post", txn: t })}
+                                className="px-2 py-1 bg-[#22c55e] text-white rounded-lg text-[10px] font-medium hover:bg-[#16a34a] transition-colors inline-flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" /> Post
+                              </button>
+                              <button onClick={() => setConfirm({ action: "reject", txn: t })}
+                                className="px-2 py-1 border dm-border dm-text-secondary rounded-lg text-[10px] font-medium hover:dm-surface-hover transition-colors inline-flex items-center gap-1">
+                                <XCircle className="w-3 h-3" /> Reject
+                              </button>
+                            </>
+                          )}
+                          {t.status === "posted" && (
+                            <button onClick={() => setConfirm({ action: "reverse", txn: t })}
+                              className="px-2 py-1 border border-[#ef4444]/40 text-[#ef4444] rounded-lg text-[10px] font-medium hover:bg-[#ef4444]/10 transition-colors inline-flex items-center gap-1">
+                              <RotateCcw className="w-3 h-3" /> Reverse
+                            </button>
+                          )}
+                          {(t.status === "reversed" || t.status === "rejected") && <span className="text-[10px] dm-text-secondary">—</span>}
+                        </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="px-4 py-3 text-xs dm-text-secondary border-t dm-border">
+            Showing {filteredTxns.length} of {transactions.length} · withdrawals above {formatCurrency(APPROVAL_THRESHOLD)} require approval
           </div>
         </div>
       )}
 
-      {/* ======== NEW TRANSACTION MODAL ======== */}
-      <Modal open={newTxnOpen} onClose={() => setNewTxnOpen(false)} title="Record New Transaction" size="lg"
+      {/* ======== NEW TRANSACTION ======== */}
+      <Modal
+        open={txnOpen}
+        onClose={() => setTxnOpen(false)}
+        title="Record New Transaction"
+        size="lg"
         footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setNewTxnOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleNewTxn} disabled={!txnForm.member || !txnForm.amount}
-              className="px-5 py-2.5 bg-[#1A1A1A] text-white rounded-xl text-sm font-medium hover:bg-[#333] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Record Transaction
-            </button>
-          </div>
-        }>
+          <>
+            <Button variant="secondary" onClick={() => setTxnOpen(false)}>Cancel</Button>
+            <Button onClick={submitTxn}>
+              <Plus className="w-4 h-4" /> {willNeedApproval ? "Submit for approval" : "Post transaction"}
+            </Button>
+          </>
+        }
+      >
         <div className="space-y-4">
+          <FormField label="Member" required error={txnErrors.sv}>
+            <SelectInput value={txnForm.sv} onChange={(v) => setTxnForm({ ...txnForm, sv: v })} options={MEMBER_OPTIONS} />
+          </FormField>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Member (SV Number) *</label>
-              <input className={inputClass} value={txnForm.member} onChange={(e) => setTxnForm({ ...txnForm, member: e.target.value })} placeholder="e.g. James Mukasa (SV-0042)" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Transaction Type</label>
-              <select className={inputClass} value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value })}>
-                <option value="Deposit">Deposit</option>
-                <option value="Withdrawal">Withdrawal</option>
-                <option value="Transfer">Transfer</option>
-              </select>
-            </div>
+            <FormField label="Transaction type" required>
+              <SelectInput value={txnForm.type} onChange={(v) => setTxnForm({ ...txnForm, type: v as TxnType })}
+                options={[{ value: "Deposit", label: "Deposit" }, { value: "Withdrawal", label: "Withdrawal" }, { value: "Transfer", label: "Transfer between products" }]} />
+            </FormField>
+            <FormField label={txnForm.type === "Transfer" ? "From product" : "Product"} required error={txnErrors.product}>
+              <SelectInput value={txnForm.product} onChange={(v) => setTxnForm({ ...txnForm, product: v })}
+                options={activeProducts.map((p) => ({ value: p.code, label: p.name }))} />
+            </FormField>
           </div>
+          {txnForm.type === "Transfer" && (
+            <FormField label="To product" required error={txnErrors.toProduct}>
+              <SelectInput value={txnForm.toProduct} onChange={(v) => setTxnForm({ ...txnForm, toProduct: v })}
+                options={activeProducts.map((p) => ({ value: p.code, label: p.name }))} />
+            </FormField>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Product</label>
-              <select className={inputClass} value={txnForm.product} onChange={(e) => setTxnForm({ ...txnForm, product: e.target.value })}>
-                {products.filter((p) => p.status === "active").map((p) => (
-                  <option key={p.code} value={p.name}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Amount (UGX) *</label>
-              <input className={inputClass} type="number" value={txnForm.amount || ""} onChange={(e) => setTxnForm({ ...txnForm, amount: Number(e.target.value) })} placeholder="0" />
-            </div>
+            <FormField label="Amount (UGX)" required error={txnErrors.amount}
+              hint={willNeedApproval ? "Above the approval threshold — will be held as pending" : undefined}>
+              <TextInput type="number" min={0} value={txnForm.amount} onChange={(v) => setTxnForm({ ...txnForm, amount: v })} placeholder="0" />
+            </FormField>
+            {txnForm.type !== "Transfer" && (
+              <FormField label="Channel" required>
+                <SelectInput value={txnForm.channel} onChange={(v) => setTxnForm({ ...txnForm, channel: v })}
+                  options={[{ value: "Cash", label: "Cash" }, { value: "Mobile Money", label: "Mobile Money" }, { value: "Bank", label: "Bank" }]} />
+              </FormField>
+            )}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Channel</label>
-            <select className={inputClass} value={txnForm.channel} onChange={(e) => setTxnForm({ ...txnForm, channel: e.target.value })}>
-              <option value="Mobile Money">Mobile Money</option>
-              <option value="Bank Transfer">Bank Transfer</option>
-              <option value="Cash">Cash</option>
-              <option value="Internal">Internal Transfer</option>
-            </select>
-          </div>
+          <FormField label="Reference" hint="Receipt, mobile-money or bank reference. Leave blank to auto-generate.">
+            <TextInput value={txnForm.reference} onChange={(v) => setTxnForm({ ...txnForm, reference: v })} placeholder="e.g. MM-883210" maxLength={30} />
+          </FormField>
         </div>
       </Modal>
 
-      {/* ======== CONFIGURE PRODUCT MODAL ======== */}
-      <Modal open={configureOpen} onClose={() => setConfigureOpen(false)} title={`Configure — ${productForm.name}`} size="lg"
+      {/* ======== ADD / CONFIGURE PRODUCT ======== */}
+      <Modal
+        open={productModal !== null}
+        onClose={() => setProductModal(null)}
+        title={productModal?.mode === "add" ? "Add Savings Product" : `Configure — ${productForm.name || productForm.code}`}
+        size="lg"
         footer={
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setConfigureOpen(false)}
-              className="px-4 py-2.5 border border-[#e2e8f0] rounded-xl text-sm font-medium text-[#64748b] hover:bg-[#f1f5f9] transition-colors">
-              Cancel
-            </button>
-            <button onClick={handleSaveProduct}
-              className="px-5 py-2.5 bg-[#4A90D9] text-white rounded-xl text-sm font-medium hover:bg-[#3a7bc8] transition-colors flex items-center gap-2">
-              <Save className="w-4 h-4" /> Save Configuration
-            </button>
-          </div>
-        }>
+          <>
+            <Button variant="secondary" onClick={() => setProductModal(null)}>Cancel</Button>
+            <Button variant="accent" onClick={saveProduct}>{productModal?.mode === "add" ? "Add product" : "Save configuration"}</Button>
+          </>
+        }
+      >
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Product Name</label>
-              <input className={inputClass} value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Product Code</label>
-              <input className={`${inputClass} bg-[#f8f9fa] cursor-not-allowed`} value={productForm.code} disabled />
-            </div>
+            <FormField label="Product name" required error={productErrors.name}>
+              <TextInput value={productForm.name} onChange={(v) => setProductForm({ ...productForm, name: v })} placeholder="e.g. Holiday Savings" />
+            </FormField>
+            <FormField label="Product code" required error={productErrors.code} hint={productModal?.mode === "edit" ? "Codes cannot be changed" : undefined}>
+              <TextInput value={productForm.code} disabled={productModal?.mode === "edit"} onChange={(v) => setProductForm({ ...productForm, code: v })} placeholder="SV-HOL" />
+            </FormField>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Interest Rate</label>
-              <input className={inputClass} value={productForm.rate} onChange={(e) => setProductForm({ ...productForm, rate: e.target.value })} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Minimum Balance (UGX)</label>
-              <input className={inputClass} type="number" value={productForm.min} onChange={(e) => setProductForm({ ...productForm, min: Number(e.target.value) })} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-[#64748b] mb-1.5">Status</label>
-              <select className={inputClass} value={productForm.status} onChange={(e) => setProductForm({ ...productForm, status: e.target.value })}>
-                <option value="active">Active</option>
-                <option value="draft">Draft</option>
-                <option value="suspended">Suspended</option>
-              </select>
-            </div>
+            <FormField label="Interest rate (% p.a.)" required error={productErrors.rate}>
+              <TextInput type="number" step="0.1" min={0} max={30} value={productForm.rate} onChange={(v) => setProductForm({ ...productForm, rate: v })} />
+            </FormField>
+            <FormField label="Minimum balance (UGX)" error={productErrors.min}>
+              <TextInput type="number" min={0} value={productForm.min} onChange={(v) => setProductForm({ ...productForm, min: v })} placeholder="0" />
+            </FormField>
+            <FormField label="Status">
+              <SelectInput value={productForm.status} onChange={(v) => setProductForm({ ...productForm, status: v as SavingsProduct["status"] })}
+                options={[{ value: "active", label: "Active" }, { value: "draft", label: "Draft" }, { value: "suspended", label: "Suspended" }]} />
+            </FormField>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-[#64748b] mb-1.5">Description</label>
-            <textarea className={`${inputClass} resize-none`} rows={3} value={productForm.description}
-              onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
-          </div>
+          <FormField label="Description">
+            <TextAreaInput value={productForm.description} onChange={(v) => setProductForm({ ...productForm, description: v })} maxLength={200} />
+          </FormField>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onClose={() => setConfirm(null)}
+        onConfirm={runConfirm}
+        danger={confirm?.action !== "post"}
+        title={confirm?.action === "post" ? "Approve & post transaction" : confirm?.action === "reverse" ? "Reverse transaction" : "Reject transaction"}
+        confirmLabel={confirm?.action === "post" ? "Post" : confirm?.action === "reverse" ? "Reverse" : "Reject"}
+        message={
+          confirm && (
+            <>
+              {confirm.action === "post" && "Post "}
+              {confirm.action === "reverse" && "Reverse "}
+              {confirm.action === "reject" && "Reject "}
+              <b className="dm-text">{confirm.txn.id}</b> — {confirm.txn.type.toLowerCase()} of <b className="dm-text">{formatCurrency(confirm.txn.amount)}</b> for {confirm.txn.member} ({confirm.txn.sv})?
+              {confirm.action === "reverse" && " Product balances will be restored."}
+            </>
+          )
+        }
+      />
     </div>
   );
 }

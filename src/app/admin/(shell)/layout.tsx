@@ -55,7 +55,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       notifications={notifs.map((n) => ({ id: n.id, title: n.title, body: n.desc, when: n.time, read: n.read, href: n.href }))}
       onMarkRead={(id) => setNotifs((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)))}
       onMarkAllRead={() => setNotifs((p) => p.map((n) => ({ ...n, read: true })))}
-      allNotificationsHref="/admin/communications"
+      allNotificationsHref="/admin/communications?tab=notifications"
       searchExtra={searchExtra}
       searchPlaceholder="Search pages or members (name / SV number)…"
       menuLinks={[

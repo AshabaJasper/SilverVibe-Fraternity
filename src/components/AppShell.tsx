@@ -182,7 +182,7 @@ export default function AppShell({
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
-            const badge = item.href === allNotificationsHref && unread > 0 ? unread : null;
+            const badge = item.href === allNotificationsHref.split("?")[0] && unread > 0 ? unread : null;
             return (
               <Link
                 key={item.href}

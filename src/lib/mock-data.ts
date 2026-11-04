@@ -155,14 +155,14 @@ export const MEMBER_LOANS = [
 ];
 
 export const MEMBER_SHARES = {
-  num_shares: 50,
-  share_value: 100_000,
+  num_shares: 250,
+  share_value: 20_000,
   total_value: 5_000_000,
   share_premium: 0,
   certificates: [
-    { number: "SV-CERT-0042", shares: 20, date: "2023-11-10", amount: 2_000_000 },
-    { number: "SV-CERT-0089", shares: 15, date: "2024-09-15", amount: 1_500_000 },
-    { number: "SV-CERT-0134", shares: 15, date: "2026-02-20", amount: 1_500_000 },
+    { number: "SV-CERT-0042", shares: 100, date: "2023-11-10", amount: 2_000_000 },
+    { number: "SV-CERT-0089", shares: 75, date: "2024-09-15", amount: 1_500_000 },
+    { number: "SV-CERT-0134", shares: 75, date: "2026-02-20", amount: 1_500_000 },
   ],
   dividends: [
     { year: "FY 2024", rate: "8%", amount: 160_000, paid_date: "2025-03-15" },

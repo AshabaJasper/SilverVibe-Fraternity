@@ -1,298 +1,285 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
-  CheckCircle, Circle, ChevronDown, ChevronRight,
-  Users, PiggyBank, Landmark, BarChart3, FileText,
-  Settings, MessageSquare, Shield, TrendingUp, Globe,
-  Database, Smartphone, Lock, CreditCard, Bell,
-  Layers, Award, Scale, BookOpen, Megaphone,
+  CheckCircle2, Circle, ChevronDown, Users, PiggyBank, Landmark, BarChart3, BookOpen,
+  Megaphone, FileBarChart, Settings, Smartphone, Sparkles, Server, ChevronsDownUp, ChevronsUpDown,
 } from "lucide-react";
+import { PageHeader, Tabs, EmptyState } from "@/components/ui";
+import { cn } from "@/lib/utils";
+
+type Status = "done" | "planned";
 
 interface Feature {
   name: string;
-  status: "done" | "demo" | "planned";
+  status: Status;
+  /** Where to see it in the demo. */
+  href?: string;
   note?: string;
 }
 
 interface Module {
   title: string;
-  icon: React.ElementType;
+  icon: LucideIcon;
   color: string;
   features: Feature[];
 }
 
+// Inventory of the showcase build. "done" = working in this frontend demo
+// (data persisted in the browser). "planned" = needs the backend phase.
 const MODULES: Module[] = [
   {
     title: "Member Management",
     icon: Users,
     color: "#4A90D9",
     features: [
-      { name: "Member registration with auto SV numbering", status: "done" },
-      { name: "Member profile (view / edit / delete)", status: "done" },
-      { name: "KYC verification workflow", status: "done" },
-      { name: "Status management (Active / Suspended / Dormant)", status: "done" },
-      { name: "Member search & filter by status", status: "done" },
-      { name: "Bulk import / export members", status: "planned", note: "Backend required" },
-      { name: "Member document uploads", status: "planned", note: "Backend required" },
-      { name: "Next-of-kin management", status: "planned" },
+      { name: "Register members with auto SV numbering and validation", status: "done", href: "/admin/members?action=register" },
+      { name: "Edit, view profile, remove (with confirmation)", status: "done", href: "/admin/members" },
+      { name: "KYC verification and status management (active / dormant / suspended)", status: "done", href: "/admin/members" },
+      { name: "Search, status filters, bulk select", status: "done", href: "/admin/members" },
+      { name: "CSV export (all, filtered or selected)", status: "done", href: "/admin/members" },
+      { name: "Member statement PDF", status: "done", href: "/admin/members" },
     ],
   },
   {
-    title: "Savings Management",
+    title: "Savings",
     icon: PiggyBank,
     color: "#22c55e",
     features: [
-      { name: "Multiple savings products (Regular, Fixed, Junior, Holiday)", status: "done" },
-      { name: "Configure savings products (rate, min deposit, status)", status: "done" },
-      { name: "Record deposits / withdrawals / transfers", status: "done" },
-      { name: "Transaction posting & approval", status: "done" },
-      { name: "Savings overview dashboard with charts", status: "done" },
-      { name: "Interest calculation & accrual", status: "planned", note: "Backend required" },
-      { name: "Savings statements generation", status: "planned" },
+      { name: "Savings products: configure and add", status: "done", href: "/admin/savings?tab=products" },
+      { name: "Deposits, withdrawals and transfers with member picker", status: "done", href: "/admin/savings?tab=transactions" },
+      { name: "Maker-checker: large withdrawals need posting", status: "done", href: "/admin/savings?tab=transactions" },
+      { name: "Reverse posted transactions", status: "done", href: "/admin/savings?tab=transactions" },
+      { name: "Live KPIs and charts computed from transactions", status: "done", href: "/admin/savings" },
     ],
   },
   {
-    title: "Loan Management",
+    title: "Loans",
     icon: Landmark,
     color: "#f59e0b",
     features: [
-      { name: "Loan application review with credit scoring", status: "done" },
-      { name: "Approve / Decline workflow with reasons", status: "done" },
-      { name: "Multiple loan products with configurable terms", status: "done" },
-      { name: "Guarantor tracking", status: "done" },
-      { name: "Loan portfolio overview with KPIs", status: "done" },
-      { name: "Loan disbursement processing", status: "planned", note: "Backend required" },
-      { name: "Repayment schedule generation", status: "planned" },
-      { name: "Automated penalty calculation", status: "planned" },
-      { name: "Loan restructuring", status: "planned" },
+      { name: "New application with credit score, guarantors and product limits", status: "done", href: "/admin/loans?action=new" },
+      { name: "Review, approve (with note) and decline (with reason)", status: "done", href: "/admin/loans?tab=applications" },
+      { name: "Disbursement into active loans", status: "done", href: "/admin/loans?tab=applications" },
+      { name: "Reducing-balance schedules, repayment recording, PDF schedule", status: "done", href: "/admin/loans?tab=active" },
+      { name: "Loan products: edit and add", status: "done", href: "/admin/loans?tab=products" },
+      { name: "Portfolio quality and PAR overview", status: "done", href: "/admin/loans" },
     ],
   },
   {
     title: "Shares & Dividends",
-    icon: Award,
+    icon: BarChart3,
     color: "#a855f7",
     features: [
-      { name: "Share issuance with auto-calculation", status: "done" },
-      { name: "Shareholder registry with edit", status: "done" },
-      { name: "Share configuration (value, min/max, dividend rate)", status: "done" },
-      { name: "Share growth chart", status: "done" },
-      { name: "Dividend history tracking", status: "done" },
-      { name: "Investment Units (IU) management", status: "demo", note: "Read-only display" },
-      { name: "Dividend declaration & distribution", status: "planned", note: "Backend required" },
-      { name: "Share transfer between members", status: "planned" },
+      { name: "Issue and transfer shares with holding limits", status: "done", href: "/admin/shares?tab=shareholders" },
+      { name: "Share certificate PDF", status: "done", href: "/admin/shares?tab=shareholders" },
+      { name: "Declare dividends and mark paid", status: "done", href: "/admin/shares?tab=dividends" },
+      { name: "Investment units: buy and redeem", status: "done", href: "/admin/shares?tab=units" },
     ],
   },
   {
-    title: "Accounting & Finance",
+    title: "Accounting",
     icon: BookOpen,
-    color: "#ef4444",
+    color: "#0ea5e9",
     features: [
-      { name: "Journal entry creation (draft/pending/posted)", status: "done" },
-      { name: "Journal entry posting & approval", status: "done" },
-      { name: "Trial balance with balance check", status: "done" },
-      { name: "Income vs Expense charts", status: "done" },
-      { name: "Expense breakdown (pie chart)", status: "done" },
-      { name: "Financial statements catalog", status: "demo", note: "Generate button UI only" },
-      { name: "Chart of accounts management", status: "planned" },
-      { name: "Automated reconciliation", status: "planned" },
-      { name: "Budget tracking", status: "planned" },
+      { name: "Chart of accounts and journal entries (draft, post, reverse)", status: "done", href: "/admin/accounting?tab=journal" },
+      { name: "Trial balance computed from posted entries", status: "done", href: "/admin/accounting?tab=trial" },
+      { name: "Income statement, balance sheet, cash flow previews and PDFs", status: "done", href: "/admin/accounting?tab=statements" },
     ],
   },
   {
     title: "Communications",
     icon: Megaphone,
-    color: "#4A90D9",
+    color: "#ef4444",
     features: [
-      { name: "Announcement management (create, edit, delete)", status: "done" },
-      { name: "Send announcements to audience groups", status: "done" },
-      { name: "Message compose (SMS / Email / Push)", status: "done" },
-      { name: "Save as draft", status: "done" },
-      { name: "SMS templates library", status: "done" },
-      { name: "Message delivery history", status: "demo", note: "Static data" },
-      { name: "Actual SMS/Email gateway integration", status: "planned", note: "Backend required" },
-      { name: "Automated reminders (loan, savings)", status: "planned" },
+      { name: "Announcements: send, edit, duplicate, delete", status: "done", href: "/admin/communications" },
+      { name: "Compose SMS / email / push with recipient counts and SMS segments", status: "done", href: "/admin/communications?tab=compose" },
+      { name: "Schedule messages and save drafts", status: "done", href: "/admin/communications?tab=compose" },
+      { name: "Message templates with placeholders", status: "done", href: "/admin/communications?tab=templates" },
+      { name: "Sent history and admin notifications", status: "done", href: "/admin/communications?tab=history" },
     ],
   },
   {
-    title: "Reports & Analytics",
-    icon: BarChart3,
-    color: "#22c55e",
-    features: [
-      { name: "Admin dashboard with KPIs", status: "done" },
-      { name: "Savings growth chart (Line/Area)", status: "done" },
-      { name: "Loan performance chart (stacked Bar)", status: "done" },
-      { name: "Portfolio quality (Pie chart)", status: "done" },
-      { name: "Report catalog with categories", status: "demo", note: "UI only" },
-      { name: "PDF / Excel report export", status: "planned" },
-      { name: "Custom report builder", status: "planned" },
-      { name: "Regulatory reports (UMRA compliance)", status: "planned" },
-    ],
-  },
-  {
-    title: "System Settings",
-    icon: Settings,
+    title: "Reports",
+    icon: FileBarChart,
     color: "#64748b",
     features: [
-      { name: "Organization settings (name, reg, currency, FY)", status: "done" },
-      { name: "Security settings (password, session, login attempts)", status: "done" },
-      { name: "Integration settings (SMS, email providers)", status: "done" },
-      { name: "Notification preferences (loan, savings alerts)", status: "done" },
-      { name: "Backup & recovery settings", status: "done" },
-      { name: "User management (add, edit, delete, role assignment)", status: "done" },
-      { name: "Two-factor authentication toggle", status: "done" },
-      { name: "Audit log viewing", status: "demo", note: "Static data" },
-      { name: "Role-based access control (RBAC)", status: "planned", note: "Backend required" },
+      { name: "18-report catalogue with PDF generation", status: "done", href: "/admin/reports" },
+      { name: "CSV exports, preview and print", status: "done", href: "/admin/reports" },
+      { name: "Report schedules (frequency, recipients, enable/disable)", status: "done", href: "/admin/reports?tab=scheduled" },
+    ],
+  },
+  {
+    title: "Administration",
+    icon: Settings,
+    color: "#1e293b",
+    features: [
+      { name: "System users with 2FA, reset password, activate/deactivate", status: "done", href: "/admin/settings?tab=users" },
+      { name: "Roles and permission matrix", status: "done", href: "/admin/settings?tab=roles" },
+      { name: "Audit log with filters and CSV export", status: "done", href: "/admin/settings?tab=audit" },
+      { name: "System settings and on-demand backup", status: "done", href: "/admin/settings?tab=system" },
     ],
   },
   {
     title: "Member Portal",
-    icon: Globe,
+    icon: Smartphone,
     color: "#4A90D9",
     features: [
-      { name: "Member dashboard with financial summary", status: "done" },
-      { name: "Savings account overview", status: "done" },
-      { name: "Loan status & repayment history", status: "done" },
-      { name: "Share portfolio view", status: "done" },
-      { name: "Profile management", status: "done" },
-      { name: "Notifications center", status: "done" },
-      { name: "Support ticket system", status: "demo", note: "UI only" },
-      { name: "Online loan application", status: "planned" },
-      { name: "Mobile Money deposit integration", status: "planned" },
+      { name: "Sign in with password or phone OTP", status: "done", href: "/portal/login" },
+      { name: "Dashboard: net worth, health score, quick deposit", status: "done", href: "/portal" },
+      { name: "Savings: transfers, withdrawal requests, statement PDF/CSV", status: "done", href: "/portal/savings" },
+      { name: "Loans: apply (visible to admin), repay, calculator, schedule PDF", status: "done", href: "/portal/loans" },
+      { name: "Shares: buy shares and units, certificate PDFs", status: "done", href: "/portal/shares" },
+      { name: "Profile: edit details, photo, next of kin, beneficiaries, KYC uploads, security", status: "done", href: "/portal/profile" },
+      { name: "Notifications and support tickets", status: "done", href: "/portal/notifications" },
     ],
   },
   {
-    title: "Security & Infrastructure",
-    icon: Shield,
-    color: "#ef4444",
+    title: "Platform & Experience",
+    icon: Sparkles,
+    color: "#f59e0b",
     features: [
-      { name: "Authentication UI (admin + portal login)", status: "done" },
-      { name: "Auth state management (Zustand store)", status: "done" },
-      { name: "Responsive design (mobile / tablet / desktop)", status: "done" },
-      { name: "Dark mode ready theme system", status: "demo", note: "Theme tokens defined" },
-      { name: "localStorage persistence layer", status: "done" },
-      { name: "Reusable Modal component", status: "done" },
-      { name: "Toast notification system", status: "done" },
-      { name: "Backend API integration", status: "planned", note: "API development needed" },
-      { name: "Database setup (PostgreSQL)", status: "planned" },
-      { name: "JWT authentication", status: "planned" },
-      { name: "Data encryption at rest", status: "planned" },
+      { name: "Route guards with demo sessions and sign-out", status: "done" },
+      { name: "Dark mode across every page", status: "done" },
+      { name: "Global search (Ctrl + K) including members", status: "done" },
+      { name: "Live notification badges shared between header and pages", status: "done" },
+      { name: "Reset demo data", status: "done" },
+      { name: "Responsive layout for phones and tablets", status: "done" },
+    ],
+  },
+  {
+    title: "Backend (next phase)",
+    icon: Server,
+    color: "#94a3b8",
+    features: [
+      { name: "PostgreSQL database and API (e.g. Supabase)", status: "planned" },
+      { name: "Real authentication, sessions and server-side permissions", status: "planned" },
+      { name: "SMS and email gateways (Africa's Talking, Resend)", status: "planned" },
+      { name: "Mobile Money collections and disbursements", status: "planned" },
+      { name: "Server-side audit trail and maker-checker engine", status: "planned" },
+      { name: "Scheduled jobs: interest accrual, penalties, report delivery", status: "planned" },
+      { name: "Multi-branch / multi-tenant support", status: "planned" },
     ],
   },
 ];
 
-const statusConfig = {
-  done: { label: "Implemented", bg: "bg-[#22c55e]/10", text: "text-[#22c55e]", icon: CheckCircle },
-  demo: { label: "Demo/UI Only", bg: "bg-[#f59e0b]/10", text: "text-[#f59e0b]", icon: Circle },
-  planned: { label: "Planned", bg: "bg-[#64748b]/10", text: "text-[#64748b]", icon: Circle },
-};
+type Filter = "all" | Status;
 
 export default function ChecklistPage() {
-  const [expanded, setExpanded] = useState<string[]>(MODULES.map((m) => m.title));
-  const [filter, setFilter] = useState<"all" | "done" | "demo" | "planned">("all");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [open, setOpen] = useState<Set<string>>(() => new Set(MODULES.map((m) => m.title)));
+
+  const all = MODULES.flatMap((m) => m.features);
+  const done = all.filter((f) => f.status === "done").length;
+  const planned = all.length - done;
+  const pct = Math.round((done / all.length) * 100);
+
+  const visible = useMemo(
+    () =>
+      MODULES.map((m) => ({ ...m, features: filter === "all" ? m.features : m.features.filter((f) => f.status === filter) })).filter(
+        (m) => m.features.length > 0
+      ),
+    [filter]
+  );
 
   const toggle = (title: string) =>
-    setExpanded((prev) => prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]);
-
-  const totals = { done: 0, demo: 0, planned: 0, total: 0 };
-  MODULES.forEach((m) => m.features.forEach((f) => { totals[f.status]++; totals.total++; }));
-  const pctDone = Math.round(((totals.done + totals.demo) / totals.total) * 100);
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Feature Checklist</h1>
-        <p className="text-[#64748b] text-sm mt-1">Complete overview of all features — implemented, demo, and planned</p>
-      </div>
+      <PageHeader
+        title="Feature Checklist"
+        subtitle="What this showcase build covers, and what the backend phase adds"
+        actions={
+          <>
+            <button onClick={() => setOpen(new Set(MODULES.map((m) => m.title)))} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border dm-border text-xs font-medium dm-text hover:dm-surface-hover">
+              <ChevronsUpDown className="w-3.5 h-3.5" /> Expand all
+            </button>
+            <button onClick={() => setOpen(new Set())} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border dm-border text-xs font-medium dm-text hover:dm-surface-hover">
+              <ChevronsDownUp className="w-3.5 h-3.5" /> Collapse all
+            </button>
+          </>
+        }
+      />
 
-      {/* Progress Bar */}
-      <div className="bg-white rounded-xl p-6 border border-[#e2e8f0]">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-[#1A1A1A]">Overall Progress</p>
-          <p className="text-sm font-bold text-[#22c55e]">{pctDone}%</p>
-        </div>
-        <div className="w-full bg-[#f1f5f9] rounded-full h-3 overflow-hidden">
-          <div className="h-full rounded-full bg-gradient-to-r from-[#22c55e] to-[#4A90D9] transition-all duration-500"
-            style={{ width: `${pctDone}%` }} />
-        </div>
-        <div className="grid grid-cols-3 gap-4 mt-4">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-[#22c55e]">{totals.done}</p>
-            <p className="text-xs text-[#64748b]">Implemented</p>
+      <div className="glass-card rounded-2xl p-6">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+          <div>
+            <p className="text-sm font-semibold dm-text">Frontend demo complete; backend planned</p>
+            <p className="text-xs dm-text-secondary mt-1">
+              {done} working features · {planned} planned for the backend phase · {MODULES.length} modules
+            </p>
           </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-[#f59e0b]">{totals.demo}</p>
-            <p className="text-xs text-[#64748b]">Demo / UI Only</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-[#64748b]">{totals.planned}</p>
-            <p className="text-xs text-[#64748b]">Planned</p>
-          </div>
+          <p className="text-3xl font-bold dm-text">{pct}%</p>
+        </div>
+        <div className="h-3 rounded-full dm-surface-hover overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#4A90D9] to-[#22c55e] transition-all" style={{ width: `${pct}%` }} />
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-1 bg-[#f1f5f9] rounded-xl p-1">
-        {(["all", "done", "demo", "planned"] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-xs font-medium transition-colors capitalize ${
-              filter === f ? "bg-white text-[#1A1A1A] shadow-sm" : "text-[#64748b] hover:text-[#1A1A1A]"
-            }`}>{f === "all" ? `All (${totals.total})` : f === "done" ? `Implemented (${totals.done})` : f === "demo" ? `Demo (${totals.demo})` : `Planned (${totals.planned})`}</button>
-        ))}
-      </div>
+      <Tabs<Filter>
+        tabs={[
+          { id: "all", label: "All", count: all.length },
+          { id: "done", label: "Working in demo", count: done },
+          { id: "planned", label: "Planned", count: planned },
+        ]}
+        active={filter}
+        onChange={setFilter}
+      />
 
-      {/* Modules */}
-      <div className="space-y-3">
-        {MODULES.map((mod) => {
-          const filtered = filter === "all" ? mod.features : mod.features.filter((f) => f.status === filter);
-          if (filtered.length === 0) return null;
-          const isOpen = expanded.includes(mod.title);
-          const doneCt = mod.features.filter((f) => f.status === "done").length;
-          const demoCt = mod.features.filter((f) => f.status === "demo").length;
-
-          return (
-            <div key={mod.title} className="bg-white rounded-xl border border-[#e2e8f0] overflow-hidden">
-              <button onClick={() => toggle(mod.title)}
-                className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#f8f9fa] transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${mod.color}15` }}>
-                    <mod.icon className="w-4.5 h-4.5" style={{ color: mod.color }} />
+      {visible.length === 0 ? (
+        <EmptyState title="Nothing in this filter" />
+      ) : (
+        <div className="space-y-3">
+          {visible.map((m) => {
+            const isOpen = open.has(m.title);
+            const mDone = m.features.filter((f) => f.status === "done").length;
+            return (
+              <div key={m.title} className="glass-card rounded-xl overflow-hidden">
+                <button onClick={() => toggle(m.title)} aria-expanded={isOpen} className="w-full px-5 py-4 flex items-center gap-3 hover:dm-surface-hover transition-colors text-left">
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${m.color}1a` }}>
+                    <m.icon className="w-[18px] h-[18px]" style={{ color: m.color }} />
                   </div>
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-[#1A1A1A]">{mod.title}</p>
-                    <p className="text-[10px] text-[#64748b]">{doneCt + demoCt}/{mod.features.length} features ready</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold dm-text">{m.title}</p>
+                    <p className="text-xs dm-text-secondary">
+                      {mDone} of {m.features.length} {filter === "planned" ? "planned" : "working"}
+                    </p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-20 bg-[#f1f5f9] rounded-full h-1.5 overflow-hidden">
-                    <div className="h-full rounded-full bg-[#22c55e]"
-                      style={{ width: `${((doneCt + demoCt) / mod.features.length) * 100}%` }} />
-                  </div>
-                  {isOpen ? <ChevronDown className="w-4 h-4 text-[#64748b]" /> : <ChevronRight className="w-4 h-4 text-[#64748b]" />}
-                </div>
-              </button>
-              {isOpen && (
-                <div className="border-t border-[#e2e8f0] px-5 py-3 space-y-2">
-                  {filtered.map((f, i) => {
-                    const sc = statusConfig[f.status];
-                    return (
-                      <div key={i} className="flex items-start gap-3 py-1.5">
-                        <sc.icon className={`w-4 h-4 mt-0.5 ${sc.text} ${f.status === "done" ? "fill-current" : ""}`} />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-sm ${f.status === "done" ? "text-[#1A1A1A]" : "text-[#64748b]"}`}>{f.name}</span>
-                            <span className={`${sc.bg} ${sc.text} px-1.5 py-0.5 rounded text-[9px] font-semibold`}>{sc.label}</span>
-                          </div>
-                          {f.note && <p className="text-[10px] text-[#C0C0C0] mt-0.5">{f.note}</p>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                  <ChevronDown className={cn("w-4 h-4 dm-text-secondary transition-transform", isOpen && "rotate-180")} />
+                </button>
+                {isOpen && (
+                  <ul className="border-t dm-border divide-y divide-[#e2e8f0]">
+                    {m.features.map((f) => (
+                      <li key={f.name} className="px-5 py-3 flex items-center gap-3">
+                        {f.status === "done" ? (
+                          <CheckCircle2 className="w-4 h-4 text-[#22c55e] shrink-0" />
+                        ) : (
+                          <Circle className="w-4 h-4 dm-text-secondary shrink-0" />
+                        )}
+                        <span className={cn("text-sm flex-1", f.status === "done" ? "dm-text" : "dm-text-secondary")}>{f.name}</span>
+                        {f.href ? (
+                          <Link href={f.href} className="text-xs font-medium text-[#4A90D9] hover:underline shrink-0">
+                            Try it →
+                          </Link>
+                        ) : f.status === "planned" ? (
+                          <span className="text-[11px] dm-text-secondary shrink-0">Backend phase</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
