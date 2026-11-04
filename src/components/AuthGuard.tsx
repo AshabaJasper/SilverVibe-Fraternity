@@ -1,6 +1,7 @@
 "use client";
 import { ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { isSigningOut } from "@/lib/store";
 import { useAuthStore, useAuthHydrated, type UserType } from "@/lib/store";
 
 /**
@@ -19,9 +20,12 @@ export default function AuthGuard({ require, children }: { require: UserType; ch
   const allowed = isAuthenticated && userType === require;
 
   useEffect(() => {
-    if (hydrated && !allowed) {
+    // During a deliberate sign-out, AppShell navigates home; don't bounce to login.
+    if (hydrated && !allowed && !isSigningOut()) {
       const login = require === "admin" ? "/admin/login" : "/portal/login";
-      router.replace(`${login}?next=${encodeURIComponent(pathname)}`);
+      // Keep the query (e.g. ?tab=audit) so the user returns to the exact view.
+      const target = pathname + window.location.search;
+      router.replace(`${login}?next=${encodeURIComponent(target)}`);
     }
   }, [hydrated, allowed, require, pathname, router]);
 

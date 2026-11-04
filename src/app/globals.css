@@ -189,7 +189,7 @@ html.dark .text-\[\#334155\] { color: var(--dm-text-secondary); }
 
 html.dark .border-\[\#e2e8f0\],
 html.dark .border-\[\#f1f5f9\],
-html.dark .divide-\[\#e2e8f0\] > * + * { border-color: var(--dm-border); }
+html.dark .divide-\[\#e2e8f0\] > * { border-color: var(--dm-border); }
 
 /* Dark "primary" buttons/icons would vanish on a dark surface — use the accent. */
 html.dark .bg-\[\#1A1A1A\] { background-color: #4A90D9; }

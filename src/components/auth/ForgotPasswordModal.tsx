@@ -41,7 +41,8 @@ export default function ForgotPasswordModal({
             <Button
               variant="accent"
               onClick={() => {
-                if (value.trim().length < 4) return setError(`Enter your ${label.toLowerCase()}.`);
+                // Lower-case only a leading capitalised word ("Email" → "email"), keeping acronyms ("SV").
+                if (value.trim().length < 4) return setError(`Enter your ${label.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())}.`);
                 setSent(true);
                 showToast("Password reset instructions sent", "info");
               }}

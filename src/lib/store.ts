@@ -50,3 +50,14 @@ export function useAuthHydrated(): boolean {
     () => false
   );
 }
+
+// Set while the user is deliberately signing out, so route guards don't redirect
+// to the login page before navigation to "/" completes.
+let signingOut = false;
+export const isSigningOut = () => signingOut;
+export function beginSignOut() {
+  signingOut = true;
+  setTimeout(() => {
+    signingOut = false;
+  }, 3000);
+}

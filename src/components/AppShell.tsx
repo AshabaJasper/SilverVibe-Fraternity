@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn, getInitials, timeAgo, formatDate } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
-import { useAuthStore, type UserType } from "@/lib/store";
+import { useAuthStore, beginSignOut, type UserType } from "@/lib/store";
 import { showToast, usePersistedState } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { loadSampleActivity, resetDemoData } from "@/lib/demo";
@@ -134,6 +134,7 @@ export default function AppShell({
   }, [searchQuery, navItems, searchExtra]);
 
   const signOut = () => {
+    beginSignOut();
     logout();
     setUserMenuOpen(false);
     showToast("You have been signed out", "info");
@@ -508,23 +509,26 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ current?: string; next?: string; confirm?: string }>({});
 
   const reset = () => {
     setCurrent("");
     setNext("");
     setConfirm("");
-    setError(null);
+    setErrors({});
   };
   const close = () => {
     reset();
     onClose();
   };
   const submit = () => {
-    if (!current) return setError("Enter your current password.");
-    if (next.length < 8) return setError("New password must be at least 8 characters.");
-    if (!/[0-9]/.test(next) || !/[A-Za-z]/.test(next)) return setError("Use both letters and numbers.");
-    if (next !== confirm) return setError("Passwords don't match.");
+    const e: { current?: string; next?: string; confirm?: string } = {};
+    if (!current) e.current = "Enter your current password.";
+    if (next.length < 8) e.next = "New password must be at least 8 characters.";
+    else if (!/[0-9]/.test(next) || !/[A-Za-z]/.test(next)) e.next = "Use both letters and numbers.";
+    if (!e.next && next !== confirm) e.confirm = "Passwords don't match.";
+    setErrors(e);
+    if (Object.keys(e).length) return;
     showToast("Password updated successfully");
     close();
   };
@@ -543,13 +547,13 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
       }
     >
       <div className="space-y-4">
-        <FormField label="Current password" required>
+        <FormField label="Current password" required error={errors.current}>
           <TextInput type="password" value={current} onChange={setCurrent} autoComplete="current-password" />
         </FormField>
-        <FormField label="New password" required hint="At least 8 characters, letters and numbers">
+        <FormField label="New password" required hint="At least 8 characters, letters and numbers" error={errors.next}>
           <TextInput type="password" value={next} onChange={setNext} autoComplete="new-password" />
         </FormField>
-        <FormField label="Confirm new password" required error={error}>
+        <FormField label="Confirm new password" required error={errors.confirm}>
           <TextInput type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
         </FormField>
       </div>

@@ -58,8 +58,19 @@ export function checkOtp(code: string): string | null {
   return code.trim() === DEMO_CREDENTIALS.otp ? null : "Incorrect code. The demo OTP is 123456.";
 }
 
-/** Only allow same-site relative redirects after login. */
+/**
+ * Only allow same-site relative redirects after login (prevents open redirects).
+ * Rejects "//host", "/\\host" (browsers treat a backslash like a slash), control
+ * characters, and anything that resolves to another origin.
+ */
 export function safeNext(next: string | null, fallback: string): string {
-  if (next && next.startsWith("/") && !next.startsWith("//")) return next;
-  return fallback;
+  if (!next || !/^\/(?![/\\])/.test(next) || /[\\\x00-\x1f]/.test(next)) return fallback;
+  try {
+    const base = "https://silvervibe.invalid";
+    const url = new URL(next, base);
+    if (url.origin !== base) return fallback;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return fallback;
+  }
 }

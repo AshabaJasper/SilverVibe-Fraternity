@@ -56,7 +56,8 @@ export function clearAllStorage(): void {
   if (typeof window === "undefined") return;
   try {
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("silvervibe_") && k !== "silvervibe_theme")
+      // Keep the theme and the signed-in session: "Reset demo data" restores data only.
+      .filter((k) => k.startsWith("silvervibe_") && k !== "silvervibe_theme" && k !== "silvervibe_auth")
       .forEach((k) => localStorage.removeItem(k));
   } catch {
     // ignore
