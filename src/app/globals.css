@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* `dark:` variants follow the .dark class on <html> (set by ThemeProvider), not the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ── Theme tokens ──────────────────────────────────────────── */
 @theme {
   --color-background: #F8F9FA;
@@ -156,3 +159,63 @@ html.dark {
 @utility stagger-3 { animation-delay: 0.3s; }
 @utility stagger-4 { animation-delay: 0.4s; }
 @utility stagger-5 { animation-delay: 0.5s; }
+
+/* ── Global dark-mode remap ──────────────────────────────────
+ * Pages use a light palette of hardcoded Tailwind arbitrary colours
+ * (bg-white, text-[#1A1A1A], border-[#e2e8f0] …). Rather than rewrite
+ * hundreds of class strings, remap those exact classes when html.dark
+ * is set. These rules are unlayered, so they win over @layer utilities.
+ * ─────────────────────────────────────────────────────────── */
+html.dark .bg-white,
+html.dark .bg-\[\#ffffff\],
+html.dark .bg-\[\#fff\] { background-color: var(--dm-surface); }
+html.dark .bg-\[\#F8F9FA\] { background-color: var(--dm-bg); }
+html.dark .bg-\[\#f8f9fa\],
+html.dark .bg-\[\#f1f5f9\],
+html.dark .bg-\[\#e2e8f0\] { background-color: var(--dm-surface-hover); }
+html.dark .hover\:bg-\[\#f8f9fa\]:hover,
+html.dark .hover\:bg-\[\#f1f5f9\]:hover,
+html.dark .hover\:bg-\[\#e2e8f0\]:hover,
+html.dark .hover\:bg-white:hover { background-color: var(--dm-surface-hover); }
+
+html.dark .text-\[\#1A1A1A\],
+html.dark .text-\[\#1a1a1a\],
+html.dark .hover\:text-\[\#1A1A1A\]:hover { color: var(--dm-text); }
+html.dark .text-\[\#64748b\],
+html.dark .text-\[\#475569\],
+html.dark .text-\[\#334155\] { color: var(--dm-text-secondary); }
+
+html.dark .border-\[\#e2e8f0\],
+html.dark .border-\[\#f1f5f9\],
+html.dark .divide-\[\#e2e8f0\] > * + * { border-color: var(--dm-border); }
+
+/* Dark "primary" buttons/icons would vanish on a dark surface — use the accent. */
+html.dark .bg-\[\#1A1A1A\] { background-color: #4A90D9; }
+html.dark .hover\:bg-\[\#333\]:hover { background-color: #3a7bc8; }
+
+/* Native form controls */
+html.dark input:not([type=checkbox]):not([type=radio]):not([type=range]),
+html.dark select,
+html.dark textarea { color-scheme: dark; }
+html.dark select option { background: var(--dm-surface); color: var(--dm-text); }
+
+/* Recharts: tooltips, grid lines, and series drawn in near-black */
+html.dark .recharts-default-tooltip {
+  background-color: var(--dm-surface) !important;
+  border-color: var(--dm-border) !important;
+  color: var(--dm-text) !important;
+}
+html.dark .recharts-tooltip-label { color: var(--dm-text) !important; }
+html.dark .recharts-cartesian-grid line { stroke: var(--dm-border); }
+html.dark .recharts-text { fill: var(--dm-text-secondary); }
+html.dark .recharts-legend-item-text { color: var(--dm-text-secondary) !important; }
+html.dark .recharts-surface [stroke="#1A1A1A"] { stroke: #C0C0C0; }
+html.dark .recharts-surface [fill="#1A1A1A"] { fill: #C0C0C0; }
+html.dark .recharts-surface stop[stop-color="#1A1A1A"] { stop-color: #C0C0C0; }
+
+/* Print: only the printable area */
+@media print {
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area { position: absolute; inset: 0; padding: 24px; background: #fff; color: #000; }
+}

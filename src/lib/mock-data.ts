@@ -7,24 +7,24 @@ export const DEMO_MEMBER = {
   sv_number: "SV-0042",
   full_name: "James Mukasa",
   gender: "Male",
-  date_of_birth: "1990-06-15",
+  date_of_birth: "1991-02-15",
   national_id: "CM84029485HDKFJ",
-  email: "james.mukasa@email.com",
+  email: "james.mukasa@silvervibe.coop",
   phone: "+256 770 123 456",
   phone2: "+256 700 987 654",
   address: "Plot 14, Kampala Road, Kampala",
   status: "Active",
   kyc_status: "Verified",
-  date_joined: "2023-03-10",
+  date_joined: "2023-11-10",
   profile_photo: null,
 };
 
 export const DEMO_ADMIN = {
   id: "a-001",
   full_name: "Sarah Nakamya",
-  email: "sarah@silvervibe.coop",
-  role: "CEO / General Manager",
-  last_login: "2026-02-13T08:30:00",
+  email: "admin@silvervibe.coop",
+  role: "Super Admin",
+  last_login: "2026-11-04T08:30:00",
 };
 
 // Member savings accounts
@@ -41,7 +41,7 @@ export const MEMBER_SAVINGS = [
     monthly_target: 200_000,
     monthly_contributed: 200_000,
     status: "Active",
-    last_activity: "2026-02-10",
+    last_activity: "2026-10-10",
     streak: 6,
     color: "#1A1A1A",
   },
@@ -57,7 +57,7 @@ export const MEMBER_SAVINGS = [
     monthly_target: 0,
     monthly_contributed: 0,
     status: "Active",
-    last_activity: "2026-02-12",
+    last_activity: "2026-11-02",
     streak: 0,
     color: "#4A90D9",
   },
@@ -73,8 +73,8 @@ export const MEMBER_SAVINGS = [
     monthly_target: 0,
     monthly_contributed: 0,
     status: "Active",
-    last_activity: "2025-08-15",
-    maturity_date: "2026-08-15",
+    last_activity: "2026-04-15",
+    maturity_date: "2027-04-15",
     tenor: "12 months",
     interest_rate: "12%",
     streak: 0,
@@ -93,33 +93,64 @@ export const MEMBER_SAVINGS = [
     monthly_target: 0,
     monthly_contributed: 0,
     status: "Active",
-    last_activity: "2025-12-01",
+    last_activity: "2026-08-01",
     streak: 0,
     color: "#f59e0b",
   },
 ];
 
+// Loan schedule is computed so the numbers always reconcile with the principal.
+// Reducing-balance amortisation: installment = P·r / (1 − (1 + r)^−n)
+function buildSchedule(principal: number, annualRatePct: number, months: number, firstDue: string, paidCount: number) {
+  const r = annualRatePct / 100 / 12;
+  const installment = Math.round((principal * r) / (1 - Math.pow(1 + r, -months)));
+  const [y0, m0] = firstDue.split("-").map(Number);
+  let balance = principal;
+  return Array.from({ length: months }, (_, i) => {
+    const interest = Math.round(balance * r);
+    // Final installment absorbs rounding so principal sums exactly.
+    const principalPart = i === months - 1 ? balance : installment - interest;
+    balance -= principalPart;
+    const d = new Date(y0, m0 - 1 + i, 1);
+    const due = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    return {
+      installment: i + 1,
+      due_date: due,
+      principal: principalPart,
+      interest,
+      total: principalPart + interest,
+      balance,
+      status: i < paidCount ? "Paid" : "Pending",
+    };
+  });
+}
+
+export const LOAN_SCHEDULE = buildSchedule(8_000_000, 18, 12, "2026-06-01", 6);
+
+const _pending = LOAN_SCHEDULE.filter((s) => s.status === "Pending");
+const _paid = LOAN_SCHEDULE.filter((s) => s.status === "Paid");
+
 export const MEMBER_LOANS = [
   {
     id: "ln-001",
     product: "Short-Term Loan",
-    loan_number: "SV-LN-2025-0042",
+    loan_number: "SV-LN-2026-0042",
     principal: 8_000_000,
-    outstanding_principal: 3_200_000,
-    outstanding_interest: 160_000,
-    total_outstanding: 3_360_000,
+    outstanding_principal: _pending.reduce((a, s) => a + s.principal, 0),
+    outstanding_interest: _pending.reduce((a, s) => a + s.interest, 0),
+    total_outstanding: _pending.reduce((a, s) => a + s.total, 0),
     interest_rate: "18%",
     interest_method: "Reducing Balance",
-    disbursement_date: "2025-08-01",
-    maturity_date: "2026-08-01",
-    next_payment_date: "2026-03-01",
-    next_payment_amount: 740_000,
-    monthly_installment: 740_000,
+    disbursement_date: "2026-05-01",
+    maturity_date: LOAN_SCHEDULE[LOAN_SCHEDULE.length - 1].due_date,
+    next_payment_date: _pending[0].due_date,
+    next_payment_amount: _pending[0].total,
+    monthly_installment: LOAN_SCHEDULE[0].total,
     status: "Active",
     days_in_arrears: 0,
-    repayment_progress: 60,
-    payments_made: 6,
-    total_payments: 12,
+    repayment_progress: Math.round((_paid.length / LOAN_SCHEDULE.length) * 100),
+    payments_made: _paid.length,
+    total_payments: LOAN_SCHEDULE.length,
   },
 ];
 
@@ -129,13 +160,13 @@ export const MEMBER_SHARES = {
   total_value: 5_000_000,
   share_premium: 0,
   certificates: [
-    { number: "SV-CERT-0042", shares: 20, date: "2023-03-10", amount: 2_000_000 },
-    { number: "SV-CERT-0089", shares: 15, date: "2024-01-15", amount: 1_500_000 },
-    { number: "SV-CERT-0134", shares: 15, date: "2025-06-20", amount: 1_500_000 },
+    { number: "SV-CERT-0042", shares: 20, date: "2023-11-10", amount: 2_000_000 },
+    { number: "SV-CERT-0089", shares: 15, date: "2024-09-15", amount: 1_500_000 },
+    { number: "SV-CERT-0134", shares: 15, date: "2026-02-20", amount: 1_500_000 },
   ],
   dividends: [
-    { year: "FY 2023", rate: "8%", amount: 160_000, paid_date: "2024-03-15" },
-    { year: "FY 2024", rate: "10%", amount: 350_000, paid_date: "2025-03-20" },
+    { year: "FY 2024", rate: "8%", amount: 160_000, paid_date: "2025-03-15" },
+    { year: "FY 2025", rate: "10%", amount: 350_000, paid_date: "2026-03-20" },
   ],
 };
 
@@ -147,71 +178,70 @@ export const MEMBER_IU = {
 };
 
 export const RECENT_TRANSACTIONS = [
-  { id: "t-001", date: "2026-02-10", type: "Deposit", account: "Regular Savings", amount: 200_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
-  { id: "t-002", date: "2026-02-05", type: "Loan Repayment", account: "Short-Term Loan", amount: 740_000, channel: "Bank Transfer", status: "Posted", direction: "debit" },
-  { id: "t-003", date: "2026-02-01", type: "Deposit", account: "Flexi/Wallet", amount: 500_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
-  { id: "t-004", date: "2026-01-28", type: "Withdrawal", account: "Flexi/Wallet", amount: 1_000_000, channel: "Bank Transfer", status: "Posted", direction: "debit" },
-  { id: "t-005", date: "2026-01-15", type: "Deposit", account: "Regular Savings", amount: 200_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
-  { id: "t-006", date: "2026-01-10", type: "Share Purchase", account: "Share Capital", amount: 500_000, channel: "Cash", status: "Posted", direction: "debit" },
-  { id: "t-007", date: "2026-01-05", type: "Loan Repayment", account: "Short-Term Loan", amount: 740_000, channel: "Bank Transfer", status: "Posted", direction: "debit" },
-  { id: "t-008", date: "2025-12-20", type: "Deposit", account: "Regular Savings", amount: 300_000, channel: "Cash", status: "Posted", direction: "credit" },
+  { id: "t-001", date: "2026-11-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
+  { id: "t-002", date: "2026-11-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Bank Transfer", status: "Posted", direction: "debit" },
+  { id: "t-003", date: "2026-10-18", type: "Deposit", account: "Flexi/Wallet", account_id: "sa-002", amount: 500_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
+  { id: "t-004", date: "2026-10-09", type: "Withdrawal", account: "Flexi/Wallet", account_id: "sa-002", amount: 1_000_000, channel: "Bank Transfer", status: "Posted", direction: "debit" },
+  { id: "t-005", date: "2026-10-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
+  { id: "t-006", date: "2026-09-10", type: "Share Purchase", account: "Share Capital", account_id: "shares", amount: 500_000, channel: "Cash", status: "Posted", direction: "debit" },
+  { id: "t-007", date: "2026-10-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Bank Transfer", status: "Posted", direction: "debit" },
+  { id: "t-008", date: "2026-08-20", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 300_000, channel: "Cash", status: "Posted", direction: "credit" },
 ];
 
 export const SAVINGS_HISTORY = [
-  { month: "Sep", regular: 9_800_000, flexi: 1_800_000, fixed: 10_000_000 },
-  { month: "Oct", regular: 10_200_000, flexi: 2_100_000, fixed: 10_000_000 },
-  { month: "Nov", regular: 10_600_000, flexi: 2_400_000, fixed: 10_000_000 },
-  { month: "Dec", regular: 11_200_000, flexi: 2_800_000, fixed: 10_000_000 },
-  { month: "Jan", regular: 11_850_000, flexi: 3_750_000, fixed: 10_000_000 },
-  { month: "Feb", regular: 12_450_000, flexi: 3_250_000, fixed: 10_000_000 },
-];
-
-export const LOAN_SCHEDULE = [
-  { installment: 1, due_date: "2025-09-01", principal: 600_000, interest: 140_000, total: 740_000, status: "Paid" },
-  { installment: 2, due_date: "2025-10-01", principal: 610_000, interest: 130_000, total: 740_000, status: "Paid" },
-  { installment: 3, due_date: "2025-11-01", principal: 620_000, interest: 120_000, total: 740_000, status: "Paid" },
-  { installment: 4, due_date: "2025-12-01", principal: 630_000, interest: 110_000, total: 740_000, status: "Paid" },
-  { installment: 5, due_date: "2026-01-01", principal: 640_000, interest: 100_000, total: 740_000, status: "Paid" },
-  { installment: 6, due_date: "2026-02-01", principal: 650_000, interest: 90_000, total: 740_000, status: "Paid" },
-  { installment: 7, due_date: "2026-03-01", principal: 660_000, interest: 80_000, total: 740_000, status: "Pending" },
-  { installment: 8, due_date: "2026-04-01", principal: 670_000, interest: 70_000, total: 740_000, status: "Pending" },
-  { installment: 9, due_date: "2026-05-01", principal: 680_000, interest: 60_000, total: 740_000, status: "Pending" },
-  { installment: 10, due_date: "2026-06-01", principal: 690_000, interest: 50_000, total: 740_000, status: "Pending" },
-  { installment: 11, due_date: "2026-07-01", principal: 700_000, interest: 40_000, total: 740_000, status: "Pending" },
-  { installment: 12, due_date: "2026-08-01", principal: 380_000, interest: 20_000, total: 400_000, status: "Pending" },
+  { month: "Jun", regular: 9_800_000, flexi: 1_800_000, fixed: 10_000_000 },
+  { month: "Jul", regular: 10_200_000, flexi: 2_100_000, fixed: 10_000_000 },
+  { month: "Aug", regular: 10_600_000, flexi: 2_400_000, fixed: 10_000_000 },
+  { month: "Sep", regular: 11_200_000, flexi: 2_800_000, fixed: 10_000_000 },
+  { month: "Oct", regular: 11_850_000, flexi: 3_750_000, fixed: 10_000_000 },
+  { month: "Nov", regular: 12_450_000, flexi: 3_250_000, fixed: 10_000_000 },
 ];
 
 export const ANNOUNCEMENTS = [
   {
     id: "ann-001",
     title: "Annual General Meeting 2026",
-    content: "Dear Members, you are invited to the Annual General Meeting scheduled for March 15, 2026 at Silver Springs Hotel, Kampala. Agenda includes financial reports, dividend declaration, and board elections.",
-    date: "2026-02-10",
+    content: "Dear Members, you are invited to the Annual General Meeting scheduled for December 12, 2026 at Silver Springs Hotel, Kampala. Agenda includes financial reports, dividend declaration, and board elections.",
+    date: "2026-10-10",
     priority: "high",
   },
   {
     id: "ann-002",
     title: "New Fixed Savings Rate",
-    content: "We are pleased to announce an increased fixed savings rate of 13% p.a. for 12-month tenor, effective March 1, 2026. Lock in your savings today!",
-    date: "2026-02-08",
+    content: "We are pleased to announce an increased fixed savings rate of 13% p.a. for 12-month tenor, effective December 1, 2026. Lock in your savings today!",
+    date: "2026-10-08",
     priority: "normal",
   },
   {
     id: "ann-003",
     title: "Mobile Money Deposits Now Available",
     content: "You can now make deposits directly from your mobile money account. Dial *165# and follow the prompts to deposit into your SilverVibe account.",
-    date: "2026-01-25",
+    date: "2026-09-25",
     priority: "normal",
   },
 ];
 
 export const NOTIFICATIONS_DATA = [
-  { id: "n-001", type: "transaction", title: "Deposit Confirmed", message: "Your deposit of UGX 200,000 to Regular Savings has been posted.", date: "2026-02-10", read: false },
-  { id: "n-002", type: "reminder", title: "Loan Repayment Due", message: "Your loan repayment of UGX 740,000 is due on March 1, 2026.", date: "2026-02-09", read: false },
-  { id: "n-003", type: "announcement", title: "AGM 2026", message: "Annual General Meeting on March 15, 2026.", date: "2026-02-08", read: true },
-  { id: "n-004", type: "transaction", title: "Loan Payment Received", message: "Your loan repayment of UGX 740,000 has been posted.", date: "2026-02-05", read: true },
-  { id: "n-005", type: "system", title: "Statement Ready", message: "Your January 2026 statement is ready for download.", date: "2026-02-01", read: true },
+  { id: "n-001", type: "transaction", title: "Deposit Confirmed", message: "Your deposit of UGX 200,000 to Regular Savings has been posted.", date: "2026-11-02", read: false, href: "/portal/savings" },
+  { id: "n-002", type: "reminder", title: "Loan Repayment Due", message: "Your loan repayment of UGX 733,440 is due on 1 December 2026.", date: "2026-11-01", read: false, href: "/portal/loans" },
+  { id: "n-003", type: "transaction", title: "Loan Payment Received", message: "Your loan repayment of UGX 733,440 has been posted.", date: "2026-11-01", read: false, href: "/portal/loans" },
+  { id: "n-004", type: "announcement", title: "AGM 2026", message: "Annual General Meeting on 12 December 2026 at Silver Springs Hotel.", date: "2026-10-20", read: true, href: "/portal" },
+  { id: "n-005", type: "loan", title: "Guarantor Request", message: "Fatima Nankya (SV-0056) listed you as a guarantor for a Business Loan.", date: "2026-10-12", read: true, href: "/portal/loans" },
+  { id: "n-006", type: "system", title: "Statement Ready", message: "Your October 2026 statement is ready for download.", date: "2026-11-01", read: true, href: "/portal/savings" },
 ];
+
+export type MemberNotification = (typeof NOTIFICATIONS_DATA)[number];
+
+export const ADMIN_NOTIFICATIONS = [
+  { id: "an-1", title: "New member registered", desc: "Martha Apio (SV-0078) submitted a registration form", time: "2026-11-04T08:45:00", read: false, href: "/admin/members?q=SV-0078" },
+  { id: "an-2", title: "Loan approval pending", desc: "Grace Nabirye (SV-0023) applied for UGX 5,000,000", time: "2026-11-04T09:02:00", read: false, href: "/admin/loans?tab=applications" },
+  { id: "an-3", title: "Savings deposit", desc: "UGX 500,000 deposited by Fatima Nankya (SV-0056)", time: "2026-11-04T09:15:00", read: false, href: "/admin/savings?tab=transactions" },
+  { id: "an-4", title: "System backup completed", desc: "Daily backup completed successfully", time: "2026-11-04T03:00:00", read: true, href: "/admin/settings?tab=system" },
+  { id: "an-5", title: "Interest computation done", desc: "Monthly interest calculated for all accounts", time: "2026-11-03T23:00:00", read: true, href: "/admin/accounting?tab=journal" },
+];
+
+export type AdminNotification = (typeof ADMIN_NOTIFICATIONS)[number];
+
 
 // ============= Admin Data =============
 
@@ -226,40 +256,40 @@ export const ADMIN_KPI = {
 };
 
 export const ADMIN_MEMBERS_LIST = [
-  { sv_number: "SV-0001", name: "Alice Namugga", phone: "+256 770 111 111", email: "alice@email.com", status: "active", kyc: "verified", savings: 28_500_000, loans: 5_000_000, shares: 8_000_000, joined: "2020-01-15" },
-  { sv_number: "SV-0012", name: "Robert Kizza", phone: "+256 700 222 222", email: "robert@email.com", status: "active", kyc: "verified", savings: 42_300_000, loans: 0, shares: 12_000_000, joined: "2020-03-22" },
-  { sv_number: "SV-0023", name: "Grace Nabirye", phone: "+256 780 333 333", email: "grace@email.com", status: "active", kyc: "verified", savings: 15_700_000, loans: 8_000_000, shares: 5_000_000, joined: "2021-06-10" },
-  { sv_number: "SV-0034", name: "David Ssempala", phone: "+256 750 444 444", email: "david@email.com", status: "active", kyc: "incomplete", savings: 8_900_000, loans: 3_500_000, shares: 3_000_000, joined: "2021-09-05" },
-  { sv_number: "SV-0042", name: "James Mukasa", phone: "+256 770 123 456", email: "james@email.com", status: "active", kyc: "verified", savings: 27_700_000, loans: 3_360_000, shares: 5_000_000, joined: "2023-03-10" },
-  { sv_number: "SV-0056", name: "Fatima Nankya", phone: "+256 700 555 555", email: "fatima@email.com", status: "active", kyc: "verified", savings: 35_600_000, loans: 12_000_000, shares: 7_000_000, joined: "2022-01-20" },
-  { sv_number: "SV-0067", name: "Peter Okello", phone: "+256 780 666 666", email: "peter@email.com", status: "dormant", kyc: "verified", savings: 4_200_000, loans: 0, shares: 2_000_000, joined: "2020-08-12" },
-  { sv_number: "SV-0078", name: "Martha Apio", phone: "+256 750 777 777", email: "martha@email.com", status: "pending", kyc: "pending", savings: 6_800_000, loans: 0, shares: 3_000_000, joined: "2025-11-08" },
-  { sv_number: "SV-0089", name: "Samuel Byaruhanga", phone: "+256 770 888 888", email: "samuel@email.com", status: "active", kyc: "verified", savings: 52_100_000, loans: 15_000_000, shares: 15_000_000, joined: "2020-02-28" },
-  { sv_number: "SV-0095", name: "Christine Tumwine", phone: "+256 700 999 999", email: "christine@email.com", status: "suspended", kyc: "verified", savings: 3_100_000, loans: 4_500_000, shares: 2_000_000, joined: "2022-07-14" },
+  { sv_number: "SV-0001", name: "Alice Namugga", phone: "+256 770 111 111", email: "alice@email.com", status: "active", kyc: "verified", savings: 28_500_000, loans: 5_000_000, shares: 8_000_000, joined: "2020-09-15" },
+  { sv_number: "SV-0012", name: "Robert Kizza", phone: "+256 700 222 222", email: "robert@email.com", status: "active", kyc: "verified", savings: 42_300_000, loans: 0, shares: 12_000_000, joined: "2020-11-22" },
+  { sv_number: "SV-0023", name: "Grace Nabirye", phone: "+256 780 333 333", email: "grace@email.com", status: "active", kyc: "verified", savings: 15_700_000, loans: 8_000_000, shares: 5_000_000, joined: "2022-02-10" },
+  { sv_number: "SV-0034", name: "David Ssempala", phone: "+256 750 444 444", email: "david@email.com", status: "active", kyc: "incomplete", savings: 8_900_000, loans: 3_500_000, shares: 3_000_000, joined: "2022-05-05" },
+  { sv_number: "SV-0042", name: "James Mukasa", phone: "+256 770 123 456", email: "james.mukasa@silvervibe.coop", status: "active", kyc: "verified", savings: 27_700_000, loans: 4_178_544, shares: 5_000_000, joined: "2023-11-10" },
+  { sv_number: "SV-0056", name: "Fatima Nankya", phone: "+256 700 555 555", email: "fatima@email.com", status: "active", kyc: "verified", savings: 35_600_000, loans: 12_000_000, shares: 7_000_000, joined: "2022-09-20" },
+  { sv_number: "SV-0067", name: "Peter Okello", phone: "+256 780 666 666", email: "peter@email.com", status: "dormant", kyc: "verified", savings: 4_200_000, loans: 0, shares: 2_000_000, joined: "2021-04-12" },
+  { sv_number: "SV-0078", name: "Martha Apio", phone: "+256 750 777 777", email: "martha@email.com", status: "pending", kyc: "pending", savings: 6_800_000, loans: 0, shares: 3_000_000, joined: "2026-07-08" },
+  { sv_number: "SV-0089", name: "Samuel Byaruhanga", phone: "+256 770 888 888", email: "samuel@email.com", status: "active", kyc: "verified", savings: 52_100_000, loans: 15_000_000, shares: 15_000_000, joined: "2020-10-28" },
+  { sv_number: "SV-0095", name: "Christine Tumwine", phone: "+256 700 999 999", email: "christine@email.com", status: "suspended", kyc: "verified", savings: 3_100_000, loans: 4_500_000, shares: 2_000_000, joined: "2023-03-14" },
 ];
 
 export const ADMIN_SAVINGS_GROWTH = [
-  { month: "Mar", amount: 3_200_000_000 },
-  { month: "Apr", amount: 3_350_000_000 },
-  { month: "May", amount: 3_520_000_000 },
-  { month: "Jun", amount: 3_680_000_000 },
-  { month: "Jul", amount: 3_850_000_000 },
-  { month: "Aug", amount: 4_010_000_000 },
-  { month: "Sep", amount: 4_180_000_000 },
-  { month: "Oct", amount: 4_350_000_000 },
-  { month: "Nov", amount: 4_520_000_000 },
-  { month: "Dec", amount: 4_640_000_000 },
-  { month: "Jan", amount: 4_750_000_000 },
-  { month: "Feb", amount: 4_820_000_000 },
+  { month: "Dec", amount: 3_200_000_000 },
+  { month: "Jan", amount: 3_350_000_000 },
+  { month: "Feb", amount: 3_520_000_000 },
+  { month: "Mar", amount: 3_680_000_000 },
+  { month: "Apr", amount: 3_850_000_000 },
+  { month: "May", amount: 4_010_000_000 },
+  { month: "Jun", amount: 4_180_000_000 },
+  { month: "Jul", amount: 4_350_000_000 },
+  { month: "Aug", amount: 4_520_000_000 },
+  { month: "Sep", amount: 4_640_000_000 },
+  { month: "Oct", amount: 4_750_000_000 },
+  { month: "Nov", amount: 4_820_000_000 },
 ];
 
 export const ADMIN_LOAN_PERFORMANCE = [
-  { month: "Sep", disbursed: 280_000_000, recovered: 310_000_000 },
-  { month: "Oct", disbursed: 320_000_000, recovered: 290_000_000 },
-  { month: "Nov", disbursed: 250_000_000, recovered: 305_000_000 },
-  { month: "Dec", disbursed: 190_000_000, recovered: 340_000_000 },
-  { month: "Jan", disbursed: 350_000_000, recovered: 280_000_000 },
-  { month: "Feb", disbursed: 300_000_000, recovered: 320_000_000 },
+  { month: "Jun", disbursed: 280_000_000, recovered: 310_000_000 },
+  { month: "Jul", disbursed: 320_000_000, recovered: 290_000_000 },
+  { month: "Aug", disbursed: 250_000_000, recovered: 305_000_000 },
+  { month: "Sep", disbursed: 190_000_000, recovered: 340_000_000 },
+  { month: "Oct", disbursed: 350_000_000, recovered: 280_000_000 },
+  { month: "Nov", disbursed: 300_000_000, recovered: 320_000_000 },
 ];
 
 export const ADMIN_PRODUCT_DISTRIBUTION = [
@@ -280,33 +310,33 @@ export const ADMIN_RECENT_ACTIVITY = [
 ];
 
 export const ADMIN_PENDING_APPROVALS = [
-  { id: "pa-1", type: "Loan Application", member: "Grace Nabirye (SV-0023)", amount: 5_000_000, submitted: "2026-02-13", priority: "high" },
-  { id: "pa-2", type: "Withdrawal", member: "David Ssempala (SV-0034)", amount: 3_000_000, submitted: "2026-02-13", priority: "medium" },
-  { id: "pa-3", type: "Profile Update", member: "Peter Okello (SV-0067)", amount: null, submitted: "2026-02-12", priority: "low" },
-  { id: "pa-4", type: "Loan Disbursement", member: "Fatima Nankya (SV-0056)", amount: 12_000_000, submitted: "2026-02-12", priority: "high" },
-  { id: "pa-5", type: "Manual Journal", member: "Accountant Entry", amount: 1_500_000, submitted: "2026-02-11", priority: "medium" },
+  { id: "pa-1", type: "Loan Application", member: "Grace Nabirye (SV-0023)", amount: 5_000_000, submitted: "2026-11-03", priority: "high" },
+  { id: "pa-2", type: "Withdrawal", member: "David Ssempala (SV-0034)", amount: 3_000_000, submitted: "2026-11-03", priority: "medium" },
+  { id: "pa-3", type: "Profile Update", member: "Peter Okello (SV-0067)", amount: null, submitted: "2026-11-02", priority: "low" },
+  { id: "pa-4", type: "Loan Disbursement", member: "Fatima Nankya (SV-0056)", amount: 12_000_000, submitted: "2026-11-02", priority: "high" },
+  { id: "pa-5", type: "Manual Journal", member: "Accountant Entry", amount: 1_500_000, submitted: "2026-11-01", priority: "medium" },
 ];
 
 export const ADMIN_LOAN_APPLICATIONS = [
-  { id: "la-1", sv: "SV-0023", member: "Grace Nabirye", product: "Short-Term Loan", amount: 5_000_000, term: "12 months", status: "pending_review", applied_date: "2026-02-13", score: 78, guarantors: ["Alice Namugga", "Robert Kizza"] },
-  { id: "la-2", sv: "SV-0056", member: "Fatima Nankya", product: "Business Loan", amount: 25_000_000, term: "36 months", status: "under_appraisal", applied_date: "2026-02-10", score: 92, guarantors: ["Samuel Byaruhanga", "James Mukasa"] },
-  { id: "la-3", sv: "SV-0089", member: "Samuel Byaruhanga", product: "Emergency Loan", amount: 2_000_000, term: "3 months", status: "approved", applied_date: "2026-02-05", score: 95, guarantors: ["Fatima Nankya"] },
-  { id: "la-4", sv: "SV-0034", member: "David Ssempala", product: "Short-Term Loan", amount: 10_000_000, term: "12 months", status: "rejected", applied_date: "2026-01-28", score: 45, guarantors: ["Peter Okello"] },
+  { id: "la-1", sv: "SV-0023", member: "Grace Nabirye", product: "Short-Term Loan", amount: 5_000_000, term: "12 months", status: "pending_review", applied_date: "2026-11-03", score: 78, guarantors: ["Alice Namugga", "Robert Kizza"] },
+  { id: "la-2", sv: "SV-0056", member: "Fatima Nankya", product: "Business Loan", amount: 25_000_000, term: "36 months", status: "under_appraisal", applied_date: "2026-10-10", score: 92, guarantors: ["Samuel Byaruhanga", "James Mukasa"] },
+  { id: "la-3", sv: "SV-0089", member: "Samuel Byaruhanga", product: "Emergency Loan", amount: 2_000_000, term: "3 months", status: "approved", applied_date: "2026-10-05", score: 95, guarantors: ["Fatima Nankya"] },
+  { id: "la-4", sv: "SV-0034", member: "David Ssempala", product: "Short-Term Loan", amount: 10_000_000, term: "12 months", status: "rejected", applied_date: "2026-09-28", score: 45, guarantors: ["Peter Okello"] },
 ];
 
 export const MEMBER_GROWTH = [
-  { month: "Mar", members: 720 },
-  { month: "Apr", members: 735 },
-  { month: "May", members: 748 },
-  { month: "Jun", members: 762 },
-  { month: "Jul", members: 775 },
-  { month: "Aug", members: 788 },
-  { month: "Sep", members: 800 },
-  { month: "Oct", members: 812 },
-  { month: "Nov", members: 823 },
-  { month: "Dec", members: 832 },
-  { month: "Jan", members: 840 },
-  { month: "Feb", members: 847 },
+  { month: "Dec", members: 720 },
+  { month: "Jan", members: 735 },
+  { month: "Feb", members: 748 },
+  { month: "Mar", members: 762 },
+  { month: "Apr", members: 775 },
+  { month: "May", members: 788 },
+  { month: "Jun", members: 800 },
+  { month: "Jul", members: 812 },
+  { month: "Aug", members: 823 },
+  { month: "Sep", members: 832 },
+  { month: "Oct", members: 840 },
+  { month: "Nov", members: 847 },
 ];
 
 export const PORTFOLIO_QUALITY = [
@@ -316,3 +346,6 @@ export const PORTFOLIO_QUALITY = [
   { category: "Doubtful (61-90)", amount: 64_500_000, percent: 3 },
   { category: "Loss (90+)", amount: 43_000_000, percent: 2 },
 ];
+
+// Demo "today" — keeps relative dates (due in N days, etc.) stable for the showcase.
+export const DEMO_TODAY = "2026-11-04";
