@@ -3,7 +3,7 @@ import { useState } from "react";
 import Modal, { Button, FormField, SelectInput, TextInput } from "@/components/Modal";
 import { showToast } from "@/lib/storage";
 import { formatCurrency } from "@/lib/utils";
-import { usePortalData } from "../_lib/usePortalData";
+import { redemptionReturns, usePortalData } from "../_lib/usePortalData";
 import { DEFAULT_PHONE, PAY_SOURCES, isValidPhone } from "../_lib/forms";
 
 type Source = "sa-002" | "momo";
@@ -150,7 +150,10 @@ function RedeemUnitsDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const n = Number(count);
   const valid = Number.isInteger(n) && n >= 1 && n <= iu.unit_balance;
-  const estimate = valid && iu.unit_balance > 0 ? n * unitPrice + Math.round((iu.accrued_returns * n) / iu.unit_balance) : 0;
+  const estimate = valid ? n * unitPrice + redemptionReturns(iu, n).returnsPart : 0;
+  // Units bought after the current returns accrued do not share in them.
+  const earning = Math.min(iu.earning_units ?? iu.unit_balance, iu.unit_balance);
+  const newerUnits = iu.unit_balance - earning;
 
   const submit = () => {
     if (iu.unit_balance < 1) return setError("You have no units to redeem");
@@ -175,6 +178,7 @@ function RedeemUnitsDialog({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         <p className="text-sm dm-text-secondary">
           You hold {iu.unit_balance} units worth {formatCurrency(iu.current_value)}. Redeemed units pay their cost plus their share of accrued returns into your Flexi/Wallet.
+          {newerUnits > 0 && iu.accrued_returns > 0 && ` Your oldest ${earning} units carry the ${formatCurrency(iu.accrued_returns)} of returns and are redeemed first; the ${newerUnits} bought since then pay out at cost.`}
         </p>
         <FormField label="Units to redeem" required error={error}>
           <TextInput value={count} onChange={(v) => { setCount(v); setError(null); }} type="number" min={1} max={iu.unit_balance} step={1} />

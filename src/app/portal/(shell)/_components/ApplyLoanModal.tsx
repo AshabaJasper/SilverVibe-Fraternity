@@ -4,7 +4,7 @@ import Modal, { Button, FormField, SelectInput, TextAreaInput, TextInput } from 
 import { showToast } from "@/lib/storage";
 import { ADMIN_MEMBERS_LIST } from "@/lib/mock-data";
 import { formatCurrency } from "@/lib/utils";
-import { LOAN_PRODUCTS, monthlyInstallment, usePortalData } from "../_lib/usePortalData";
+import { ELIGIBILITY_RULE, LOAN_PRODUCTS, monthlyInstallment, usePortalData } from "../_lib/usePortalData";
 import { parseAmount } from "../_lib/forms";
 
 export interface LoanPrefill {
@@ -84,7 +84,7 @@ function ApplyLoanDialog({ onClose, prefill }: { onClose: () => void; prefill?: 
       <div className="space-y-4">
         <div className="rounded-xl p-3 bg-[#4A90D9]/10 text-sm dm-text">
           You can borrow up to <strong>{formatCurrency(eligibility)}</strong>
-          <span className="dm-text-secondary"> — 3× your savings ({formatCurrency(totalSavings)}) + share capital ({formatCurrency(sharesValue)}).</span>
+          <span className="dm-text-secondary"> — {ELIGIBILITY_RULE}. Savings {formatCurrency(totalSavings)} + share capital {formatCurrency(sharesValue)}.</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Loan product" required>

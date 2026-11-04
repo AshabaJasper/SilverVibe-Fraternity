@@ -19,7 +19,7 @@ const FAQS = [
   { q: "How do I make a deposit?", a: "On your Dashboard click 'Quick Deposit', choose the savings account and amount, and pay with Mobile Money. You can also deposit by bank transfer to the SilverVibe account or with cash at our office on Kampala Road. Deposits are posted within 24 hours." },
   { q: "What is the minimum monthly contribution?", a: "Regular Savings requires at least UGX 200,000 per month. Flexi/Wallet Savings has no minimum." },
   { q: "How do I apply for a loan?", a: "Go to Loans and click 'Apply for Loan' (or use 'Apply for Loan' in the Dashboard quick actions). Choose a product, enter the amount and term, and submit. You'll see the application status on the Loans page and receive a notification when it is reviewed." },
-  { q: "How do I download my statement?", a: "Go to Savings and click 'Download Statement'. A PDF with your recent transactions and balances is downloaded straight away." },
+  { q: "How do I download my statement?", a: "Go to Savings and click 'Download Statement'. A dialog lets you choose the account and the period, then downloads the PDF (or a CSV) with those transactions and balances." },
   { q: "How do I update my contact information?", a: "Go to Profile > Personal Info and click 'Edit'. Changes to your name, email, phone numbers, occupation and address are saved immediately. SV number, National ID, date of birth and date joined can only be changed at the SACCO office." },
   { q: "My proof of address has expired. What do I do?", a: "Go to Profile > KYC Documents and click 'Replace' next to the expired document, or use 'Upload New Document'. The new file shows as 'Pending review' until member services verify it." },
   { q: "How do I turn on two-factor authentication?", a: "Go to Profile > Security and click 'Enable' next to Two-factor authentication, then enter the 6-digit code sent to your phone. You can also change your password and transaction PIN there." },
@@ -76,7 +76,7 @@ const TICKET_SEED: SupportTicket[] = [
 const GUIDE = [
   { title: "Make a deposit", href: "/portal?action=deposit", cta: "Open Quick Deposit", steps: ["Open your Dashboard.", "Click 'Quick Deposit' in Quick Actions.", "Pick the savings account and enter the amount.", "Confirm the Mobile Money prompt on your phone."] },
   { title: "Apply for a loan", href: "/portal/loans?action=apply", cta: "Apply for a loan", steps: ["Go to Loans.", "Click 'Apply for Loan'.", "Choose a product, amount and repayment term.", "Review the estimated installment and submit."] },
-  { title: "Download a statement", href: "/portal/savings", cta: "Go to Savings", steps: ["Go to Savings.", "Click 'Download Statement'.", "Open the PDF from your downloads folder."] },
+  { title: "Download a statement", href: "/portal/savings?action=statement", cta: "Open statement dialog", steps: ["Go to Savings and click 'Download Statement'.", "Choose the account and the period.", "Click PDF and open it from your downloads folder."] },
   { title: "Update your profile", href: "/portal/profile?tab=personal", cta: "Open my profile", steps: ["Go to Profile > Personal Info.", "Click 'Edit'.", "Update your email, phone or address and click 'Save changes'."] },
 ];
 
@@ -89,6 +89,8 @@ const TUTORIALS = [
   { title: "Securing your account with two-factor authentication", duration: "2:20" },
 ];
 const YOUTUBE_URL = "https://www.youtube.com/results?search_query=SACCO+member+portal+tutorial";
+/** YouTube search for one tutorial topic. */
+const youtubeSearch = (topic: string) => `https://www.youtube.com/results?search_query=${encodeURIComponent(`SACCO ${topic}`)}`;
 
 /* ==================================================================
  * Helpers
@@ -172,7 +174,7 @@ export default function SupportPage() {
     { label: "Call Us", value: "+256 700 123 456", href: "tel:+256700123456", icon: Phone, color: "#22c55e" },
     { label: "Email Us", value: "support@silvervibe.coop", href: "mailto:support@silvervibe.coop", icon: Mail, color: "#4A90D9" },
     { label: "WhatsApp", value: "Chat with member services", href: "https://wa.me/256700123456", icon: MessageCircle, color: "#16a34a", external: true },
-    { label: "Visit Us", value: "Plot 14, Kampala Road · Mon–Fri 8:00–17:00, Sat 9:00–13:00", href: "https://www.google.com/maps/search/?api=1&query=Plot+14+Kampala+Road+Kampala", icon: MapPin, color: "#f59e0b", external: true },
+    { label: "Visit Us", value: "Plot 22, Kampala Road, Kampala · Mon–Fri 8:00–17:00, Sat 9:00–13:00", href: "https://www.google.com/maps/search/?api=1&query=Plot+22+Kampala+Road+Kampala", icon: MapPin, color: "#f59e0b", external: true },
   ];
 
   return (
@@ -392,10 +394,18 @@ export default function SupportPage() {
       >
         <ul className="divide-y dm-border">
           {TUTORIALS.map((t) => (
-            <li key={t.title} className="py-3 flex items-center gap-3">
-              <PlayCircle className="w-5 h-5 text-[#ef4444] shrink-0" />
-              <span className="text-sm dm-text flex-1">{t.title}</span>
-              <span className="text-xs dm-text-secondary font-mono">{t.duration}</span>
+            <li key={t.title}>
+              <a
+                href={youtubeSearch(t.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-3 px-2 -mx-2 rounded-lg flex items-center gap-3 hover:bg-[#f1f5f9] transition-colors"
+              >
+                <PlayCircle className="w-5 h-5 text-[#ef4444] shrink-0" />
+                <span className="text-sm dm-text flex-1">{t.title}</span>
+                <span className="text-xs dm-text-secondary font-mono">{t.duration}</span>
+                <ExternalLink className="w-3.5 h-3.5 dm-text-secondary shrink-0" aria-hidden />
+              </a>
             </li>
           ))}
         </ul>

@@ -29,6 +29,7 @@ import { AGM_DATE, liveSavingsHistory, usePortalData } from "./_lib/usePortalDat
 import DepositModal from "./_components/DepositModal";
 import ApplyLoanModal from "./_components/ApplyLoanModal";
 import ActionParam from "./_components/ActionParam";
+import LoanStatusNotifier from "./_components/LoanStatusNotifier";
 
 type Announcement = (typeof ANNOUNCEMENTS)[number];
 
@@ -178,6 +179,7 @@ export default function MemberDashboard() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      <LoanStatusNotifier />
       <Suspense fallback={null}>
         <ActionParam actions={{ deposit: () => setDepositOpen(true), apply: () => setLoanOpen(true) }} />
       </Suspense>

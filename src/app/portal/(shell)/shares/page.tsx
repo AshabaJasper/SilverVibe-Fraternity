@@ -9,11 +9,11 @@ import { EmptyState, PageHeader } from "@/components/ui";
 import { showToast } from "@/lib/storage";
 import { generateShareCertificate, generateTablePdf } from "@/lib/pdf-reports";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { MEMBER_INFO, usePortalData, type ShareCertificate } from "../_lib/usePortalData";
+import { usePortalData, type ShareCertificate } from "../_lib/usePortalData";
 import { BuySharesModal, UnitsModal } from "../_components/SharesModals";
 
 export default function SharesPage() {
-  const { shares, unitPrice, today } = usePortalData();
+  const { shares, unitPrice, today, member } = usePortalData();
   const iu = shares.iu;
   const [buyOpen, setBuyOpen] = useState(false);
   const [unitsMode, setUnitsMode] = useState<"buy" | "redeem" | null>(null);
@@ -27,7 +27,7 @@ export default function SharesPage() {
   const downloadCert = async (c: ShareCertificate) => {
     setBusy(c.number);
     try {
-      await generateShareCertificate({ number: c.number, holder: MEMBER_INFO.name, sv: MEMBER_INFO.sv, shares: c.shares, amount: c.amount, date: c.date });
+      await generateShareCertificate({ number: c.number, holder: member.name, sv: member.sv, shares: c.shares, amount: c.amount, date: c.date });
       showToast(`Certificate ${c.number} downloaded`);
     } catch {
       showToast("Could not generate PDF", "error");
@@ -41,10 +41,10 @@ export default function SharesPage() {
     try {
       await generateTablePdf({
         title: "Dividend Statement",
-        subtitle: `${MEMBER_INFO.name} · ${MEMBER_INFO.sv}`,
-        filename: `dividend-statement-${MEMBER_INFO.sv}`,
+        subtitle: `${member.name} · ${member.sv}`,
+        filename: `dividend-statement-${member.sv}`,
         summary: [
-          ["Member", `${MEMBER_INFO.name} (${MEMBER_INFO.sv})`],
+          ["Member", `${member.name} (${member.sv})`],
           ["Shares held", `${shares.num_shares} @ UGX ${shares.share_value.toLocaleString("en-US")}`],
           ["Share capital", `UGX ${shares.total_value.toLocaleString("en-US")}`],
           ["As at", formatDate(today)],
@@ -212,7 +212,7 @@ export default function SharesPage() {
         </div>
         <p className="text-xs dm-text-secondary mt-3">
           Investment Units fund the society&apos;s long-term assets (real estate, listed shares and other income-earning investments). Returns accrue
-          to unit holders; redeemed units pay out at cost plus accrued returns into your Flexi/Wallet.
+          to the units held while they were earned (new units only share in later returns); redeemed units pay out at cost plus their returns into your Flexi/Wallet.
         </p>
       </div>
 

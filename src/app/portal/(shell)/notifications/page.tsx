@@ -11,6 +11,7 @@ import { usePersistedState, showToast } from "@/lib/storage";
 import { cn, daysUntil, formatDate, useHydrated } from "@/lib/utils";
 import { Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, PageHeader } from "@/components/ui";
+import LoanStatusNotifier from "../_components/LoanStatusNotifier";
 
 const iconMap: Record<string, React.ElementType> = {
   transaction: ArrowDownRight,
@@ -113,6 +114,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      <LoanStatusNotifier />
       <PageHeader
         title="Notifications"
         subtitle={`${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}`}

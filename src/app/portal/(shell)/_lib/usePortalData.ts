@@ -5,8 +5,9 @@
 // the dashboard shows up on /portal/savings, a repayment moves the dashboard
 // net worth, a share purchase reduces the Flexi wallet, and so on.
 // ============================================================
-import { useCallback, useMemo } from "react";
-import { usePersistedState } from "@/lib/storage";
+import { useCallback, useEffect, useMemo } from "react";
+import { loadFromStorage, saveToStorage, usePersistedState } from "@/lib/storage";
+import { useAuthStore } from "@/lib/store";
 import { KEYS } from "@/lib/keys";
 import {
   ADMIN_LOAN_APPLICATIONS,
@@ -17,6 +18,7 @@ import {
   MEMBER_LOANS,
   MEMBER_SAVINGS,
   MEMBER_SHARES,
+  NOTIFICATIONS_DATA,
   RECENT_TRANSACTIONS,
   SAVINGS_HISTORY,
 } from "@/lib/mock-data";
@@ -75,6 +77,12 @@ export interface InvestmentUnits {
   total_invested: number;
   accrued_returns: number;
   current_value: number;
+  /**
+   * Units that were held while `accrued_returns` built up. Units bought later
+   * do not share in returns earned before they were purchased. Missing in
+   * older stored data — then every held unit is treated as earning.
+   */
+  earning_units?: number;
 }
 
 export interface PortalShares {
@@ -133,12 +141,51 @@ export const LOAN_PRODUCTS = [
 ] as const;
 
 export const ACTIVE_LOAN = MEMBER_LOANS[0];
-export const MEMBER_INFO = {
-  name: DEMO_MEMBER.full_name,
-  sv: DEMO_MEMBER.sv_number,
-  email: DEMO_MEMBER.email,
-  phone: DEMO_MEMBER.phone,
-};
+/** Largest loan a member can take, whatever their savings. */
+export const MAX_LOAN = 50_000_000;
+/** Shown next to every eligibility figure. */
+export const ELIGIBILITY_RULE = "Up to 3× your savings and shares, max UGX 50M";
+
+/** Subset of the profile page's KEYS.portalProfile record that other pages read. */
+interface StoredProfile {
+  full_name?: string;
+  sv_number?: string;
+  email?: string;
+  phone?: string;
+}
+
+/**
+ * The member's current name/contact details for PDFs and admin records:
+ * the saved profile first, then the signed-in user, then the demo member.
+ */
+export function useMemberInfo() {
+  const [profile] = usePersistedState<StoredProfile | null>(KEYS.portalProfile, null);
+  const user = useAuthStore((s) => s.user);
+  return useMemo(
+    () => ({
+      name: profile?.full_name?.trim() || user?.name || DEMO_MEMBER.full_name,
+      sv: profile?.sv_number || user?.sv || DEMO_MEMBER.sv_number,
+      email: profile?.email?.trim() || user?.email || DEMO_MEMBER.email,
+      phone: profile?.phone?.trim() || DEMO_MEMBER.phone,
+    }),
+    [profile, user]
+  );
+}
+
+/** Returns paid out when redeeming `units`: only earning units carry returns (oldest first). */
+export function redemptionReturns(iu: InvestmentUnits, units: number): { returnsPart: number; earningRedeemed: number } {
+  const earning = Math.min(iu.earning_units ?? iu.unit_balance, iu.unit_balance);
+  const earningRedeemed = Math.min(Math.max(0, units), earning);
+  const returnsPart = earning > 0 ? Math.round((iu.accrued_returns * earningRedeemed) / earning) : 0;
+  return { returnsPart, earningRedeemed };
+}
+
+/** Numeric suffix of an application id ("LA-2026-0007" → 7, "la-3" → 3, "la-xyz" → 0). */
+function appSeq(id: string): number {
+  const m = /(\d+)$/.exec(id);
+  return m ? Number(m[1]) : 0;
+}
+
 export const AGM_DATE = "2026-12-12";
 
 const SEED_SHARES: PortalShares = { ...MEMBER_SHARES, iu: { ...MEMBER_IU } };
@@ -217,6 +264,7 @@ export function usePortalData() {
   const [rawShares, setShares] = usePersistedState<PortalShares>(KEYS.portalShares, SEED_SHARES);
   const [loanApps, setLoanApps] = usePersistedState<PortalLoanApp[]>(KEYS.portalLoanApps, []);
   const [adminApps, setAdminApps] = usePersistedState<AdminLoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
+  const member = useMemberInfo();
 
   const accounts = useMemo(
     () => rawAccounts.map((a) => ({ ...a, color: ACCOUNT_COLORS[a.id] ?? (a.color === "#1A1A1A" ? "#a855f7" : a.color) })),
@@ -246,7 +294,7 @@ export function usePortalData() {
     const sharesValue = shares.total_value;
     const iuValue = shares.iu.current_value;
     const netWorth = totalSavings + sharesValue + iuValue - outstandingLoan;
-    const eligibility = Math.max(0, 3 * (totalSavings + sharesValue));
+    const eligibility = Math.min(MAX_LOAN, Math.max(0, 3 * (totalSavings + sharesValue)));
 
     // Monthly Regular Savings target, from this month's Regular deposits.
     const regular = accounts.find((a) => a.id === "sa-001");
@@ -398,9 +446,12 @@ export function usePortalData() {
             left -= cut;
           }
         }
-        // Recompute running balances so the schedule still reconciles.
-        let bal = rows.reduce((s, r) => s + r.principal, 0);
-        for (const r of rows) {
+        // Recompute running balances for unpaid rows only, starting from the
+        // principal still outstanding; Paid rows keep their historical balance.
+        // (rows already Paid before this payment are left untouched).
+        const open = rows.filter((_, i) => prev[i].status !== "Paid");
+        let bal = open.reduce((s, r) => s + r.principal, 0);
+        for (const r of open) {
           bal -= r.principal;
           r.balance = Math.max(0, bal);
         }
@@ -457,7 +508,12 @@ export function usePortalData() {
       setShares((prev) => {
         const iu = prev.iu ?? SEED_SHARES.iu;
         const total_invested = iu.total_invested + cost;
-        return { ...prev, iu: { ...iu, unit_balance: iu.unit_balance + units, total_invested, current_value: total_invested + iu.accrued_returns } };
+        // New units do not earn the returns already accrued: freeze the earning set.
+        const earning_units = Math.min(iu.earning_units ?? iu.unit_balance, iu.unit_balance);
+        return {
+          ...prev,
+          iu: { ...iu, unit_balance: iu.unit_balance + units, total_invested, earning_units, current_value: total_invested + iu.accrued_returns },
+        };
       });
       if (source === "sa-002") adjustAccounts([{ id: "sa-002", balance: -cost, available: -cost }]);
       addTxns([
@@ -471,14 +527,17 @@ export function usePortalData() {
   /** Redeem units at cost plus their share of accrued returns; proceeds go to Flexi. */
   const redeemUnits = useCallback(
     (units: number) => {
-      const iu = shares.iu;
-      const returnsPart = iu.unit_balance > 0 ? Math.round((iu.accrued_returns * units) / iu.unit_balance) : 0;
+      const { returnsPart, earningRedeemed } = redemptionReturns(shares.iu, units);
       const proceeds = units * unitPrice + returnsPart;
       setShares((prev) => {
         const cur = prev.iu ?? SEED_SHARES.iu;
+        const unit_balance = cur.unit_balance - units;
         const total_invested = Math.max(0, cur.total_invested - units * unitPrice);
         const accrued_returns = Math.max(0, cur.accrued_returns - returnsPart);
-        return { ...prev, iu: { unit_balance: cur.unit_balance - units, total_invested, accrued_returns, current_value: total_invested + accrued_returns } };
+        const left = Math.max(0, Math.min(cur.earning_units ?? cur.unit_balance, cur.unit_balance) - earningRedeemed);
+        // Once every pre-purchase unit is gone (no returns left), all remaining units earn equally.
+        const earning_units = accrued_returns > 0 && left > 0 ? left : unit_balance;
+        return { ...prev, iu: { unit_balance, total_invested, accrued_returns, earning_units, current_value: total_invested + accrued_returns } };
       });
       adjustAccounts([{ id: "sa-002", balance: proceeds, available: proceeds }]);
       addTxns([{ type: "Investment Units Redemption", account: "Flexi/Wallet", account_id: "sa-002", amount: proceeds, channel: "Internal Transfer", status: "Posted", direction: "credit" }]);
@@ -490,14 +549,18 @@ export function usePortalData() {
   /** Submit a loan application: saved for the member AND queued for admin review. */
   const applyForLoan = useCallback(
     (app: { product: string; amount: number; term: number; purpose: string; guarantors: string[] }) => {
-      const id = uid("la");
+      // Readable sequential id: one more than the highest suffix already used
+      // (legacy ids like "la-1" or "la-xyz" are tolerated).
+      const existing = [...loadFromStorage<AdminLoanApp[]>(KEYS.adminLoanApps, adminApps), ...loanApps];
+      const next = existing.reduce((m, a) => Math.max(m, appSeq(a.id)), 0) + 1;
       const applied_date = todayISO();
+      const id = `LA-${applied_date.slice(0, 4)}-${String(next).padStart(4, "0")}`;
       setLoanApps((prev) => [{ id, ...app, applied_date, status: "pending_review" }, ...prev]);
       setAdminApps((prev) => [
         {
           id,
-          sv: DEMO_MEMBER.sv_number,
-          member: DEMO_MEMBER.full_name,
+          sv: member.sv,
+          member: member.name,
           product: app.product,
           amount: app.amount,
           term: `${app.term} months`,
@@ -511,7 +574,7 @@ export function usePortalData() {
       ]);
       return id;
     },
-    [setLoanApps, setAdminApps, derived.healthScore]
+    [adminApps, loanApps, member, setLoanApps, setAdminApps, derived.healthScore]
   );
 
   /** Member applications with the latest status an admin has set on the same id. */
@@ -532,6 +595,7 @@ export function usePortalData() {
     schedule,
     shares,
     applications,
+    member,
     daysToNextPayment,
     unitPrice,
     ...derived,
@@ -548,3 +612,48 @@ export function usePortalData() {
 }
 
 export type PortalData = ReturnType<typeof usePortalData>;
+
+// ---------------------------------------------------------------- loan status notifications
+
+/** Private key: application id → the last status the member was notified about. */
+const LOAN_NOTIFIED_KEY = "portal_loan_app_notified";
+const NOTIFY_STATUSES: Record<string, { title: string; message: (a: PortalLoanApp) => string }> = {
+  approved: { title: "Loan Application Approved", message: (a) => `Your ${a.product} application ${a.id} for UGX ${a.amount.toLocaleString("en-US")} has been approved.` },
+  rejected: { title: "Loan Application Declined", message: (a) => `Your ${a.product} application ${a.id} was not approved. Contact the loans office for details.` },
+  disbursed: { title: "Loan Disbursed", message: (a) => `Your ${a.product} of UGX ${a.amount.toLocaleString("en-US")} (${a.id}) has been disbursed.` },
+};
+
+/**
+ * Adds one member notification each time an admin moves one of the member's
+ * applications to approved / rejected / disbursed. Reads and writes storage
+ * directly, so several mounted instances (dashboard, loans page) stay
+ * idempotent: the notified map is updated in the same synchronous step.
+ */
+export function useLoanStatusNotifier() {
+  const hydrated = useHydrated();
+  const [loanApps] = usePersistedState<PortalLoanApp[]>(KEYS.portalLoanApps, []);
+  const [adminApps] = usePersistedState<AdminLoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    // Use what is actually stored, not the first-render fallbacks.
+    const mine = loadFromStorage<PortalLoanApp[]>(KEYS.portalLoanApps, []);
+    const admin = loadFromStorage<AdminLoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
+    const notified = loadFromStorage<Record<string, string>>(LOAN_NOTIFIED_KEY, {});
+    const date = todayISO();
+    const fresh: (typeof NOTIFICATIONS_DATA)[number][] = [];
+    for (const app of mine) {
+      const status = admin.find((x) => x.id === app.id)?.status;
+      const spec = status ? NOTIFY_STATUSES[status] : undefined;
+      if (!status || !spec || notified[app.id] === status) continue;
+      notified[app.id] = status;
+      fresh.push({ id: `n-${app.id}-${status}`, type: "loan", title: spec.title, message: spec.message(app), date, read: false, href: "/portal/loans" });
+    }
+    if (!fresh.length) return;
+    saveToStorage(LOAN_NOTIFIED_KEY, notified);
+    const existing = loadFromStorage(KEYS.memberNotifications, NOTIFICATIONS_DATA);
+    const ids = new Set(existing.map((n) => n.id));
+    saveToStorage(KEYS.memberNotifications, [...fresh.filter((n) => !ids.has(n.id)), ...existing]);
+  }, [hydrated, loanApps, adminApps]);
+}
+

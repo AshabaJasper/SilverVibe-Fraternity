@@ -74,7 +74,7 @@ function RepayDialog({ onClose }: { onClose: () => void }) {
             >
               <p className="text-sm font-semibold dm-text">{m === "next" ? "Next installment" : "Custom amount"}</p>
               <p className="text-xs dm-text-secondary">
-                {m === "next" ? `${formatCurrency(installment)} · due ${formatDate(nextPayment.due_date)}` : "Pay ahead and save interest"}
+                {m === "next" ? `${formatCurrency(installment)} · due ${formatDate(nextPayment.due_date)}` : "Pay extra to reduce your next installment's principal"}
               </p>
             </button>
           ))}

@@ -10,14 +10,15 @@ import { Badge, EmptyState, PageHeader } from "@/components/ui";
 import { showToast } from "@/lib/storage";
 import { generateLoanSchedulePdf } from "@/lib/pdf-reports";
 import { cn, daysUntil, formatCurrency, formatDate, formatRelativeDays } from "@/lib/utils";
-import { ACTIVE_LOAN, LOAN_PRODUCTS, MEMBER_INFO, monthlyInstallment, usePortalData } from "../_lib/usePortalData";
+import { ACTIVE_LOAN, ELIGIBILITY_RULE, LOAN_PRODUCTS, monthlyInstallment, usePortalData } from "../_lib/usePortalData";
 import ApplyLoanModal, { type LoanPrefill } from "../_components/ApplyLoanModal";
 import RepayLoanModal from "../_components/RepayLoanModal";
 import ActionParam from "../_components/ActionParam";
+import LoanStatusNotifier from "../_components/LoanStatusNotifier";
 
 export default function LoansPage() {
   const {
-    hydrated, today, schedule, applications, outstandingLoan, principalRepaid, nextPayment, daysToNextPayment, eligibility, paidCount,
+    hydrated, today, schedule, applications, outstandingLoan, principalRepaid, nextPayment, daysToNextPayment, eligibility, paidCount, member,
   } = usePortalData();
 
   const [applyOpen, setApplyOpen] = useState(false);
@@ -63,7 +64,7 @@ export default function LoansPage() {
     setPdfBusy(true);
     try {
       await generateLoanSchedulePdf(
-        { loan_number: ACTIVE_LOAN.loan_number, product: ACTIVE_LOAN.product, principal: ACTIVE_LOAN.principal, interest_rate: ACTIVE_LOAN.interest_rate, member: `${MEMBER_INFO.name} (${MEMBER_INFO.sv})` },
+        { loan_number: ACTIVE_LOAN.loan_number, product: ACTIVE_LOAN.product, principal: ACTIVE_LOAN.principal, interest_rate: ACTIVE_LOAN.interest_rate, member: `${member.name} (${member.sv})` },
         schedule
       );
       showToast("Repayment schedule downloaded");
@@ -76,6 +77,7 @@ export default function LoansPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      <LoanStatusNotifier />
       <Suspense fallback={null}>
         <ActionParam actions={{ apply: () => openApply(), repay: () => setRepayOpen(true) }} />
       </Suspense>
@@ -112,7 +114,7 @@ export default function LoansPage() {
               : "No payments due"
           }
         />
-        <Kpi icon={Shield} color="#a855f7" label="Eligibility" value={formatCurrency(eligibility)} sub="3× savings + shares" />
+        <Kpi icon={Shield} color="#a855f7" label="Eligibility" value={formatCurrency(eligibility)} sub={ELIGIBILITY_RULE} />
       </div>
 
       {/* Active loan */}
@@ -345,7 +347,7 @@ export default function LoansPage() {
                 <p className="text-sm font-semibold text-[#ef4444]">{calcValid ? formatCurrency(calcTotal - p) : "—"}</p>
               </div>
             </div>
-            {calcValid && p > eligibility && <p className="text-xs text-[#d97706] mt-3">Above your current limit of {formatCurrency(eligibility)}.</p>}
+            {calcValid && p > eligibility && <p className="text-xs text-[#d97706] mt-3">Above your current limit of {formatCurrency(eligibility)} ({ELIGIBILITY_RULE.toLowerCase()}).</p>}
             {calcValid && n > calcProductInfo.maxTerm && <p className="text-xs text-[#d97706] mt-3">{calcProductInfo.value} allows up to {calcProductInfo.maxTerm} months.</p>}
             <Button
               variant="accent"

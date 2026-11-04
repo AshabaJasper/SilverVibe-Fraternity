@@ -4,9 +4,9 @@ import { FileDown, FileSpreadsheet } from "lucide-react";
 import Modal, { Button, FormField, SelectInput, TextInput } from "@/components/Modal";
 import { showToast } from "@/lib/storage";
 import { exportToCsv } from "@/lib/export";
-import { generateMemberStatement } from "@/lib/pdf-reports";
-import { formatCurrency } from "@/lib/utils";
-import { MEMBER_INFO, shortName, usePortalData, type PortalTxn } from "../_lib/usePortalData";
+import { generateTablePdf } from "@/lib/pdf-reports";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { shortName, usePortalData, type PortalTxn } from "../_lib/usePortalData";
 import { DEFAULT_PHONE, isValidPhone, parseAmount } from "../_lib/forms";
 
 // ============================================================ Statement
@@ -33,7 +33,7 @@ export function StatementModal({ open, onClose, defaultAccount }: { open: boolea
 }
 
 function StatementDialog({ onClose, defaultAccount }: { onClose: () => void; defaultAccount: string }) {
-  const { accounts, transactions, today } = usePortalData();
+  const { accounts, transactions, today, member } = usePortalData();
   const [account, setAccount] = useState(defaultAccount);
   const [period, setPeriod] = useState("3m");
   const [busy, setBusy] = useState(false);
@@ -42,12 +42,41 @@ function StatementDialog({ onClose, defaultAccount }: { onClose: () => void; def
   const rows = transactions.filter((t) => t.date >= from && (account === "all" || txnInAccount(t, account)));
   const acctLabel = account === "all" ? "All accounts" : shortName(accounts.find((a) => a.id === account)?.product ?? account);
   const balances = (account === "all" ? accounts : accounts.filter((a) => a.id === account)).map((a) => ({ label: shortName(a.product), amount: a.balance }));
-  const slug = `${MEMBER_INFO.sv}-${account}-${period}`;
+  const slug = `${member.sv}-${account}-${period}`;
+  const periodLabel =
+    period === "all" ? `All transactions to ${formatDate(today)}` : `${formatDate(from)} to ${formatDate(today)}`;
 
   const downloadPdf = async () => {
     setBusy(true);
     try {
-      await generateMemberStatement(MEMBER_INFO, rows, balances);
+      const credits = rows.filter((t) => t.direction === "credit").reduce((s, t) => s + t.amount, 0);
+      const debits = rows.filter((t) => t.direction !== "credit").reduce((s, t) => s + t.amount, 0);
+      await generateTablePdf({
+        title: "Member Account Statement",
+        subtitle: `${member.name} · ${member.sv} · ${acctLabel} · ${periodLabel}`,
+        filename: `statement-${slug}`,
+        summary: [
+          ["Member", `${member.name} (${member.sv})`],
+          ["Phone", member.phone],
+          ["Account", acctLabel],
+          ["Period", periodLabel],
+          ["Total credits", formatCurrency(credits)],
+          ["Total debits", formatCurrency(debits)],
+        ],
+        sections: [
+          ...(balances.length
+            ? [{ heading: "Account balances", columns: ["Account", "Balance (UGX)"], rows: balances.map((b) => [b.label, b.amount]), numericCols: [1] }]
+            : []),
+          {
+            heading: "Transactions",
+            columns: ["Date", "Type", "Account", "Channel", "Debit", "Credit"],
+            rows: rows.length
+              ? rows.map((t) => [formatDate(t.date), t.type, t.account, t.channel || "-", t.direction === "credit" ? "-" : t.amount, t.direction === "credit" ? t.amount : "-"])
+              : [["-", "No transactions in this period", "", "", "", ""]],
+            numericCols: [4, 5],
+          },
+        ],
+      });
       showToast(`Statement (${acctLabel}) downloaded`);
       onClose();
     } catch {
