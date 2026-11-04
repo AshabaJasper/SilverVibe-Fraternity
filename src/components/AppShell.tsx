@@ -5,12 +5,15 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
-  Bell, ChevronDown, ChevronRight, Key, LogOut, Menu, Moon, Search, Sun, X, RotateCcw, CheckCheck,
+  Bell, ChevronDown, ChevronRight, Key, LogOut, Menu, Moon, Search, Sun, X, RotateCcw, CheckCheck, Lightbulb, Sparkles,
 } from "lucide-react";
 import { cn, getInitials, timeAgo, formatDate } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuthStore, type UserType } from "@/lib/store";
-import { clearAllStorage, showToast } from "@/lib/storage";
+import { showToast } from "@/lib/storage";
+import { loadSampleActivity, resetDemoData } from "@/lib/demo";
+import { DemoGuide, useDemoGuide } from "@/components/DemoGuide";
+import { WelcomeModal } from "@/components/WelcomeModal";
 import Modal, { Button, FormField, TextInput } from "@/components/Modal";
 
 export interface NavItem {
@@ -88,6 +91,7 @@ export default function AppShell({
   const userRef = useRef<HTMLDivElement>(null);
 
   const isPortal = variant === "member";
+  const demoGuide = useDemoGuide(variant);
   const unread = notifications.filter((n) => !n.read).length;
 
   // Close dropdowns on outside click.
@@ -262,6 +266,15 @@ export default function AppShell({
               </button>
 
               <button
+                onClick={() => demoGuide.setOpen(!demoGuide.open)}
+                className="p-2 rounded-lg hover:dm-surface-hover transition-colors"
+                aria-label={demoGuide.open ? "Hide demo tips" : "Show demo tips"}
+                title="Demo tips"
+              >
+                <Lightbulb className={cn("w-[18px] h-[18px]", demoGuide.open ? "text-[#f59e0b]" : "dm-text-secondary")} />
+              </button>
+
+              <button
                 onClick={toggleTheme}
                 className="p-2 rounded-lg hover:dm-surface-hover transition-colors"
                 aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -377,6 +390,16 @@ export default function AppShell({
                       <button
                         onClick={() => {
                           setUserMenuOpen(false);
+                          const { added } = loadSampleActivity();
+                          showToast(`Loaded ${added} new sample records`);
+                        }}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm dm-text hover:dm-surface-hover transition-colors w-full"
+                      >
+                        <Sparkles className="w-4 h-4 dm-text-secondary" /> Load sample activity
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
                           setResetOpen(true);
                         }}
                         className="flex items-center gap-3 px-4 py-2.5 text-sm dm-text hover:dm-surface-hover transition-colors w-full"
@@ -439,6 +462,8 @@ export default function AppShell({
       </div>
 
       <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
+      <DemoGuide variant={variant} />
+      <WelcomeModal variant={variant} />
       <Modal
         open={resetOpen}
         onClose={() => setResetOpen(false)}
@@ -450,8 +475,7 @@ export default function AppShell({
             <Button
               variant="danger"
               onClick={() => {
-                clearAllStorage();
-                window.location.reload();
+                resetDemoData();
               }}
             >
               Reset
