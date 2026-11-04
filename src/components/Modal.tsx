@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,14 +48,17 @@ export default function Modal({ open, onClose, title, children, size = "md", foo
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Modals only open after user interaction, so document is always available here.
+  if (!open || typeof document === "undefined") return null;
 
   const widthClass = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" }[size];
 
-  return (
+  // Portal to <body> so an ancestor with a transform/filter (e.g. an animated
+  // card) can't become the containing block for this fixed overlay.
+  return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
       onMouseDown={(e) => {
         if (e.target === overlayRef.current) onClose();
       }}
@@ -65,7 +69,7 @@ export default function Modal({ open, onClose, title, children, size = "md", foo
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`relative w-full ${widthClass} dm-surface dm-text rounded-2xl shadow-2xl animate-slide-in max-h-[90vh] flex flex-col`}
+        className={`relative w-full ${widthClass} dm-surface dm-text rounded-t-2xl sm:rounded-2xl shadow-2xl animate-slide-in max-h-[92dvh] sm:max-h-[90vh] flex flex-col`}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b dm-border">
           <h2 id={titleId} className="text-lg font-bold dm-text">{title}</h2>
@@ -83,7 +87,8 @@ export default function Modal({ open, onClose, title, children, size = "md", foo
           <div className="px-6 py-4 border-t dm-border flex flex-wrap items-center justify-end gap-3">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

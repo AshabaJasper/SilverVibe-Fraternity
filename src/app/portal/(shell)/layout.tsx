@@ -21,7 +21,7 @@ const navItems: NavItem[] = [
 const QUICK_LINKS = [
   { label: "Make a deposit", sub: "Dashboard", href: "/portal?action=deposit", keywords: "deposit save money" },
   { label: "Apply for a loan", sub: "Loans", href: "/portal/loans?action=apply", keywords: "loan apply borrow" },
-  { label: "Download statement", sub: "Savings", href: "/portal/savings", keywords: "statement download pdf" },
+  { label: "Download statement", sub: "Savings", href: "/portal/savings?action=statement", keywords: "statement download pdf" },
   { label: "Change password", sub: "Profile → Security", href: "/portal/profile?tab=security", keywords: "password security 2fa" },
   { label: "Contact support", sub: "Support", href: "/portal/support", keywords: "help support ticket message" },
 ];

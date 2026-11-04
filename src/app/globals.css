@@ -94,11 +94,13 @@ html.dark {
 /* ── Keyframes ─────────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  /* `none` (not translateY(0)) so a finished animation leaves no transform behind:
+     a lingering transform would make the element the containing block for fixed children. */
+  to   { opacity: 1; transform: none; }
 }
 @keyframes slideInRight {
   from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: none; }
 }
 @keyframes countUp {
   from { opacity: 0; transform: translateY(10px); }

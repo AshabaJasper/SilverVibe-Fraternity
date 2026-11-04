@@ -10,7 +10,8 @@ import {
 import { cn, getInitials, timeAgo, formatDate } from "@/lib/utils";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuthStore, type UserType } from "@/lib/store";
-import { showToast } from "@/lib/storage";
+import { showToast, usePersistedState } from "@/lib/storage";
+import { KEYS } from "@/lib/keys";
 import { loadSampleActivity, resetDemoData } from "@/lib/demo";
 import { DemoGuide, useDemoGuide } from "@/components/DemoGuide";
 import { WelcomeModal } from "@/components/WelcomeModal";
@@ -92,6 +93,9 @@ export default function AppShell({
 
   const isPortal = variant === "member";
   const demoGuide = useDemoGuide(variant);
+  // The member's uploaded profile photo (data URL) is stored with their profile.
+  const [memberProfile] = usePersistedState<{ photo?: string | null } | null>(KEYS.portalProfile, null);
+  const photo = isPortal ? memberProfile?.photo ?? null : null;
   const unread = notifications.filter((n) => !n.read).length;
 
   // Close dropdowns on outside click.
@@ -171,9 +175,13 @@ export default function AppShell({
         {isPortal && (
           <div className="px-4 py-4 border-b border-[#C0C0C0]/10">
             <Link href="/portal/profile" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 bg-white/5 hover:bg-white/10 transition-colors rounded-xl p-3">
-              <div className="w-10 h-10 rounded-full bg-[#4A90D9]/20 flex items-center justify-center">
-                <span className="text-sm font-semibold text-[#4A90D9]">{getInitials(name)}</span>
-              </div>
+              {photo ? (
+                <span className="w-10 h-10 rounded-full bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${photo})` }} role="img" aria-label={`${name} profile photo`} />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-[#4A90D9]/20 flex items-center justify-center">
+                  <span className="text-sm font-semibold text-[#4A90D9]">{getInitials(name)}</span>
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium truncate">{name}</p>
                 <p className="text-[#C0C0C0]/50 text-xs">{roleLabel}</p>
@@ -357,9 +365,13 @@ export default function AppShell({
                   className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:dm-surface-hover transition-colors"
                   aria-label="Account menu"
                 >
-                  <div className={cn("w-7 h-7 flex items-center justify-center", isPortal ? "rounded-full bg-[#4A90D9]" : "rounded-lg bg-[#1A1A1A]")}>
-                    <span className="text-[10px] font-semibold text-white">{getInitials(name)}</span>
-                  </div>
+                  {photo ? (
+                    <span className="w-7 h-7 rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${photo})` }} aria-hidden="true" />
+                  ) : (
+                    <div className={cn("w-7 h-7 flex items-center justify-center", isPortal ? "rounded-full bg-[#4A90D9]" : "rounded-lg bg-[#1A1A1A]")}>
+                      <span className="text-[10px] font-semibold text-white">{getInitials(name)}</span>
+                    </div>
+                  )}
                   <div className="hidden sm:block text-left">
                     <p className="text-xs font-medium dm-text leading-tight">{name.split(" ")[0]}</p>
                     <p className="text-[10px] dm-text-secondary leading-tight">{roleLabel}</p>
