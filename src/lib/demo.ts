@@ -13,62 +13,34 @@ import { clearAllStorage, loadFromStorage, saveToStorage } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import {
   ADMIN_LOAN_APPLICATIONS,
+  ADMIN_MEMBERS_LIST,
   ADMIN_NOTIFICATIONS,
-  ADMIN_PENDING_APPROVALS,
   MEMBER_SAVINGS,
   NOTIFICATIONS_DATA,
   RECENT_TRANSACTIONS,
 } from "@/lib/mock-data";
 import { formatCurrency, todayISO, uid } from "@/lib/utils";
+// Savings seeds, loan-application shape and balance rules are shared with the admin
+// pages so the sample activity lands exactly where (and how) the pages expect it.
+import {
+  DEFAULT_SAVINGS_PRODUCTS,
+  DEFAULT_SAVINGS_TXN,
+  SAVINGS_PRODUCTS_KEY,
+  SAVINGS_TXN_KEY,
+  applyToMembers,
+  applyToProducts,
+  nextLoanAppId,
+  nextTxnId,
+  type LoanApp,
+  type Member,
+  type SavingsProduct,
+  type SavingsTxn,
+} from "@/app/admin/(shell)/_lib/seeds";
 
 // ------------------------------------------------------------------
 // Record shapes (mirroring the pages that own each key)
 // ------------------------------------------------------------------
 
-/** admin/(shell)/savings/page.tsx → SavingsTxn */
-interface SavingsTxn {
-  id: string;
-  sv: string;
-  member: string;
-  type: "Deposit" | "Withdrawal" | "Transfer";
-  product: string;
-  toProduct?: string;
-  amount: number;
-  date: string;
-  channel: string;
-  reference: string;
-  status: "posted" | "pending" | "reversed" | "rejected";
-}
-
-/** admin/(shell)/savings/page.tsx → SavingsProduct */
-interface SavingsProduct {
-  code: string;
-  name: string;
-  rate: number;
-  min: number;
-  members: number;
-  balance: number;
-  status: "active" | "draft" | "suspended";
-  description: string;
-  color: string;
-}
-
-/** KEYS.adminLoanApps (admin loans page / portal AdminLoanApp) */
-interface LoanApp {
-  id: string;
-  sv: string;
-  member: string;
-  product: string;
-  amount: number;
-  term: string | number;
-  status: string;
-  applied_date: string;
-  score?: number;
-  guarantors?: string[];
-  purpose?: string;
-}
-
-type PendingApproval = (typeof ADMIN_PENDING_APPROVALS)[number];
 type AdminNotification = (typeof ADMIN_NOTIFICATIONS)[number];
 type MemberNotification = (typeof NOTIFICATIONS_DATA)[number];
 
@@ -114,36 +86,9 @@ interface PortalAccount {
 // Seeds the pages use but do not export (kept identical to the page sources).
 // ------------------------------------------------------------------
 
-const SAVINGS_TXN_KEY = "admin_savings_txn";
-const SAVINGS_PRODUCTS_KEY = "admin_savings_products";
-const PENDING_KEY = "admin_pending_approvals";
 const ANNOUNCEMENTS_KEY = "admin_announcements";
 const LOADED_KEY = "demo_sample_loaded";
 const RUNS_KEY = "demo_sample_runs";
-
-// Mirrors DEFAULT_PRODUCTS in src/app/admin/(shell)/savings/page.tsx
-const SEED_SAVINGS_PRODUCTS: SavingsProduct[] = [
-  { code: "SV-REG", name: "Regular Savings", rate: 5, min: 50_000, members: 789, balance: 2_100_000_000, status: "active", color: "#4A90D9", description: "Mandatory monthly savings that build members' borrowing power." },
-  { code: "SV-FLEX", name: "Flexi/Wallet", rate: 3, min: 0, members: 512, balance: 850_000_000, status: "active", color: "#C0C0C0", description: "Voluntary wallet with free deposits and withdrawals via mobile money." },
-  { code: "SV-FIX", name: "Fixed Savings", rate: 12, min: 1_000_000, members: 143, balance: 1_200_000_000, status: "active", color: "#22c55e", description: "Locked 6–24 month deposits earning a higher fixed rate." },
-  { code: "SV-YSV", name: "Young Savers", rate: 6, min: 10_000, members: 96, balance: 180_000_000, status: "active", color: "#a855f7", description: "Savings for members' children under 18, managed by a parent." },
-  { code: "SV-LGS", name: "Loan Guarantee", rate: 3, min: 0, members: 274, balance: 490_000_000, status: "active", color: "#f59e0b", description: "Savings held under lien as security for member loans." },
-];
-
-// Mirrors DEFAULT_TXN in src/app/admin/(shell)/savings/page.tsx
-const SEED_SAVINGS_TXN: SavingsTxn[] = [
-  { id: "TXN-4821", sv: "SV-0056", member: "Fatima Nankya", type: "Deposit", product: "SV-REG", amount: 500_000, date: "2026-11-04", channel: "Mobile Money", reference: "MM-882134", status: "posted" },
-  { id: "TXN-4820", sv: "SV-0012", member: "Robert Kizza", type: "Withdrawal", product: "SV-FLEX", amount: 2_000_000, date: "2026-11-04", channel: "Bank", reference: "BNK-55102", status: "posted" },
-  { id: "TXN-4819", sv: "SV-0034", member: "David Ssempala", type: "Withdrawal", product: "SV-REG", amount: 3_000_000, date: "2026-11-03", channel: "Cash", reference: "CSH-20931", status: "pending" },
-  { id: "TXN-4818", sv: "SV-0042", member: "James Mukasa", type: "Deposit", product: "SV-REG", amount: 200_000, date: "2026-11-02", channel: "Mobile Money", reference: "MM-880017", status: "posted" },
-  { id: "TXN-4817", sv: "SV-0089", member: "Samuel Byaruhanga", type: "Deposit", product: "SV-FIX", amount: 5_000_000, date: "2026-11-01", channel: "Bank", reference: "BNK-55087", status: "posted" },
-  { id: "TXN-4816", sv: "SV-0001", member: "Alice Namugga", type: "Deposit", product: "SV-YSV", amount: 150_000, date: "2026-10-28", channel: "Cash", reference: "CSH-20877", status: "posted" },
-  { id: "TXN-4815", sv: "SV-0023", member: "Grace Nabirye", type: "Transfer", product: "SV-FLEX", toProduct: "SV-LGS", amount: 1_000_000, date: "2026-10-22", channel: "Internal", reference: "TRF-1093", status: "posted" },
-  { id: "TXN-4814", sv: "SV-0042", member: "James Mukasa", type: "Deposit", product: "SV-FLEX", amount: 500_000, date: "2026-10-18", channel: "Mobile Money", reference: "MM-861120", status: "posted" },
-  { id: "TXN-4813", sv: "SV-0078", member: "Martha Apio", type: "Deposit", product: "SV-REG", amount: 300_000, date: "2026-10-15", channel: "Cash", reference: "CSH-20790", status: "posted" },
-  { id: "TXN-4812", sv: "SV-0042", member: "James Mukasa", type: "Withdrawal", product: "SV-FLEX", amount: 1_000_000, date: "2026-10-09", channel: "Bank", reference: "BNK-54920", status: "posted" },
-  { id: "TXN-4811", sv: "SV-0067", member: "Peter Okello", type: "Withdrawal", product: "SV-REG", amount: 400_000, date: "2026-10-05", channel: "Cash", reference: "CSH-20702", status: "rejected" },
-];
 
 // Mirrors SEED_ANNOUNCEMENTS in src/app/admin/(shell)/communications/page.tsx
 const SEED_ANNOUNCEMENTS: Announcement[] = [
@@ -172,25 +117,6 @@ const SEED_ANNOUNCEMENTS: Announcement[] = [
 // ------------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------------
-
-/** Same "max existing + 1" scheme as nextTxnId() on the savings page. */
-function nextTxnNumber(txns: SavingsTxn[]): number {
-  return txns.reduce((m, t) => Math.max(m, Number(t.id.replace(/\D/g, "")) || 0), 4800) + 1;
-}
-
-/** Same as applyToProducts(…, 1) on the savings page, for posted transactions. */
-function applyToProducts(products: SavingsProduct[], t: SavingsTxn): SavingsProduct[] {
-  return products.map((p) => {
-    let delta = 0;
-    if (t.type === "Deposit" && p.code === t.product) delta = t.amount;
-    if (t.type === "Withdrawal" && p.code === t.product) delta = -t.amount;
-    if (t.type === "Transfer") {
-      if (p.code === t.product) delta = -t.amount;
-      if (p.code === t.toProduct) delta = t.amount;
-    }
-    return delta ? { ...p, balance: p.balance + delta } : p;
-  });
-}
 
 const CHANNEL_PREFIX: Record<string, string> = { "Mobile Money": "MM", Bank: "BNK", Cash: "CSH", Internal: "TRF" };
 
@@ -245,8 +171,9 @@ export function loadSampleActivity(): { added: number } {
   const jamesDeposit = amt(300_000);
 
   // ---- Admin savings transactions ----
-  const txns = loadFromStorage<SavingsTxn[]>(SAVINGS_TXN_KEY, SEED_SAVINGS_TXN);
-  let products = loadFromStorage<SavingsProduct[]>(SAVINGS_PRODUCTS_KEY, SEED_SAVINGS_PRODUCTS);
+  const txns = loadFromStorage<SavingsTxn[]>(SAVINGS_TXN_KEY, DEFAULT_SAVINGS_TXN);
+  let products = loadFromStorage<SavingsProduct[]>(SAVINGS_PRODUCTS_KEY, DEFAULT_SAVINGS_PRODUCTS);
+  let members = loadFromStorage<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
   const bigWithdrawer = v % 2 === 0
     ? { sv: "SV-0089", member: "Samuel Byaruhanga", base: 4_500_000 }
     : { sv: "SV-0012", member: "Robert Kizza", base: 3_800_000 };
@@ -259,15 +186,21 @@ export function loadSampleActivity(): { added: number } {
     // Above the UGX 2M threshold → waits for a second officer (maker-checker).
     { sv: bigWithdrawer.sv, member: bigWithdrawer.member, type: "Withdrawal", product: "SV-REG", amount: amt(bigWithdrawer.base), channel: "Bank", status: "pending" },
   ];
-  let n = nextTxnNumber(txns);
-  const newTxns: SavingsTxn[] = drafts.map((d) => {
-    const id = `TXN-${n++}`;
-    return { ...d, id, date: today, reference: `${CHANNEL_PREFIX[d.channel] ?? "TRF"}-${id.slice(4)}` };
-  });
-  for (const t of newTxns) if (t.status === "posted") products = applyToProducts(products, t);
+  const newTxns: SavingsTxn[] = [];
+  for (const d of drafts) {
+    const id = nextTxnId([...newTxns, ...txns]);
+    newTxns.push({ ...d, id, date: today, reference: `${CHANNEL_PREFIX[d.channel] ?? "TRF"}-${id.slice(4)}` });
+  }
+  // Posted transactions move product balances and the member register's savings column.
+  for (const t of newTxns) {
+    if (t.status !== "posted") continue;
+    products = applyToProducts(products, t);
+    members = applyToMembers(members, t);
+  }
   // Page lists newest first.
   saveToStorage(SAVINGS_TXN_KEY, [...newTxns.slice().reverse(), ...txns]);
   saveToStorage(SAVINGS_PRODUCTS_KEY, products);
+  saveToStorage(KEYS.adminMembers, members);
   added += newTxns.length;
   const pendingWithdrawal = newTxns[newTxns.length - 1];
 
@@ -283,23 +216,16 @@ export function loadSampleActivity(): { added: number } {
       { sv: "SV-0023", member: "Grace Nabirye", product: "Emergency Loan", amount: Math.min(5_000_000, amt(2_500_000)), term: "6 months", score: 76, guarantors: ["Alice Namugga"], purpose: "Hospital bills for a family member" },
     ],
   ];
-  const newApps: LoanApp[] = appPairs[v % 2].map((a) => ({ ...a, id: uid("la"), status: "pending_review", applied_date: today }));
+  // Sequential LA-<year>-#### ids, same scheme as the admin Loans page.
+  const newApps: LoanApp[] = [];
+  for (const a of appPairs[v % 2]) {
+    newApps.push({ ...a, id: nextLoanAppId([...newApps, ...apps], today.slice(0, 4)), status: "pending_review", applied_date: today });
+  }
   saveToStorage(KEYS.adminLoanApps, [...newApps, ...apps]);
   added += newApps.length;
-
-  // ---- Pending approval on the dashboard (loan decision syncs to Loans) ----
-  const pending = loadFromStorage<PendingApproval[]>(PENDING_KEY, ADMIN_PENDING_APPROVALS);
+  // The dashboard's Pending Approvals derives loan and withdrawal items from these
+  // records, so nothing extra is written to its list.
   const firstApp = newApps[0];
-  const newPending: PendingApproval = {
-    id: uid("pa"),
-    type: "Loan Application",
-    member: `${firstApp.member} (${firstApp.sv})`,
-    amount: firstApp.amount,
-    submitted: today,
-    priority: "high",
-  };
-  saveToStorage(PENDING_KEY, [newPending, ...pending]);
-  added += 1;
 
   // ---- Admin notifications (unread, spread over the morning) ----
   const adminNotifs = loadFromStorage<AdminNotification[]>(KEYS.adminNotifications, ADMIN_NOTIFICATIONS);

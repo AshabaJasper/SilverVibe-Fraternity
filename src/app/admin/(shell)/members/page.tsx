@@ -1,6 +1,6 @@
 "use client";
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Search, Download, UserPlus, Eye, Edit2, CheckCircle, XCircle, Clock, Shield, Phone, Mail,
   Save, Trash2, AlertTriangle, Users, CreditCard, PiggyBank, FileText, Loader2, BadgeCheck, X,
@@ -52,6 +52,35 @@ const CSV_COLUMNS = [
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** Accessible green for white-text buttons (white on #22c55e fails contrast). */
+const GREEN_BTN = "bg-[#16a34a] hover:bg-[#15803d]";
+
+/**
+ * National part of a Ugandan phone number, digits only: "+256 770 123 456",
+ * "0770123456" and "770 123 456" all become "770123456".
+ */
+function phoneDigits(raw: string): string {
+  const d = raw.replace(/\D/g, "");
+  if (d.startsWith("256")) return d.slice(3);
+  if (d.startsWith("0")) return d.slice(1);
+  return d;
+}
+
+/** Search text that looks like a phone number (digits, spaces, +, -, brackets). */
+const PHONE_QUERY_RE = /^[+\d\s()-]+$/;
+
+function matchesSearch(m: Member, term: string): boolean {
+  if (!term) return true;
+  if (
+    m.name.toLowerCase().includes(term) ||
+    m.sv_number.toLowerCase().includes(term) ||
+    m.email.toLowerCase().includes(term)
+  ) return true;
+  if (!PHONE_QUERY_RE.test(term)) return false;
+  const q = phoneDigits(term);
+  return q.length >= 3 && phoneDigits(m.phone).includes(q);
+}
 
 function emptyMember(): Member {
   return {
@@ -206,6 +235,8 @@ export default function AdminMembersPage() {
 
 function MembersInner() {
   const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -241,16 +272,17 @@ function MembersInner() {
     if (params.get("action") === "register") openRegister();
   }
 
+  // Drop ?action= once applied so a refresh or Back doesn't reopen the register modal.
+  useEffect(() => {
+    if (!params.get("action")) return;
+    const next = new URLSearchParams(params.toString());
+    next.delete("action");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [params, pathname, router]);
+
   const term = search.trim().toLowerCase();
-  const filtered = members.filter((m) => {
-    const matchSearch =
-      !term ||
-      m.name.toLowerCase().includes(term) ||
-      m.sv_number.toLowerCase().includes(term) ||
-      m.phone.replace(/\s/g, "").includes(term.replace(/\s/g, "")) ||
-      m.email.toLowerCase().includes(term);
-    return matchSearch && (statusFilter === "all" || m.status === statusFilter);
-  });
+  const filtered = members.filter((m) => matchesSearch(m, term) && (statusFilter === "all" || m.status === statusFilter));
 
   const count = (s: string) => members.filter((m) => m.status === s).length;
   const tabs: { id: StatusFilter; label: string; count: number }[] = [
@@ -273,6 +305,14 @@ function MembersInner() {
   const toggleChecked = (sv: string) =>
     setChecked((prev) => (prev.includes(sv) ? prev.filter((x) => x !== sv) : [...prev, sv]));
   const toggleAll = () => setChecked(allVisibleChecked ? [] : filtered.map((m) => m.sv_number));
+
+  /** Select a row. Below 2xl the detail panel sits under the table, so bring it into view. */
+  const selectMember = (sv: string) => {
+    setSelectedSv(sv);
+    if (window.matchMedia("(max-width: 1535px)").matches) {
+      requestAnimationFrame(() => document.getElementById("member-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    }
+  };
 
   /* ---------- actions ---------- */
 
@@ -397,15 +437,17 @@ function MembersInner() {
             onClick={() => exportRows(members.filter((m) => visibleChecked.includes(m.sv_number)), "selected")}>
             <Download className="w-3.5 h-3.5" /> Export selected
           </Button>
-          <Button variant="success" className="py-1.5 text-xs" onClick={() => { verifyKyc(visibleChecked); setChecked([]); }}>
+          <Button variant="success" className={`py-1.5 text-xs ${GREEN_BTN}`} onClick={() => { verifyKyc(visibleChecked); setChecked([]); }}>
             <BadgeCheck className="w-3.5 h-3.5" /> Mark verified
           </Button>
           <Button variant="secondary" className="py-1.5 text-xs" onClick={() => setChecked([])}>Clear</Button>
         </div>
       )}
 
-      <div className="flex gap-6">
-        <div className={`flex-1 min-w-0 glass-card rounded-xl overflow-hidden ${selected ? "hidden lg:block" : ""}`}>
+      {/* Detail panel sits beside the table only on 2xl screens; below that it goes under
+          the table so the table keeps its full width (and its Actions column). */}
+      <div className="flex flex-col 2xl:flex-row gap-6">
+        <div className={`w-full 2xl:w-auto 2xl:flex-1 min-w-0 self-start glass-card rounded-xl overflow-hidden ${selected ? "hidden lg:block" : ""}`}>
           {filtered.length === 0 ? (
             <EmptyState
               icon={Users}
@@ -423,12 +465,12 @@ function MembersInner() {
                         onChange={toggleAll} className="w-4 h-4 accent-[#4A90D9] cursor-pointer" />
                     </th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Member</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Contact</th>
+                    <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Contact</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-[#64748b]">KYC</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Savings</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Loans</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shares</th>
+                    <th className="hidden xl:table-cell text-right px-4 py-3 text-xs font-semibold text-[#64748b]">Shares</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-[#64748b]">Actions</th>
                   </tr>
                 </thead>
@@ -437,7 +479,7 @@ function MembersInner() {
                     <tr
                       key={m.sv_number}
                       className={`border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors cursor-pointer ${selectedSv === m.sv_number ? "bg-[#4A90D9]/5" : ""}`}
-                      onClick={() => setSelectedSv(m.sv_number)}
+                      onClick={() => selectMember(m.sv_number)}
                     >
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" aria-label={`Select ${m.name}`} checked={checked.includes(m.sv_number)}
@@ -454,7 +496,7 @@ function MembersInner() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden md:table-cell px-4 py-3">
                         <p className="text-xs dm-text whitespace-nowrap">{m.phone}</p>
                         <p className="text-[10px] dm-text-secondary truncate max-w-[160px]">{m.email}</p>
                       </td>
@@ -462,7 +504,7 @@ function MembersInner() {
                       <td className="px-4 py-3"><KycBadge kyc={m.kyc} /></td>
                       <td className="px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.savings)}</td>
                       <td className="px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.loans)}</td>
-                      <td className="px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.shares)}</td>
+                      <td className="hidden xl:table-cell px-4 py-3 text-right text-xs font-medium dm-text whitespace-nowrap">{formatCurrency(m.shares)}</td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button type="button" className="p-1.5 rounded-lg hover:bg-[#f1f5f9]" title="View profile" aria-label={`View ${m.name}'s profile`}
@@ -485,77 +527,79 @@ function MembersInner() {
 
         {/* Detail panel */}
         {selected && (
-          <div className="w-full lg:w-80 glass-card rounded-xl p-5 animate-fade-in flex-shrink-0 self-start">
+          <div id="member-detail" className="w-full 2xl:w-80 glass-card rounded-xl p-5 animate-fade-in flex-shrink-0 self-start scroll-mt-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold dm-text">Member Details</h3>
               <button type="button" onClick={() => setSelectedSv(null)} className="text-xs dm-text-secondary hover:underline">Close</button>
             </div>
-            <div className="text-center mb-5">
-              <div className="w-14 h-14 rounded-full bg-[#4A90D9] flex items-center justify-center mx-auto mb-2">
-                <span className="text-white text-lg font-bold">{getInitials(selected.name)}</span>
-              </div>
-              <h4 className="font-semibold dm-text">{selected.name}</h4>
-              <p className="text-xs dm-text-secondary mb-2">{selected.sv_number}</p>
-              <Badge status={selected.status} tone={selected.status === "dormant" ? "amber" : undefined} />
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-xs">
-                <Phone className="w-3.5 h-3.5 dm-text-secondary" />
-                <span className="dm-text">{selected.phone}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <Mail className="w-3.5 h-3.5 dm-text-secondary" />
-                <span className="dm-text break-all">{selected.email}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <Shield className="w-3.5 h-3.5 dm-text-secondary" />
-                <KycBadge kyc={selected.kyc} />
-                {selected.kyc !== "verified" && (
-                  <button type="button" onClick={() => verifyKyc([selected.sv_number])}
-                    className="ml-auto text-[10px] px-2 py-0.5 bg-[#22c55e] text-white rounded-lg hover:bg-[#16a34a] transition-colors">
-                    Verify KYC
-                  </button>
-                )}
-              </div>
-
-              <hr className="dm-border" />
-
-              <div className="grid grid-cols-2 gap-3">
-                <MetricTile label="Total Savings" value={formatCurrency(selected.savings)} />
-                <MetricTile label="Loan Balance" value={formatCurrency(selected.loans)} />
-                <MetricTile label="Shares" value={formatCurrency(selected.shares)} />
-                <MetricTile label="Joined" value={formatDate(selected.joined)} />
-              </div>
-
-              <div className="pt-2 space-y-2">
-                <div className="flex gap-2">
-                  <Button variant="accent" className="flex-1 py-2 text-xs" onClick={() => setProfileOpen(true)}>View Full Profile</Button>
-                  <Button variant="secondary" className="flex-1 py-2 text-xs" onClick={() => openEdit(selected)}>Edit</Button>
+            <div className="lg:grid lg:grid-cols-[200px_1fr] lg:gap-8 2xl:block">
+              <div className="text-center mb-5 lg:mb-0 2xl:mb-5">
+                <div className="w-14 h-14 rounded-full bg-[#4A90D9] flex items-center justify-center mx-auto mb-2">
+                  <span className="text-white text-lg font-bold">{getInitials(selected.name)}</span>
                 </div>
-                <div className="flex gap-1 flex-wrap">
-                  {selected.status !== "active" && (
-                    <button type="button" onClick={() => changeStatus(selected.sv_number, "active")}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-[#22c55e]/10 text-[#16a34a] rounded-lg hover:bg-[#22c55e]/20">
-                      Activate
+                <h4 className="font-semibold dm-text">{selected.name}</h4>
+                <p className="text-xs dm-text-secondary mb-2">{selected.sv_number}</p>
+                <Badge status={selected.status} tone={selected.status === "dormant" ? "amber" : undefined} />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs">
+                  <Phone className="w-3.5 h-3.5 dm-text-secondary" />
+                  <span className="dm-text">{selected.phone}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <Mail className="w-3.5 h-3.5 dm-text-secondary" />
+                  <span className="dm-text break-all">{selected.email}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <Shield className="w-3.5 h-3.5 dm-text-secondary" />
+                  <KycBadge kyc={selected.kyc} />
+                  {selected.kyc !== "verified" && (
+                    <button type="button" onClick={() => verifyKyc([selected.sv_number])}
+                      className="ml-auto text-[10px] px-2 py-0.5 bg-[#16a34a] text-white rounded-lg hover:bg-[#15803d] transition-colors">
+                      Verify KYC
                     </button>
                   )}
-                  {selected.status !== "suspended" && (
-                    <button type="button" onClick={() => changeStatus(selected.sv_number, "suspended")}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#dc2626] rounded-lg hover:bg-[#ef4444]/20">
-                      Suspend
+                </div>
+
+                <hr className="dm-border" />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <MetricTile label="Total Savings" value={formatCurrency(selected.savings)} />
+                  <MetricTile label="Loan Balance" value={formatCurrency(selected.loans)} />
+                  <MetricTile label="Shares" value={formatCurrency(selected.shares)} />
+                  <MetricTile label="Joined" value={formatDate(selected.joined)} />
+                </div>
+
+                <div className="pt-2 space-y-2 lg:max-w-md 2xl:max-w-none">
+                  <div className="flex gap-2">
+                    <Button variant="accent" className="flex-1 py-2 text-xs" onClick={() => setProfileOpen(true)}>View Full Profile</Button>
+                    <Button variant="secondary" className="flex-1 py-2 text-xs" onClick={() => openEdit(selected)}>Edit</Button>
+                  </div>
+                  <div className="flex gap-1 flex-wrap">
+                    {selected.status !== "active" && (
+                      <button type="button" onClick={() => changeStatus(selected.sv_number, "active")}
+                        className="px-2.5 py-1 text-[10px] font-medium bg-[#22c55e]/10 text-[#16a34a] rounded-lg hover:bg-[#22c55e]/20">
+                        Activate
+                      </button>
+                    )}
+                    {selected.status !== "suspended" && (
+                      <button type="button" onClick={() => changeStatus(selected.sv_number, "suspended")}
+                        className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#dc2626] rounded-lg hover:bg-[#ef4444]/20">
+                        Suspend
+                      </button>
+                    )}
+                    {selected.status !== "dormant" && (
+                      <button type="button" onClick={() => changeStatus(selected.sv_number, "dormant")}
+                        className="px-2.5 py-1 text-[10px] font-medium bg-[#f59e0b]/10 text-[#d97706] rounded-lg hover:bg-[#f59e0b]/20">
+                        Mark Dormant
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setDeleteOpen(true)}
+                      className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#dc2626] rounded-lg hover:bg-[#ef4444]/20 inline-flex items-center gap-1">
+                      <Trash2 className="w-3 h-3" /> Remove
                     </button>
-                  )}
-                  {selected.status !== "dormant" && (
-                    <button type="button" onClick={() => changeStatus(selected.sv_number, "dormant")}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-[#f59e0b]/10 text-[#d97706] rounded-lg hover:bg-[#f59e0b]/20">
-                      Mark Dormant
-                    </button>
-                  )}
-                  <button type="button" onClick={() => setDeleteOpen(true)}
-                    className="px-2.5 py-1 text-[10px] font-medium bg-[#ef4444]/10 text-[#dc2626] rounded-lg hover:bg-[#ef4444]/20 inline-flex items-center gap-1">
-                    <Trash2 className="w-3 h-3" /> Remove
-                  </button>
+                  </div>
                 </div>
               </div>
             </div>

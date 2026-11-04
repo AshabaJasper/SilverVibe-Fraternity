@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from "react";
  * Keys are namespaced with it, so visitors who used an older build of the demo
  * never see stale records from their browser storage.
  */
-export const DATA_VERSION = 3;
+export const DATA_VERSION = 4;
 const PREFIX = `silvervibe_v${DATA_VERSION}_`;
 
 /** Fired on window when any persisted key changes, so every hook using it re-syncs. */

@@ -251,7 +251,7 @@ type BtnVariant = "primary" | "secondary" | "danger" | "accent" | "success";
 const btnVariants: Record<BtnVariant, string> = {
   primary: "bg-[#1A1A1A] text-white hover:bg-[#333] dark:bg-[#4A90D9]",
   accent: "bg-[#4A90D9] text-white hover:bg-[#3a7bc8]",
-  success: "bg-[#22c55e] text-white hover:bg-[#16a34a]",
+  success: "bg-[#16a34a] text-white hover:bg-[#15803d]",
   danger: "bg-[#ef4444] text-white hover:bg-[#dc2626]",
   secondary: "border dm-border dm-text hover:dm-surface-hover",
 };

@@ -1,12 +1,12 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CreditCard, TrendingUp, AlertTriangle, Clock, CheckCircle2, XCircle, Download, Plus, Eye,
   Users, Percent, Target, Banknote, CalendarDays, Edit2, Loader2, FileText, Wallet, Inbox,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
-import { formatCurrency, formatDate, todayISO, uid } from "@/lib/utils";
+import { formatCurrency, formatDate, formatNumber, todayISO } from "@/lib/utils";
 import {
   ADMIN_KPI, ADMIN_LOAN_APPLICATIONS, ADMIN_LOAN_PERFORMANCE, ADMIN_MEMBERS_LIST, DEMO_TODAY, PORTFOLIO_QUALITY,
 } from "@/lib/mock-data";
@@ -16,6 +16,7 @@ import { exportToCsv } from "@/lib/export";
 import { generateLoanSchedulePdf } from "@/lib/pdf-reports";
 import Modal, { Button, FormField, SelectInput, TextAreaInput, TextInput } from "@/components/Modal";
 import { Badge, EmptyState, PageHeader, StatCard, Tabs } from "@/components/ui";
+import { isPendingLoanStatus, nextLoanAppId, type LoanApp } from "../_lib/seeds";
 
 /* ================================================================== */
 /* Types                                                              */
@@ -24,29 +25,6 @@ import { Badge, EmptyState, PageHeader, StatCard, Tabs } from "@/components/ui";
 type TabId = "overview" | "applications" | "active" | "products";
 type AppFilter = "all" | "pending" | "approved" | "disbursed" | "rejected";
 type Member = (typeof ADMIN_MEMBERS_LIST)[number];
-
-/**
- * Loan application. The member portal appends records to the same key with only the
- * core fields, so everything past `status` is optional and `term` may be "12 months" or 12.
- */
-interface LoanApp {
-  id: string;
-  sv: string;
-  member: string;
-  product: string;
-  amount: number;
-  term: string | number;
-  status: string; // pending_review | under_appraisal | approved | rejected | disbursed
-  applied_date: string;
-  score?: number;
-  guarantors?: string[];
-  purpose?: string;
-  approve_note?: string;
-  decline_reason?: string;
-  decline_notes?: string;
-  decided_date?: string;
-  loan_id?: string;
-}
 
 interface Repayment { date: string; amount: number; principal: number; interest: number }
 
@@ -140,28 +118,49 @@ function loanHealth(loan: ActiveLoan, schedule: ScheduleRow[]): "current" | "wat
   return overdue === 0 ? "current" : overdue <= 2 ? "watch" : "arrears";
 }
 
-/** Seed loan whose balance is exactly where its schedule says after `paid` installments. */
-function seedLoan(id: string, sv: string, product: string, principal: number, rate: number, term: number, firstDue: string, paid: number): ActiveLoan {
+/**
+ * Seed loan whose outstanding balance equals the member register's loans column
+ * (ADMIN_MEMBERS_LIST), so Members, Loans and the portal agree. Installments are marked
+ * repaid in schedule order; any remainder is folded into the last repayment as an
+ * extra principal payment.
+ */
+function seedLoan(id: string, sv: string, product: string, principal: number, rate: number, term: number, firstDue: string): ActiveLoan {
   const rows = amortise(principal, rate, term, firstDue);
-  const member = ADMIN_MEMBERS_LIST.find((m) => m.sv_number === sv)?.name ?? sv;
+  const m = ADMIN_MEMBERS_LIST.find((x) => x.sv_number === sv);
+  const balance = Math.min(principal, m?.loans ?? principal);
+  const repaid = principal - balance;
+  const repayments: Repayment[] = [];
+  let cumulative = 0;
+  for (const r of rows) {
+    if (cumulative + r.principal > repaid) break;
+    cumulative += r.principal;
+    repayments.push({ date: r.due_date, amount: r.total, principal: r.principal, interest: r.interest });
+  }
+  const rest = repaid - cumulative;
+  if (rest > 0) {
+    const last = repayments[repayments.length - 1];
+    if (last) repayments[repayments.length - 1] = { ...last, amount: last.amount + rest, principal: last.principal + rest };
+    else repayments.push({ date: firstDue, amount: rest, principal: rest, interest: 0 });
+  }
   return {
-    id, sv, member, product, principal, rate, term,
-    balance: paid > 0 ? rows[paid - 1].balance : principal,
+    id, sv, member: m?.name ?? sv, product, principal, rate, term, balance,
     disbursed: addMonths(firstDue, -1),
     first_due: firstDue,
-    repayments: rows.slice(0, paid).map((r) => ({ date: r.due_date, amount: r.total, principal: r.principal, interest: r.interest })),
+    repayments,
   };
 }
 
-// Names/SV numbers match ADMIN_MEMBERS_LIST. SV-LN-2026-0042 mirrors James Mukasa's portal loan.
+// Names/SV numbers match ADMIN_MEMBERS_LIST and each balance equals that member's loans
+// column. SV-LN-2026-0042 mirrors James Mukasa's portal loan (UGX 4,178,544 outstanding).
+// Terms are chosen so health varies: David is on watch, Christine (suspended) in arrears.
 const SEED_LOANS: ActiveLoan[] = [
-  seedLoan("SV-LN-2026-0042", "SV-0042", "Short-Term Loan", 8_000_000, 18, 12, "2026-06-01", 6),
-  seedLoan("LN-2026-0118", "SV-0023", "Short-Term Loan", 12_000_000, 18, 24, "2026-04-01", 8),
-  seedLoan("LN-2026-0097", "SV-0001", "Development Loan", 7_000_000, 20, 24, "2026-01-01", 11),
-  seedLoan("LN-2026-0061", "SV-0034", "School Fees Loan", 6_000_000, 16, 12, "2026-02-01", 8),
-  seedLoan("LN-2026-0131", "SV-0056", "Business Loan", 15_000_000, 19, 36, "2026-05-01", 7),
-  seedLoan("LN-2025-0388", "SV-0089", "Business Loan", 25_000_000, 19, 36, "2025-09-01", 15),
-  seedLoan("LN-2026-0074", "SV-0095", "Emergency Loan", 4_500_000, 15, 6, "2026-06-01", 2),
+  seedLoan("SV-LN-2026-0042", "SV-0042", "Short-Term Loan", 8_000_000, 18, 12, "2026-06-01"),
+  seedLoan("LN-2026-0118", "SV-0023", "Short-Term Loan", 12_000_000, 18, 24, "2026-04-01"),
+  seedLoan("LN-2026-0097", "SV-0001", "Development Loan", 8_500_000, 20, 24, "2026-01-01"),
+  seedLoan("LN-2026-0061", "SV-0034", "School Fees Loan", 5_000_000, 16, 24, "2026-02-01"),
+  seedLoan("LN-2026-0131", "SV-0056", "Business Loan", 14_200_000, 19, 36, "2026-05-01"),
+  seedLoan("LN-2025-0388", "SV-0089", "Business Loan", 23_100_000, 19, 36, "2025-09-01"),
+  seedLoan("LN-2026-0074", "SV-0095", "Emergency Loan", 6_000_000, 15, 12, "2026-06-01"),
 ];
 
 // Portfolio totals sum to the UGX 2.15B loan book shown on the dashboard.
@@ -185,10 +184,14 @@ const DECLINE_REASONS = [
 
 const PQ_COLORS: Record<string, string> = {
   Current: "#22c55e", "Watch (1-30)": "#f59e0b", "Substandard (31-60)": "#f97316",
-  "Doubtful (61-90)": "#ef4444", "Loss (90+)": "#991b1b",
+  // #991b1b was unreadable on the dark theme; #dc2626 reads on both.
+  "Doubtful (61-90)": "#ef4444", "Loss (90+)": "#dc2626",
 };
 
-const isPending = (s: string) => s === "pending_review" || s === "under_appraisal";
+const isPending = isPendingLoanStatus;
+
+/** Accessible green for success buttons (white text on #22c55e fails contrast). */
+const GREEN_BTN = "bg-[#16a34a] hover:bg-[#15803d]";
 
 /**
  * Deterministic credit score (20–98): savings cover of the request, KYC and status,
@@ -385,6 +388,15 @@ function LoansInner() {
     if (params.get("action") === "new") openNewApplication();
   }
 
+  // Drop ?action= once applied so a refresh or Back doesn't reopen the modal.
+  useEffect(() => {
+    if (!params.get("action")) return;
+    const next = new URLSearchParams(params.toString());
+    next.delete("action");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [params, pathname, router]);
+
   const changeTab = (t: TabId) => {
     setActiveTab(t);
     // Keep the URL shareable without adding history entries.
@@ -497,7 +509,8 @@ function LoansInner() {
     if (Object.keys(errs).length || !applicant || !product) return;
 
     const app: LoanApp = {
-      id: uid("la"),
+      // Sequential LA-<year>-#### (tolerates the portal's uid-style ids).
+      id: nextLoanAppId(applications, todayISO().slice(0, 4)),
       sv: applicant.sv_number,
       member: applicant.name,
       product: product.name,
@@ -690,7 +703,13 @@ function LoansInner() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Loan Portfolio" value={formatCurrency(portfolio)} sub={`${products.length} products`} icon={CreditCard} color="#a855f7" />
             <StatCard label="Active Loans" value={activeCount} sub={`${openLoans.length} tracked in demo`} icon={TrendingUp} color="#22c55e" />
-            <StatCard label="PAR > 30 Days" value={`${ADMIN_KPI.par_30.value}%`} sub="Industry standard: < 5%" icon={AlertTriangle} color="#ef4444" />
+            <StatCard label="PAR > 30 Days" value={`${ADMIN_KPI.par_30.value}%`} icon={AlertTriangle} color="#ef4444"
+              sub={
+                // A falling PAR is good news, so the trend is green.
+                <span className={ADMIN_KPI.par_30.change <= 0 ? "text-[#16a34a]" : "text-[#dc2626]"}>
+                  {ADMIN_KPI.par_30.change <= 0 ? "▼" : "▲"} {Math.abs(ADMIN_KPI.par_30.change)} pts vs last month · target &lt; 5%
+                </span>
+              } />
             <button type="button" onClick={() => changeTab("applications")} className="text-left">
               <StatCard label="Pending Applications" value={pendingApps.length} sub={<span className="text-[#4A90D9]">Review now →</span>} icon={Clock} color="#f59e0b" />
             </button>
@@ -789,7 +808,7 @@ function LoansInner() {
                     </Button>
                     {isPending(app.status) && (
                       <>
-                        <Button variant="success" className="py-2 text-xs" onClick={() => openApprove(app)}><CheckCircle2 className="w-3.5 h-3.5" /> Approve</Button>
+                        <Button variant="success" className={`py-2 text-xs ${GREEN_BTN}`} onClick={() => openApprove(app)}><CheckCircle2 className="w-3.5 h-3.5" /> Approve</Button>
                         <Button variant="danger" className="py-2 text-xs" onClick={() => openDecline(app)}><XCircle className="w-3.5 h-3.5" /> Decline</Button>
                       </>
                     )}
@@ -819,8 +838,9 @@ function LoansInner() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                    {["Loan ID", "Member", "Product", "Principal", "Balance", "Rate", "Status", "Next Due", "Actions"].map((h, i) => (
-                      <th key={h} className={`px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap ${i >= 3 && i <= 4 ? "text-right" : i === 5 || i === 8 ? "text-center" : "text-left"}`}>{h}</th>
+                    {/* Product and rate sit under the ID/principal so Actions never clips at laptop widths. */}
+                    {["Loan", "Member", "Principal", "Balance", "Status", "Next Due", "Actions"].map((h, i) => (
+                      <th key={h} className={`px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap ${i === 2 || i === 3 ? "text-right" : i === 6 ? "text-center" : "text-left"}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -829,17 +849,24 @@ function LoansInner() {
                     const progress = ((l.principal - l.balance) / l.principal) * 100;
                     return (
                       <tr key={l.id} className="border-b border-[#e2e8f0] hover:bg-[#f8f9fa] transition-colors">
-                        <td className="px-4 py-3 text-xs font-mono dm-text-secondary whitespace-nowrap">{l.id}</td>
-                        <td className="px-4 py-3 text-xs dm-text font-medium whitespace-nowrap">{l.member} <span className="dm-text-secondary">({l.sv})</span></td>
-                        <td className="px-4 py-3 text-xs dm-text-secondary whitespace-nowrap">{l.product}</td>
-                        <td className="px-4 py-3 text-xs text-right dm-text whitespace-nowrap">{formatCurrency(l.principal)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <p className="text-xs font-mono dm-text-secondary">{l.id}</p>
+                          <p className="text-[11px] dm-text-secondary">{l.product}</p>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <p className="text-xs dm-text font-medium">{l.member}</p>
+                          <p className="text-[11px] dm-text-secondary">{l.sv}</p>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <p className="text-xs dm-text">{formatCurrency(l.principal)}</p>
+                          <p className="text-[11px] dm-text-secondary">{l.rate}% · {l.term} mo</p>
+                        </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <p className="text-xs font-medium dm-text">{formatCurrency(l.balance)}</p>
                           <div className="w-16 bg-[#94a3b8]/25 rounded-full h-1 mt-1 ml-auto">
                             <div className="bg-[#22c55e] h-1 rounded-full" style={{ width: `${progress}%` }} />
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-center dm-text">{l.rate}%</td>
                         <td className="px-4 py-3"><Badge status={health} tone={health === "watch" ? "amber" : health === "arrears" ? "red" : undefined} /></td>
                         <td className="px-4 py-3 text-xs dm-text-secondary whitespace-nowrap">
                           {next ? <>{formatDate(next.due_date)}<br /><span className="dm-text">{formatCurrency(next.total)}</span></> : "—"}
@@ -914,7 +941,7 @@ function LoansInner() {
             {isPending(selectedApp.status) && (
               <>
                 <Button variant="danger" onClick={() => openDecline(selectedApp)}><XCircle className="w-4 h-4" /> Decline</Button>
-                <Button variant="success" onClick={() => openApprove(selectedApp)}><CheckCircle2 className="w-4 h-4" /> Approve</Button>
+                <Button variant="success" className={GREEN_BTN} onClick={() => openApprove(selectedApp)}><CheckCircle2 className="w-4 h-4" /> Approve</Button>
               </>
             )}
             {selectedApp.status === "approved" && <Button variant="accent" onClick={() => openDisburse(selectedApp)}><Banknote className="w-4 h-4" /> Disburse</Button>}
@@ -968,7 +995,7 @@ function LoansInner() {
 
       {/* ======== APPROVE ======== */}
       <Modal open={approveOpen && !!selectedApp} onClose={() => setApproveOpen(false)} title="Approve Loan" size="md"
-        footer={<><Button variant="secondary" onClick={() => setApproveOpen(false)}>Cancel</Button><Button variant="success" onClick={handleApprove}><CheckCircle2 className="w-4 h-4" /> Confirm Approval</Button></>}>
+        footer={<><Button variant="secondary" onClick={() => setApproveOpen(false)}>Cancel</Button><Button variant="success" className={GREEN_BTN} onClick={handleApprove}><CheckCircle2 className="w-4 h-4" /> Confirm Approval</Button></>}>
         {selectedApp && (
           <div className="space-y-4">
             <div className="p-3 bg-[#22c55e]/10 rounded-xl border border-[#22c55e]/20">
@@ -1035,7 +1062,7 @@ function LoansInner() {
             <Button variant="secondary" disabled={pdfBusy} onClick={() => downloadSchedule(selectedLoan)}>
               {pdfBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {pdfBusy ? "Generating…" : "Download schedule"}
             </Button>
-            <Button variant="success" disabled={selectedLoan.balance <= 0} onClick={() => openRepay(selectedLoan)}><Wallet className="w-4 h-4" /> Record repayment</Button>
+            <Button variant="success" className={GREEN_BTN} disabled={selectedLoan.balance <= 0} onClick={() => openRepay(selectedLoan)}><Wallet className="w-4 h-4" /> Record repayment</Button>
           </>
         )}>
         {selectedLoan && (
@@ -1050,7 +1077,8 @@ function LoansInner() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-[#f8f9fa] border-b border-[#e2e8f0]">
-                    {["#", "Due date", "Principal", "Interest", "Installment", "Balance", "Status"].map((h, i) => (
+                    {/* Amounts are in UGX (stated in the headers) so cells fit on a phone. */}
+                    {["#", "Due date", "Principal (UGX)", "Interest (UGX)", "Installment (UGX)", "Balance (UGX)", "Status"].map((h, i) => (
                       <th key={h} className={`px-3 py-2 font-semibold text-[#64748b] ${i >= 2 && i <= 5 ? "text-right" : "text-left"}`}>{h}</th>
                     ))}
                   </tr>
@@ -1060,10 +1088,10 @@ function LoansInner() {
                     <tr key={s.installment} className="border-b border-[#e2e8f0] last:border-0">
                       <td className="px-3 py-2 dm-text-secondary">{s.installment}</td>
                       <td className="px-3 py-2 dm-text whitespace-nowrap">{formatDate(s.due_date)}</td>
-                      <td className="px-3 py-2 text-right dm-text">{formatCurrency(s.principal)}</td>
-                      <td className="px-3 py-2 text-right dm-text">{formatCurrency(s.interest)}</td>
-                      <td className="px-3 py-2 text-right font-medium dm-text">{formatCurrency(s.total)}</td>
-                      <td className="px-3 py-2 text-right dm-text-secondary">{formatCurrency(s.balance)}</td>
+                      <td className="px-3 py-2 text-right dm-text">{formatNumber(s.principal)}</td>
+                      <td className="px-3 py-2 text-right dm-text">{formatNumber(s.interest)}</td>
+                      <td className="px-3 py-2 text-right font-medium dm-text">{formatNumber(s.total)}</td>
+                      <td className="px-3 py-2 text-right dm-text-secondary">{formatNumber(s.balance)}</td>
                       <td className="px-3 py-2"><Badge status={s.status} /></td>
                     </tr>
                   ))}
@@ -1081,7 +1109,7 @@ function LoansInner() {
 
       {/* ======== REPAYMENT ======== */}
       <Modal open={repayOpen && !!selectedLoan} onClose={() => setRepayOpen(false)} title={`Record Repayment — ${selectedLoan?.id ?? ""}`} size="md"
-        footer={<><Button variant="secondary" onClick={() => setRepayOpen(false)}>Cancel</Button><Button variant="success" onClick={handleRepay}><Wallet className="w-4 h-4" /> Record repayment</Button></>}>
+        footer={<><Button variant="secondary" onClick={() => setRepayOpen(false)}>Cancel</Button><Button variant="success" className={GREEN_BTN} onClick={handleRepay}><Wallet className="w-4 h-4" /> Record repayment</Button></>}>
         {selectedLoan && (
           <div className="space-y-4">
             <div className="dm-surface-hover rounded-xl p-4 grid grid-cols-2 gap-4">

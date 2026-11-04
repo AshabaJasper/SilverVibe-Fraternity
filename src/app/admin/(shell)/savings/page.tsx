@@ -11,103 +11,41 @@ import {
 import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, useHydrated, cn } from "@/lib/utils";
 import { ADMIN_SAVINGS_GROWTH, ADMIN_MEMBERS_LIST, DEMO_TODAY } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
+import { KEYS } from "@/lib/keys";
 import { exportToCsv } from "@/lib/export";
 import Modal, { FormField, TextInput, SelectInput, TextAreaInput, Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, Badge, PageHeader, StatCard, Tabs } from "@/components/ui";
+import {
+  DEFAULT_SAVINGS_PRODUCTS, DEFAULT_SAVINGS_TXN, SAVINGS_PRODUCTS_KEY, SAVINGS_TXN_KEY,
+  applyToMembers, applyToProducts, nextTxnId,
+  type Member, type SavingsProduct, type SavingsTxn, type TxnType,
+} from "../_lib/seeds";
 
 // ------------------------------------------------------------------
-// Types & seed data
+// Types & seed data (shared with the dashboard and demo loader)
 // ------------------------------------------------------------------
-interface SavingsProduct {
-  code: string;
-  name: string;
-  rate: number; // % p.a.
-  min: number; // minimum balance (UGX)
-  members: number;
-  balance: number;
-  status: "active" | "draft" | "suspended";
-  description: string;
-  color: string;
-}
-
-type TxnType = "Deposit" | "Withdrawal" | "Transfer";
-type TxnStatus = "posted" | "pending" | "reversed" | "rejected";
-
-interface SavingsTxn {
-  id: string;
-  sv: string;
-  member: string;
-  type: TxnType;
-  product: string; // product code
-  toProduct?: string; // transfers only
-  amount: number;
-  date: string;
-  channel: string;
-  reference: string;
-  status: TxnStatus;
-}
 
 /** Withdrawals above this amount need a second officer to post them. */
 const APPROVAL_THRESHOLD = 2_000_000;
 
 const PRODUCT_COLORS = ["#4A90D9", "#C0C0C0", "#22c55e", "#a855f7", "#f59e0b", "#ef4444", "#14b8a6"];
 
-// Names and balances match ADMIN_PRODUCT_DISTRIBUTION (total UGX 4.82B = dashboard KPI).
-const DEFAULT_PRODUCTS: SavingsProduct[] = [
-  { code: "SV-REG", name: "Regular Savings", rate: 5, min: 50_000, members: 789, balance: 2_100_000_000, status: "active", color: "#4A90D9", description: "Mandatory monthly savings that build members' borrowing power." },
-  { code: "SV-FLEX", name: "Flexi/Wallet", rate: 3, min: 0, members: 512, balance: 850_000_000, status: "active", color: "#C0C0C0", description: "Voluntary wallet with free deposits and withdrawals via mobile money." },
-  { code: "SV-FIX", name: "Fixed Savings", rate: 12, min: 1_000_000, members: 143, balance: 1_200_000_000, status: "active", color: "#22c55e", description: "Locked 6–24 month deposits earning a higher fixed rate." },
-  { code: "SV-YSV", name: "Young Savers", rate: 6, min: 10_000, members: 96, balance: 180_000_000, status: "active", color: "#a855f7", description: "Savings for members' children under 18, managed by a parent." },
-  { code: "SV-LGS", name: "Loan Guarantee", rate: 3, min: 0, members: 274, balance: 490_000_000, status: "active", color: "#f59e0b", description: "Savings held under lien as security for member loans." },
-];
-
-// Names/SV numbers match ADMIN_MEMBERS_LIST; several mirror dashboard activity and approvals.
-const DEFAULT_TXN: SavingsTxn[] = [
-  { id: "TXN-4821", sv: "SV-0056", member: "Fatima Nankya", type: "Deposit", product: "SV-REG", amount: 500_000, date: "2026-11-04", channel: "Mobile Money", reference: "MM-882134", status: "posted" },
-  { id: "TXN-4820", sv: "SV-0012", member: "Robert Kizza", type: "Withdrawal", product: "SV-FLEX", amount: 2_000_000, date: "2026-11-04", channel: "Bank", reference: "BNK-55102", status: "posted" },
-  { id: "TXN-4819", sv: "SV-0034", member: "David Ssempala", type: "Withdrawal", product: "SV-REG", amount: 3_000_000, date: "2026-11-03", channel: "Cash", reference: "CSH-20931", status: "pending" },
-  { id: "TXN-4818", sv: "SV-0042", member: "James Mukasa", type: "Deposit", product: "SV-REG", amount: 200_000, date: "2026-11-02", channel: "Mobile Money", reference: "MM-880017", status: "posted" },
-  { id: "TXN-4817", sv: "SV-0089", member: "Samuel Byaruhanga", type: "Deposit", product: "SV-FIX", amount: 5_000_000, date: "2026-11-01", channel: "Bank", reference: "BNK-55087", status: "posted" },
-  { id: "TXN-4816", sv: "SV-0001", member: "Alice Namugga", type: "Deposit", product: "SV-YSV", amount: 150_000, date: "2026-10-28", channel: "Cash", reference: "CSH-20877", status: "posted" },
-  { id: "TXN-4815", sv: "SV-0023", member: "Grace Nabirye", type: "Transfer", product: "SV-FLEX", toProduct: "SV-LGS", amount: 1_000_000, date: "2026-10-22", channel: "Internal", reference: "TRF-1093", status: "posted" },
-  { id: "TXN-4814", sv: "SV-0042", member: "James Mukasa", type: "Deposit", product: "SV-FLEX", amount: 500_000, date: "2026-10-18", channel: "Mobile Money", reference: "MM-861120", status: "posted" },
-  { id: "TXN-4813", sv: "SV-0078", member: "Martha Apio", type: "Deposit", product: "SV-REG", amount: 300_000, date: "2026-10-15", channel: "Cash", reference: "CSH-20790", status: "posted" },
-  { id: "TXN-4812", sv: "SV-0042", member: "James Mukasa", type: "Withdrawal", product: "SV-FLEX", amount: 1_000_000, date: "2026-10-09", channel: "Bank", reference: "BNK-54920", status: "posted" },
-  { id: "TXN-4811", sv: "SV-0067", member: "Peter Okello", type: "Withdrawal", product: "SV-REG", amount: 400_000, date: "2026-10-05", channel: "Cash", reference: "CSH-20702", status: "rejected" },
-];
-
 type TabId = "overview" | "products" | "transactions";
 const TAB_IDS: TabId[] = ["overview", "products", "transactions"];
 
-const MEMBER_OPTIONS = [
-  { value: "", label: "Select a member…" },
-  ...ADMIN_MEMBERS_LIST.map((m) => ({ value: m.sv_number, label: `${m.name} (${m.sv_number})${m.status !== "active" ? ` — ${m.status}` : ""}` })),
-];
+/** Member picker over the live register; non-active members are labelled. */
+function memberOptions(members: Member[]) {
+  return [
+    { value: "", label: "Select a member…" },
+    ...members.map((m) => ({ value: m.sv_number, label: `${m.name} (${m.sv_number})${m.status !== "active" ? ` (${m.status})` : ""}` })),
+  ];
+}
 
 const EMPTY_TXN_FORM = { sv: "", type: "Deposit" as TxnType, product: "SV-REG", toProduct: "SV-FLEX", amount: "", channel: "Mobile Money", reference: "" };
 const EMPTY_PRODUCT_FORM = { code: "", name: "", rate: "", min: "", status: "active" as SavingsProduct["status"], description: "" };
 
 const th = "text-left px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap";
 const td = "px-4 py-3 text-xs whitespace-nowrap";
-
-/** Apply (sign = 1) or undo (sign = -1) a posted transaction on product balances. */
-function applyToProducts(products: SavingsProduct[], t: SavingsTxn, sign: 1 | -1): SavingsProduct[] {
-  return products.map((p) => {
-    let delta = 0;
-    if (t.type === "Deposit" && p.code === t.product) delta = t.amount;
-    if (t.type === "Withdrawal" && p.code === t.product) delta = -t.amount;
-    if (t.type === "Transfer") {
-      if (p.code === t.product) delta = -t.amount;
-      if (p.code === t.toProduct) delta = t.amount;
-    }
-    return delta ? { ...p, balance: p.balance + sign * delta } : p;
-  });
-}
-
-function nextTxnId(txns: SavingsTxn[]): string {
-  const max = txns.reduce((m, t) => Math.max(m, Number(t.id.replace(/\D/g, "")) || 0), 4800);
-  return `TXN-${max + 1}`;
-}
 
 export default function AdminSavingsPage() {
   return (
@@ -126,8 +64,10 @@ function SavingsInner() {
   const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "overview";
   const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
 
-  const [products, setProducts] = usePersistedState<SavingsProduct[]>("admin_savings_products", DEFAULT_PRODUCTS);
-  const [transactions, setTransactions] = usePersistedState<SavingsTxn[]>("admin_savings_txn", DEFAULT_TXN);
+  const [products, setProducts] = usePersistedState<SavingsProduct[]>(SAVINGS_PRODUCTS_KEY, DEFAULT_SAVINGS_PRODUCTS);
+  const [transactions, setTransactions] = usePersistedState<SavingsTxn[]>(SAVINGS_TXN_KEY, DEFAULT_SAVINGS_TXN);
+  // Live member register: pickers follow registrations/removals, and posted money moves its savings column.
+  const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
 
   // Filters
   const [typeFilter, setTypeFilter] = useState("all");
@@ -190,7 +130,7 @@ function SavingsInner() {
 
   const submitTxn = () => {
     const errors: Record<string, string> = {};
-    const member = ADMIN_MEMBERS_LIST.find((m) => m.sv_number === txnForm.sv);
+    const member = members.find((m) => m.sv_number === txnForm.sv);
     const amount = Number(txnForm.amount);
     if (!member) errors.sv = "Choose a member";
     else if (member.status === "suspended") errors.sv = `${member.name} is suspended — transactions are blocked`;
@@ -220,7 +160,10 @@ function SavingsInner() {
       status: needsApproval ? "pending" : "posted",
     };
     setTransactions((prev) => [txn, ...prev]);
-    if (!needsApproval) setProducts((prev) => applyToProducts(prev, txn, 1));
+    if (!needsApproval) {
+      setProducts((prev) => applyToProducts(prev, txn, 1));
+      setMembers((prev) => applyToMembers(prev, txn, 1));
+    }
     setTxnOpen(false);
     showToast(
       needsApproval
@@ -236,10 +179,12 @@ function SavingsInner() {
     if (action === "post") {
       setTransactions((prev) => prev.map((x) => (x.id === txn.id ? { ...x, status: "posted" } : x)));
       setProducts((prev) => applyToProducts(prev, txn, 1));
+      setMembers((prev) => applyToMembers(prev, txn, 1));
       showToast(`${txn.id} approved and posted`);
     } else if (action === "reverse") {
       setTransactions((prev) => prev.map((x) => (x.id === txn.id ? { ...x, status: "reversed" } : x)));
       setProducts((prev) => applyToProducts(prev, txn, -1));
+      setMembers((prev) => applyToMembers(prev, txn, -1));
       showToast(`${txn.id} reversed — balances restored`, "info");
     } else {
       setTransactions((prev) => prev.map((x) => (x.id === txn.id ? { ...x, status: "rejected" } : x)));
@@ -487,7 +432,7 @@ function SavingsInner() {
                         <p className="dm-text font-medium">{t.member}</p>
                         <p className="dm-text-secondary text-[11px]">{t.sv}</p>
                       </td>
-                      <td className={cn(td, "font-semibold", t.type === "Deposit" ? "text-[#22c55e]" : t.type === "Withdrawal" ? "text-[#ef4444]" : "text-[#4A90D9]")}>{t.type}</td>
+                      <td className={cn(td, "font-semibold", t.type === "Deposit" ? "text-[#16a34a]" : t.type === "Withdrawal" ? "text-[#ef4444]" : "text-[#4A90D9]")}>{t.type}</td>
                       <td className={cn(td, "dm-text-secondary")}>
                         {productName(t.product)}
                         {t.toProduct && <> → {productName(t.toProduct)}</>}
@@ -504,7 +449,7 @@ function SavingsInner() {
                           {t.status === "pending" && (
                             <>
                               <button onClick={() => setConfirm({ action: "post", txn: t })}
-                                className="px-2 py-1 bg-[#22c55e] text-white rounded-lg text-[10px] font-medium hover:bg-[#16a34a] transition-colors inline-flex items-center gap-1">
+                                className="px-2 py-1 bg-[#16a34a] text-white rounded-lg text-[10px] font-medium hover:bg-[#15803d] transition-colors inline-flex items-center gap-1">
                                 <CheckCircle className="w-3 h-3" /> Post
                               </button>
                               <button onClick={() => setConfirm({ action: "reject", txn: t })}
@@ -551,7 +496,7 @@ function SavingsInner() {
       >
         <div className="space-y-4">
           <FormField label="Member" required error={txnErrors.sv}>
-            <SelectInput value={txnForm.sv} onChange={(v) => setTxnForm({ ...txnForm, sv: v })} options={MEMBER_OPTIONS} />
+            <SelectInput value={txnForm.sv} onChange={(v) => setTxnForm({ ...txnForm, sv: v })} options={memberOptions(members)} />
           </FormField>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Transaction type" required>

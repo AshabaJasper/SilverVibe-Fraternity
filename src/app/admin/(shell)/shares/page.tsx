@@ -11,10 +11,12 @@ import {
 import { formatCurrency, formatCompact, formatNumber, formatDate, todayISO, cn } from "@/lib/utils";
 import { ADMIN_KPI, ADMIN_MEMBERS_LIST } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
+import { KEYS } from "@/lib/keys";
 import { exportToCsv } from "@/lib/export";
 import { generateShareCertificate } from "@/lib/pdf-reports";
 import Modal, { FormField, TextInput, SelectInput, Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, Badge, PageHeader, StatCard, Tabs } from "@/components/ui";
+import type { Member } from "../_lib/seeds";
 
 // ------------------------------------------------------------------
 // Types & seed data
@@ -116,10 +118,13 @@ const FY_OPTIONS = ["FY 2021", "FY 2022", "FY 2023", "FY 2024", "FY 2025", "FY 2
 type TabId = "overview" | "shareholders" | "dividends" | "units";
 const TAB_IDS: TabId[] = ["overview", "shareholders", "dividends", "units"];
 
-const MEMBER_OPTIONS = [
-  { value: "", label: "Select a member…" },
-  ...ADMIN_MEMBERS_LIST.map((m) => ({ value: m.sv_number, label: `${m.name} (${m.sv_number})` })),
-];
+/** Member picker over the live register; non-active members are labelled. */
+function memberOptions(members: Member[]) {
+  return [
+    { value: "", label: "Select a member…" },
+    ...members.map((m) => ({ value: m.sv_number, label: `${m.name} (${m.sv_number})${m.status !== "active" ? ` (${m.status})` : ""}` })),
+  ];
+}
 
 const th = "text-left px-4 py-3 text-xs font-semibold text-[#64748b] whitespace-nowrap";
 const td = "px-4 py-3 text-xs whitespace-nowrap";
@@ -146,6 +151,9 @@ function SharesInner() {
   const [config, setConfig] = usePersistedState<ShareConfig>("admin_share_config", DEFAULT_SHARE_CONFIG);
   const [dividends, setDividends] = usePersistedState<Dividend[]>("admin_share_dividends", DEFAULT_DIVIDENDS);
   const [iu, setIu] = usePersistedState<IuHolding[]>("admin_iu_holdings", DEFAULT_IU);
+  // Live member register: pickers follow registrations/removals, and its shares column
+  // (UGX value = shares × share value) is kept in step with the shareholder register.
+  const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
 
   // Modal state
   const [issueOpen, setIssueOpen] = useState(false);
@@ -167,7 +175,8 @@ function SharesInner() {
   // ---------------- Derived figures ----------------
   const totalShares = shareholders.reduce((a, s) => a + s.shares, 0);
   const totalCapital = totalShares * config.shareValue;
-  const holderCount = shareholders.reduce((a, s) => a + (s.holders ?? 1), 0);
+  // Members whose holding is zero (e.g. after transferring everything out) are not shareholders.
+  const holderCount = shareholders.reduce((a, s) => a + (s.shares > 0 ? s.holders ?? 1 : 0), 0);
   const named = shareholders.filter((s) => !s.holders);
 
   // Sort a copy (never mutate state in render): largest holders first, aggregated row last.
@@ -188,7 +197,12 @@ function SharesInner() {
     return { units, invested, value, gain: value - invested, holders: iu.filter((h) => h.units > 0).length };
   }, [iu, config.iuPrice]);
 
-  const memberBySv = (sv: string) => ADMIN_MEMBERS_LIST.find((m) => m.sv_number === sv);
+  const memberBySv = (sv: string) => members.find((m) => m.sv_number === sv);
+  const memberOpts = memberOptions(members);
+
+  /** Write new share holdings (count of shares per SV) into the member register as UGX value. */
+  const syncMemberShares = (holdings: Record<string, number>, shareValue = config.shareValue) =>
+    setMembers((prev) => prev.map((m) => (m.sv_number in holdings ? { ...m, shares: holdings[m.sv_number] * shareValue } : m)));
   const holdingOf = (sv: string) => shareholders.find((s) => s.sv === sv)?.shares ?? 0;
   const nextCert = () => {
     const max = shareholders.reduce((m, s) => Math.max(m, Number(s.cert.replace(/\D/g, "")) || 0), 0);
@@ -214,6 +228,7 @@ function SharesInner() {
         ? prev.map((s) => (s.sv === m.sv_number ? { ...s, shares: s.shares + issueQty } : s))
         : [...prev, { sv: m.sv_number, name: m.name, shares: issueQty, cert, since: todayISO() }]
     );
+    syncMemberShares({ [m.sv_number]: holdingOf(m.sv_number) + issueQty });
     showToast(`${formatNumber(issueQty)} shares (${formatCurrency(issueQty * config.shareValue)}) issued to ${m.name}`);
     setIssueOpen(false);
   };
@@ -242,6 +257,10 @@ function SharesInner() {
     setErrors(e);
     if (Object.keys(e).length) return;
     setConfig(c);
+    // A new share value revalues every listed holding in the member register.
+    if (c.shareValue !== config.shareValue) {
+      syncMemberShares(Object.fromEntries(named.map((s) => [s.sv, s.shares])), c.shareValue);
+    }
     showToast("Share configuration updated");
     setConfigOpen(false);
   };
@@ -256,6 +275,7 @@ function SharesInner() {
     setErrors(e);
     if (Object.keys(e).length) return;
     setShareholders((prev) => prev.map((s) => (s.sv === editing.sv ? { ...s, shares: n } : s)));
+    syncMemberShares({ [editing.sv]: n });
     showToast(`${editing.name} now holds ${formatNumber(n)} shares`);
     setEditing(null);
   };
@@ -283,6 +303,7 @@ function SharesInner() {
       );
       return toExists ? moved : [...moved, { sv: toMember.sv_number, name: toMember.name, shares: qty, cert, since: todayISO() }];
     });
+    syncMemberShares({ [from.sv]: from.shares - qty, [toMember.sv_number]: holdingOf(toMember.sv_number) + qty });
     showToast(`${formatNumber(qty)} shares transferred from ${from.name} to ${toMember.name}`);
     setTransferOpen(false);
   };
@@ -332,6 +353,7 @@ function SharesInner() {
     const m = memberBySv(iuForm.sv);
     const holding = iu.find((h) => h.sv === iuForm.sv);
     if (!m) e.sv = "Choose a member";
+    else if (iuModal === "buy" && m.status === "suspended") e.sv = `${m.name} is suspended — purchases are blocked`;
     if (!Number.isInteger(iuQty) || iuQty < 1) e.units = "Enter a whole number of units";
     else if (iuModal === "redeem" && (!holding || iuQty > holding.units)) e.units = `Only ${holding?.units ?? 0} units held`;
     setErrors(e);
@@ -376,7 +398,7 @@ function SharesInner() {
       sortedShareholders.map((s) => ({
         sv: s.holders ? "" : s.sv,
         name: s.holders ? `${s.name} (${s.holders})` : s.name,
-        holders: s.holders ?? 1,
+        holders: s.shares > 0 ? s.holders ?? 1 : 0,
         shares: s.shares,
         value: s.shares * config.shareValue,
         percent: totalShares ? ((s.shares / totalShares) * 100).toFixed(2) : "0",
@@ -392,9 +414,13 @@ function SharesInner() {
 
   const shareholderOptions = [
     { value: "", label: "Select shareholder…" },
-    ...[...named].sort((a, b) => a.name.localeCompare(b.name)).map((s) => ({ value: s.sv, label: `${s.name} (${s.sv}) — ${formatNumber(s.shares)} shares` })),
+    // Only members still on the register who actually hold shares.
+    ...named
+      .filter((s) => s.shares > 0 && members.some((m) => m.sv_number === s.sv))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((s) => ({ value: s.sv, label: `${s.name} (${s.sv}) — ${formatNumber(s.shares)} shares` })),
   ];
-  const iuHolderOptions = [{ value: "", label: "Select holder…" }, ...iu.map((h) => ({ value: h.sv, label: `${h.name} (${h.sv}) — ${h.units} units` }))];
+  const iuHolderOptions = [{ value: "", label: "Select holder…" }, ...iu.filter((h) => members.some((m) => m.sv_number === h.sv)).map((h) => ({ value: h.sv, label: `${h.name} (${h.sv}) — ${h.units} units` }))];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -578,7 +604,7 @@ function SharesInner() {
                           {d.status === "declared" ? (
                             <div className="flex justify-end gap-1.5">
                               <button onClick={() => setDivConfirm({ action: "pay", fy: d.fy })}
-                                className="inline-flex items-center gap-1 px-2 py-1 bg-[#22c55e] text-white rounded-lg text-[10px] font-medium hover:bg-[#16a34a]">
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-[#16a34a] text-white rounded-lg text-[10px] font-medium hover:bg-[#15803d]">
                                 <CheckCircle className="w-3 h-3" /> Mark paid
                               </button>
                               <button onClick={() => setDivConfirm({ action: "cancel", fy: d.fy })} aria-label={`Cancel ${d.fy} declaration`}
@@ -670,7 +696,7 @@ function SharesInner() {
         <div className="space-y-4">
           <FormField label="Member" required error={errors.sv}
             hint={issueForm.sv ? `Currently holds ${formatNumber(holdingOf(issueForm.sv))} shares` : undefined}>
-            <SelectInput value={issueForm.sv} onChange={(v) => setIssueForm({ ...issueForm, sv: v })} options={MEMBER_OPTIONS} />
+            <SelectInput value={issueForm.sv} onChange={(v) => setIssueForm({ ...issueForm, sv: v })} options={memberOpts} />
           </FormField>
           <FormField label="Number of shares" required error={errors.shares}
             hint={`Min ${config.minShares} per purchase · max holding ${formatNumber(config.maxShares)} shares`}>
@@ -730,7 +756,7 @@ function SharesInner() {
             <SelectInput value={transferForm.from} onChange={(v) => setTransferForm({ ...transferForm, from: v })} options={shareholderOptions} />
           </FormField>
           <FormField label="To member" required error={errors.to}>
-            <SelectInput value={transferForm.to} onChange={(v) => setTransferForm({ ...transferForm, to: v })} options={MEMBER_OPTIONS} />
+            <SelectInput value={transferForm.to} onChange={(v) => setTransferForm({ ...transferForm, to: v })} options={memberOpts} />
           </FormField>
           <FormField label="Shares to transfer" required error={errors.shares}
             hint={`Value: ${formatCurrency((Number(transferForm.shares) || 0) * config.shareValue)}`}>
@@ -767,7 +793,7 @@ function SharesInner() {
         footer={<><Button variant="secondary" onClick={() => setIuModal(null)}>Cancel</Button><Button onClick={submitIu}>{iuModal === "redeem" ? "Redeem" : "Buy units"}</Button></>}>
         <div className="space-y-4">
           <FormField label={iuModal === "redeem" ? "Holder" : "Member"} required error={errors.sv}>
-            <SelectInput value={iuForm.sv} onChange={(v) => setIuForm({ ...iuForm, sv: v })} options={iuModal === "redeem" ? iuHolderOptions : MEMBER_OPTIONS} />
+            <SelectInput value={iuForm.sv} onChange={(v) => setIuForm({ ...iuForm, sv: v })} options={iuModal === "redeem" ? iuHolderOptions : memberOpts} />
           </FormField>
           <FormField label="Units" required error={errors.units} hint={`NAV ${formatCurrency(config.iuPrice)} per unit`}>
             <TextInput type="number" min={1} value={iuForm.units} onChange={(v) => setIuForm({ ...iuForm, units: v })} />

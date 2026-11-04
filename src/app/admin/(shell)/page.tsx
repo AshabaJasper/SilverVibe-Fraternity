@@ -4,26 +4,83 @@ import type { LucideIcon } from "lucide-react";
 import {
   Users, PiggyBank, CreditCard, AlertTriangle, BarChart3, Target,
   Clock, TrendingUp, TrendingDown, CheckCircle2, XCircle, UserPlus, ChevronRight,
-  ArrowLeftRight, FilePlus2, Megaphone, PartyPopper, RotateCcw,
+  ArrowLeftRight, FilePlus2, Megaphone, PartyPopper, Banknote,
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
+import { formatCurrency, formatDate, formatNumber, todayISO } from "@/lib/utils";
 import {
   ADMIN_KPI, ADMIN_SAVINGS_GROWTH, ADMIN_LOAN_PERFORMANCE, ADMIN_PRODUCT_DISTRIBUTION,
-  ADMIN_RECENT_ACTIVITY, ADMIN_PENDING_APPROVALS, ADMIN_MEMBERS_LIST, ADMIN_LOAN_APPLICATIONS,
+  ADMIN_RECENT_ACTIVITY, ADMIN_MEMBERS_LIST, ADMIN_LOAN_APPLICATIONS,
   DEMO_ADMIN, DEMO_TODAY, MEMBER_GROWTH, PORTFOLIO_QUALITY,
 } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { Badge, EmptyState } from "@/components/ui";
+import {
+  DEFAULT_SAVINGS_PRODUCTS, DEFAULT_SAVINGS_TXN, MANUAL_APPROVALS_SEED, PENDING_KEY,
+  SAVINGS_PRODUCTS_KEY, SAVINGS_TXN_KEY, applyToMembers, applyToProducts, isDerivedApprovalType,
+  isPendingLoanStatus,
+  type LoanApp, type ManualApproval, type Member, type SavingsProduct, type SavingsTxn,
+} from "./_lib/seeds";
 
-type PendingApproval = (typeof ADMIN_PENDING_APPROVALS)[number];
 type ActivityItem = (typeof ADMIN_RECENT_ACTIVITY)[number];
 
-const PENDING_KEY = "admin_pending_approvals";
+/**
+ * One row in Pending Approvals. Loan, disbursement and withdrawal rows are derived live
+ * from their source records (loan applications, savings transactions), so deciding
+ * them here or on the Loans/Savings pages always shows the same state.
+ */
+interface ApprovalItem {
+  key: string;
+  kind: "loan_app" | "disbursement" | "withdrawal" | "manual";
+  sourceId: string;
+  type: string;
+  member: string;
+  amount: number | null;
+  submitted: string;
+  priority: string;
+  href: string;
+}
+
+const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+function buildApprovals(apps: LoanApp[], txns: SavingsTxn[], manual: ManualApproval[]): ApprovalItem[] {
+  const items: ApprovalItem[] = [];
+  for (const a of apps) {
+    const member = `${a.member} (${a.sv})`;
+    if (isPendingLoanStatus(a.status)) {
+      items.push({
+        key: `la:${a.id}`, kind: "loan_app", sourceId: a.id, type: "Loan Application", member, amount: a.amount,
+        submitted: a.applied_date, priority: a.status === "pending_review" ? "high" : "medium", href: "/admin/loans?tab=applications",
+      });
+    } else if (a.status === "approved") {
+      items.push({
+        key: `ld:${a.id}`, kind: "disbursement", sourceId: a.id, type: "Loan Disbursement", member, amount: a.amount,
+        submitted: a.decided_date ?? a.applied_date, priority: "high", href: "/admin/loans?tab=applications",
+      });
+    }
+  }
+  for (const t of txns) {
+    if (t.status === "pending" && t.type === "Withdrawal") {
+      items.push({
+        key: `wd:${t.id}`, kind: "withdrawal", sourceId: t.id, type: "Withdrawal", member: `${t.member} (${t.sv})`, amount: t.amount,
+        submitted: t.date, priority: "medium", href: "/admin/savings?tab=transactions",
+      });
+    }
+  }
+  // Older browsers may still hold derived items in the persisted list; skip them.
+  for (const pa of manual) {
+    if (isDerivedApprovalType(pa.type)) continue;
+    items.push({
+      key: `pa:${pa.id}`, kind: "manual", sourceId: pa.id, type: pa.type, member: pa.member, amount: pa.amount,
+      submitted: pa.submitted, priority: pa.priority, href: approvalHref(pa.type, pa.member),
+    });
+  }
+  return items.sort((a, b) => b.submitted.localeCompare(a.submitted) || (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3));
+}
 
 // Neutral grid colour that reads in both light and dark mode.
 const GRID = { stroke: "#94a3b8", strokeOpacity: 0.25 };
@@ -34,7 +91,8 @@ const PRODUCT_COLORS = ADMIN_PRODUCT_DISTRIBUTION.map((p) => (p.color === "#1A1A
 
 const PQ_COLORS: Record<string, string> = {
   Current: "#22c55e", "Watch (1-30)": "#f59e0b", "Substandard (31-60)": "#f97316",
-  "Doubtful (61-90)": "#ef4444", "Loss (90+)": "#991b1b",
+  // #991b1b was unreadable on the dark theme; #dc2626 reads on both.
+  "Doubtful (61-90)": "#ef4444", "Loss (90+)": "#dc2626",
 };
 
 /** Pull "SV-0067" out of "Peter Okello (SV-0067)". */
@@ -42,13 +100,12 @@ function svFrom(text: string): string | null {
   return /SV-\d{4}/.exec(text)?.[0] ?? null;
 }
 
-/** Where a pending approval is actioned in full. */
-function approvalHref(pa: PendingApproval): string {
-  const t = pa.type.toLowerCase();
-  if (t.includes("loan")) return "/admin/loans?tab=applications";
-  if (t.includes("withdrawal") || t.includes("deposit")) return "/admin/savings?tab=transactions";
+/** Where a manual (non-derived) approval is actioned in full. */
+function approvalHref(type: string, member: string): string {
+  const t = type.toLowerCase();
+  if (t.includes("deposit")) return "/admin/savings?tab=transactions";
   if (t.includes("profile")) {
-    const sv = svFrom(pa.member);
+    const sv = svFrom(member);
     return sv ? `/admin/members?q=${sv}` : "/admin/members";
   }
   if (t.includes("journal")) return "/admin/accounting?tab=journal";
@@ -70,10 +127,13 @@ function activityHref(a: ActivityItem): string {
 }
 
 function KPICard({
-  label, value, change, icon: Icon, color, href, sub,
+  label, value, change, icon: Icon, color, href, sub, goodWhenDown = false,
 }: {
   label: string; value: string; change?: number; icon: LucideIcon; color: string; href: string; sub?: string;
+  /** For risk ratios such as PAR a fall is good news, so it is shown green. */
+  goodWhenDown?: boolean;
 }) {
+  const good = change !== undefined && (goodWhenDown ? change <= 0 : change >= 0);
   return (
     <Link href={href} className="block glass-card rounded-xl p-5 hover:shadow-md transition-all animate-fade-in group">
       <div className="flex items-start justify-between mb-3">
@@ -82,7 +142,7 @@ function KPICard({
         </div>
         {change !== undefined && (
           <span className={`flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full ${
-            change >= 0 ? "bg-[#22c55e]/10 text-[#16a34a]" : "bg-[#ef4444]/10 text-[#dc2626]"
+            good ? "bg-[#22c55e]/10 text-[#16a34a]" : "bg-[#ef4444]/10 text-[#dc2626]"
           }`}>
             {change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
             {Math.abs(change)}%
@@ -112,28 +172,48 @@ function QuickAction({ href, icon: Icon, label, color }: { href: string; icon: L
 
 export default function AdminDashboard() {
   const kpi = ADMIN_KPI;
-  const [pending, setPending] = usePersistedState<PendingApproval[]>(PENDING_KEY, ADMIN_PENDING_APPROVALS);
-  const [members] = usePersistedState(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
-  const [, setLoanApps] = usePersistedState(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
+  const [manual, setManual] = usePersistedState<ManualApproval[]>(PENDING_KEY, MANUAL_APPROVALS_SEED);
+  const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
+  const [loanApps, setLoanApps] = usePersistedState<LoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
+  const [txns, setTxns] = usePersistedState<SavingsTxn[]>(SAVINGS_TXN_KEY, DEFAULT_SAVINGS_TXN);
+  const [, setProducts] = usePersistedState<SavingsProduct[]>(SAVINGS_PRODUCTS_KEY, DEFAULT_SAVINGS_PRODUCTS);
+
+  const pending = buildApprovals(loanApps, txns, manual);
 
   // Society-wide count: seeded total plus/minus members registered or removed in the demo register.
   const totalMembers = kpi.total_members.value + (members.length - ADMIN_MEMBERS_LIST.length);
 
-  const decide = (pa: PendingApproval, approved: boolean) => {
-    setPending((prev) => prev.filter((p) => p.id !== pa.id));
-    // Keep the Loans page in step: a loan application decided here is decided there too.
-    const sv = svFrom(pa.member);
-    if (pa.type === "Loan Application" && sv) {
+  /** Approve/reject performs the same change the owning page would make. */
+  const decide = (item: ApprovalItem, approved: boolean) => {
+    const today = todayISO();
+    if (item.kind === "loan_app") {
       setLoanApps((prev) =>
         prev.map((a) =>
-          a.sv === sv && (a.status === "pending_review" || a.status === "under_appraisal")
-            ? { ...a, status: approved ? "approved" : "rejected" }
+          a.id === item.sourceId && isPendingLoanStatus(a.status)
+            ? approved
+              ? { ...a, status: "approved", decided_date: today, approve_note: "Approved from dashboard" }
+              : { ...a, status: "rejected", decided_date: today, decline_reason: "Declined from dashboard" }
             : a
         )
       );
+    } else if (item.kind === "withdrawal") {
+      const txn = txns.find((t) => t.id === item.sourceId && t.status === "pending");
+      if (!txn) return;
+      setTxns((prev) => prev.map((t) => (t.id === txn.id ? { ...t, status: approved ? "posted" : "rejected" } : t)));
+      if (approved) {
+        // Posting moves the product balance and the member's savings, exactly as on the Savings page.
+        setProducts((prev) => applyToProducts(prev, txn, 1));
+        setMembers((prev) => applyToMembers(prev, txn, 1));
+      }
+    } else if (item.kind === "manual") {
+      setManual((prev) => prev.filter((p) => p.id !== item.sourceId));
+    } else {
+      return; // Disbursements open the Loans page (the disbursement needs its modal).
     }
     showToast(
-      `${pa.type} for ${pa.member} ${approved ? "approved" : "rejected"}`,
+      item.kind === "withdrawal"
+        ? `${item.sourceId} ${approved ? "approved and posted" : "rejected"} for ${item.member}`
+        : `${item.type} for ${item.member} ${approved ? "approved" : "rejected"}`,
       approved ? "success" : "info"
     );
   };
@@ -160,7 +240,7 @@ export default function AdminDashboard() {
         <KPICard label="Total Members" value={formatNumber(totalMembers)} change={kpi.total_members.change} icon={Users} color="#4A90D9" href="/admin/members" sub={`${kpi.total_members.active} active`} />
         <KPICard label="Total Savings" value={formatCurrency(kpi.total_savings.value)} change={kpi.total_savings.change} icon={PiggyBank} color="#22c55e" href="/admin/savings" />
         <KPICard label="Loan Book" value={formatCurrency(kpi.total_loan_book.value)} change={kpi.total_loan_book.change} icon={CreditCard} color="#a855f7" href="/admin/loans?tab=active" />
-        <KPICard label="PAR > 30 Days" value={`${kpi.par_30.value}%`} change={kpi.par_30.change} icon={AlertTriangle} color="#ef4444" href="/admin/loans?tab=overview" sub="Portfolio quality" />
+        <KPICard label="PAR > 30 Days" value={`${kpi.par_30.value}%`} change={kpi.par_30.change} goodWhenDown icon={AlertTriangle} color="#ef4444" href="/admin/loans?tab=overview" sub="Portfolio quality" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <KPICard label="Share Capital" value={formatCurrency(kpi.total_share_capital.value)} change={kpi.total_share_capital.change} icon={BarChart3} color="#a855f7" href="/admin/shares" />
@@ -349,22 +429,13 @@ export default function AdminDashboard() {
             <EmptyState
               icon={PartyPopper}
               title="All caught up"
-              hint="There are no items waiting for your approval."
-              action={
-                <button
-                  type="button"
-                  onClick={() => { setPending(ADMIN_PENDING_APPROVALS); showToast("Demo approvals restored", "info"); }}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 border dm-border rounded-lg text-xs font-medium dm-text hover:bg-[#f1f5f9]"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Restore demo items
-                </button>
-              }
+              hint="No loan applications, disbursements, withdrawals or other items are waiting for approval."
             />
           ) : (
             <div className="space-y-3">
               {pending.map((pa) => (
-                <div key={pa.id} className="p-3 border dm-border rounded-lg hover:border-[#4A90D9]/40 transition-colors flex items-start gap-3">
-                  <Link href={approvalHref(pa)} className="flex-1 min-w-0 group" title="Open in the relevant page">
+                <div key={pa.key} className="p-3 border dm-border rounded-lg hover:border-[#4A90D9]/40 transition-colors flex items-start gap-3">
+                  <Link href={pa.href} className="flex-1 min-w-0 group" title="Open in the relevant page">
                     <p className="text-xs font-semibold dm-text group-hover:text-[#4A90D9] inline-flex items-center gap-0.5">
                       {pa.type} <ChevronRight className="w-3 h-3" />
                     </p>
@@ -372,29 +443,42 @@ export default function AdminDashboard() {
                     {pa.amount !== null && <p className="text-sm font-semibold dm-text mt-1">{formatCurrency(pa.amount)}</p>}
                     <div className="flex items-center gap-2 mt-2">
                       <Badge status={pa.priority} tone={pa.priority === "high" ? "red" : pa.priority === "medium" ? "amber" : "gray"} />
-                      <span className="text-[10px] dm-text-secondary">Submitted {formatDate(pa.submitted)}</span>
+                      <span className="text-[10px] dm-text-secondary">
+                        {pa.kind === "disbursement" ? "Approved" : "Submitted"} {formatDate(pa.submitted)}
+                      </span>
                     </div>
                   </Link>
-                  <div className="flex gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => decide(pa, true)}
-                      title="Approve"
-                      aria-label={`Approve ${pa.type} for ${pa.member}`}
-                      className="p-1.5 rounded-lg bg-[#22c55e]/10 hover:bg-[#22c55e]/20 transition-colors"
+                  {pa.kind === "disbursement" ? (
+                    // Disbursing needs the Loans page modal (fees, schedule preview).
+                    <Link
+                      href={pa.href}
+                      aria-label={`Disburse loan for ${pa.member}`}
+                      className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#4A90D9]/10 text-[#4A90D9] text-[11px] font-medium hover:bg-[#4A90D9]/20 transition-colors"
                     >
-                      <CheckCircle2 className="w-4 h-4 text-[#22c55e]" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => decide(pa, false)}
-                      title="Reject"
-                      aria-label={`Reject ${pa.type} for ${pa.member}`}
-                      className="p-1.5 rounded-lg bg-[#ef4444]/10 hover:bg-[#ef4444]/20 transition-colors"
-                    >
-                      <XCircle className="w-4 h-4 text-[#ef4444]" />
-                    </button>
-                  </div>
+                      <Banknote className="w-3.5 h-3.5" /> Disburse
+                    </Link>
+                  ) : (
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => decide(pa, true)}
+                        title="Approve"
+                        aria-label={`Approve ${pa.type} for ${pa.member}`}
+                        className="p-1.5 rounded-lg bg-[#22c55e]/10 hover:bg-[#22c55e]/20 transition-colors"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-[#16a34a]" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => decide(pa, false)}
+                        title="Reject"
+                        aria-label={`Reject ${pa.type} for ${pa.member}`}
+                        className="p-1.5 rounded-lg bg-[#ef4444]/10 hover:bg-[#ef4444]/20 transition-colors"
+                      >
+                        <XCircle className="w-4 h-4 text-[#ef4444]" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
