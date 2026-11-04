@@ -4,6 +4,30 @@
 
 ---
 
+## Live demo
+
+**https://silvervibe-sacco-app.vercel.app**
+
+| Portal | Sign-in | Credentials |
+| ------ | ------- | ----------- |
+| Admin dashboard | `/admin/login` | `admin@silvervibe.coop` / `admin123` |
+| Member portal (password) | `/portal/login` | `SV-0042` / `member123` |
+| Member portal (phone OTP) | `/portal/login` → *Phone OTP* | `+256 770 123 456`, code `123456` |
+
+Each login page has a "Click to fill in" demo box. Your changes are saved in your browser (localStorage).
+Use **account menu → Reset demo data** to restore the original data.
+
+### 3-minute demo script
+1. **Admin → Members**: register a member, edit them, export the list to CSV.
+2. **Admin → Loans**: create a new application, review and approve it, disburse it, then view and download its repayment schedule.
+3. **Admin → Accounting**: post a journal entry, then watch the trial balance update. Download the income statement PDF.
+4. **Admin → Reports**: generate any report as a PDF.
+5. **Member portal → Dashboard**: make a quick deposit and watch the balances update. Apply for a loan; it appears in Admin → Loans.
+6. **Member portal → Shares**: download a share certificate PDF.
+7. Toggle **dark mode** (moon icon) and press **Ctrl + K** to search.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -11,7 +35,15 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
+
+| Command | What it does |
+| ------- | ------------ |
+| `npm run dev` | Development server |
+| `npm run build && npm start` | Production build and server |
+| `npm run lint` | ESLint |
+| `npx tsc --noEmit` | Type check |
+| `npm run smoke` | Playwright smoke test against `BASE_URL` (default `http://localhost:3000`) |
 
 ---
 
@@ -23,7 +55,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | Styling        | Tailwind CSS 4 (`@theme`, `@layer`, `@utility`) |
 | Icons          | Lucide React                                    |
 | Charts         | Recharts (Line, Area, Bar, Pie)                 |
-| State          | Zustand (auth store), `usePersistedState` hook  |
+| State          | Zustand (persisted demo auth), `usePersistedState` hook |
+| Documents      | jsPDF + autotable (lazy-loaded) for statements, reports, certificates |
 | Persistence    | localStorage (demo edits survive refresh)       |
 | Fonts          | Inter (UI), Plus Jakarta Sans (headings)        |
 
@@ -33,40 +66,39 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ```
 src/
-    app/
-      page.tsx                  # Landing page (role selector)
-      layout.tsx                # Root layout (fonts, metadata)
-      globals.css               # Tailwind v4 theme & utilities
-      admin/
-        layout.tsx              # Sidebar + header shell
-        page.tsx                # Dashboard (KPIs, charts, activity)
-        members/page.tsx        # CRUD + modals (register, edit, delete, profile)
-        savings/page.tsx        # Products, transactions + modals
-        loans/page.tsx          # Review, approve, decline + modals
-        shares/page.tsx         # Issue shares, configure, shareholders + modals
-        accounting/page.tsx     # Journal entries, trial balance, statements + modals
-        communications/page.tsx # Announcements, compose, templates + modals
-        reports/page.tsx        # Report catalog
-        settings/page.tsx       # Org, security, integrations, users + modals
-        checklist/page.tsx      # Feature checklist with progress tracking
-      portal/
-        layout.tsx              # Member portal shell
-        page.tsx                # Member dashboard
-        savings/page.tsx        # Savings overview
-        loans/page.tsx          # Loan status
-        shares/page.tsx         # Share portfolio
-        profile/page.tsx        # Profile management
-        notifications/page.tsx  # Notification center
-        support/page.tsx        # Support tickets
-        login/page.tsx          # Portal login
-    components/
-      Modal.tsx                 # Reusable modal (sm/md/lg/xl, ESC close, overlay)
-    lib/
-      mock-data.ts              # Demo data for all pages
-      storage.ts                # usePersistedState hook, showToast, localStorage utils
-      store.ts                  # Zustand auth store
-      utils.ts                  # formatCurrency, formatNumber, cn()
+  app/
+    page.tsx                    # Landing page (choose portal)
+    layout.tsx                  # Root layout: fonts, theme, metadata
+    globals.css                 # Tailwind v4 theme, dm-* tokens, dark-mode remap
+    admin/
+      login/page.tsx            # Admin sign-in (outside the shell)
+      (shell)/layout.tsx        # Auth guard + sidebar/header shell
+      (shell)/page.tsx          # Dashboard
+      (shell)/{members,savings,loans,shares,accounting,
+               communications,reports,settings,checklist}/page.tsx
+    portal/
+      login/page.tsx            # Member sign-in: password or phone OTP
+      (shell)/layout.tsx        # Auth guard + member shell
+      (shell)/page.tsx          # Member dashboard
+      (shell)/{savings,loans,shares,profile,notifications,support}/page.tsx
+  components/
+    AppShell.tsx                # Shared sidebar, header, search, notifications, user menu
+    AuthGuard.tsx               # Redirects to the right login page (?next=)
+    Modal.tsx                   # Modal, form controls, Button, ConfirmDialog
+    ui.tsx                      # EmptyState, Badge, StatCard, Tabs, PageHeader
+    ThemeProvider.tsx           # Light/dark theme
+  lib/
+    mock-data.ts                # Seed data (computed loan schedule)
+    storage.ts                  # usePersistedState (versioned, cross-component sync), showToast
+    store.ts / auth.ts          # Persisted demo session and credentials
+    pdf-reports.ts              # PDF statements, reports, certificates
+    export.ts                   # CSV export and print
+    keys.ts                     # Shared persisted-state keys
+    utils.ts                    # Formatting, dates, useHydrated
+scripts/smoke.mjs               # Playwright smoke test
 ```
+
+`(shell)` is a Next.js route group. It wraps pages in the sidebar layout without changing their URLs, so the login pages stay outside the shell.
 
 ---
 
