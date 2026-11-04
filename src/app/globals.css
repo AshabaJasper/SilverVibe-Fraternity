@@ -219,3 +219,30 @@ html.dark .recharts-surface stop[stop-color="#1A1A1A"] { stop-color: #C0C0C0; }
   #print-area, #print-area * { visibility: visible; }
   #print-area { position: absolute; inset: 0; padding: 24px; background: #fff; color: #000; }
 }
+
+/* ── Accessibility ─────────────────────────────────────────── */
+/* Visible keyboard focus everywhere (mouse clicks don't show it). */
+:where(a, button, [role="tab"], [role="switch"], summary, [tabindex]):focus-visible {
+  outline: 2px solid #4A90D9;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: -48px;
+  z-index: 10000;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #4A90D9;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 12px; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

@@ -435,7 +435,7 @@ export default function AppShell({
           )}
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 min-w-0">{children}</main>
+        <main id="main-content" className="flex-1 p-4 lg:p-6 min-w-0">{children}</main>
       </div>
 
       <ChangePasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
