@@ -11,8 +11,8 @@ import { useAuthStore } from "@/lib/store";
 import { KEYS } from "@/lib/keys";
 import {
   ADMIN_LOAN_APPLICATIONS,
+  ADMIN_MEMBERS_LIST,
   DEMO_MEMBER,
-  DEMO_TODAY,
   LOAN_SCHEDULE,
   MEMBER_IU,
   MEMBER_LOANS,
@@ -20,10 +20,21 @@ import {
   MEMBER_SHARES,
   NOTIFICATIONS_DATA,
   RECENT_TRANSACTIONS,
-  SAVINGS_HISTORY,
+  savingsHistory,
 } from "@/lib/mock-data";
-import { daysUntil, todayISO, uid } from "@/lib/utils";
+import { uid } from "@/lib/utils";
 import { useHydrated } from "@/lib/use-hydrated";
+import {
+  ANCHOR,
+  TIMELINE_EVENTS as EV,
+  addMonthsKey,
+  daysBetween,
+  demoTodayISO,
+  lastNMonths,
+  monthKey,
+  useDemoToday,
+} from "@/lib/demo-clock";
+import { PROCESSED_KEY, applyStandingOrders, type ClockState } from "./standingOrders";
 
 // ---------------------------------------------------------------- types
 
@@ -187,7 +198,12 @@ function appSeq(id: string): number {
   return m ? Number(m[1]) : 0;
 }
 
-export const AGM_DATE = "2026-12-12";
+export const AGM_DATE = EV.agm;
+/**
+ * FY 2025/26 dividend declared at the AGM: the rate on the share capital held
+ * during that year (the seed holding, not shares bought since).
+ */
+export const DECLARED_DIVIDEND = Math.round((MEMBER_SHARES.total_value * EV.dividendRatePct) / 100);
 
 const SEED_SHARES: PortalShares = { ...MEMBER_SHARES, iu: { ...MEMBER_IU } };
 
@@ -203,12 +219,44 @@ export function monthlyInstallment(principal: number, annualRatePct: number, mon
   return (principal * r) / (1 - Math.pow(1 + r, -months));
 }
 
-/** 6-month savings history whose latest point is the member's live balances. */
-export function liveSavingsHistory(accounts: PortalAccount[]) {
+/**
+ * 6-month savings history ending in today's month at the member's live balances.
+ * Regular steps down by one standing order per month going back; Flexi keeps the
+ * seed series' shape scaled to the live balance; Fixed is a locked deposit.
+ */
+export function liveSavingsHistory(accounts: PortalAccount[], today: string) {
   const bal = (id: string) => accounts.find((a) => a.id === id)?.balance ?? 0;
-  return SAVINGS_HISTORY.map((p, i) =>
-    i === SAVINGS_HISTORY.length - 1 ? { ...p, regular: bal("sa-001"), flexi: bal("sa-002"), fixed: bal("sa-003") } : p
-  );
+  const months = lastNMonths(today, 6);
+  const shape = savingsHistory(today);
+  const lastFlexi = shape[shape.length - 1].flexi || 1;
+  const n = months.length;
+  return months.map((m, i) => {
+    const back = n - 1 - i;
+    return {
+      key: m.key,
+      month: m.month,
+      label: m.label,
+      regular: Math.max(0, bal("sa-001") - back * EV.savingsStandingOrderAmount),
+      flexi: back === 0 ? bal("sa-002") : Math.round((bal("sa-002") * shape[i].flexi) / lastFlexi / 10_000) * 10_000,
+      fixed: bal("sa-003"),
+    };
+  });
+}
+
+/** "today", "tomorrow", "in 5 days", "3 days ago" relative to the demo clock. */
+export function relativeDays(date: string, today: string): string {
+  const d = daysBetween(today, date.slice(0, 10));
+  if (d === 0) return "today";
+  if (d === 1) return "tomorrow";
+  if (d === -1) return "yesterday";
+  return d > 0 ? `in ${d} days` : `${-d} days ago`;
+}
+
+/** Next date (≥ today) the UGX 200,000 Regular Savings standing order runs. */
+export function nextSavingsOrderDate(today: string): string {
+  const day = String(EV.savingsStandingOrderDay).padStart(2, "0");
+  const thisMonth = `${monthKey(today)}-${day}`;
+  return thisMonth >= today ? thisMonth : `${monthKey(addMonthsKey(today, 1))}-${day}`;
 }
 
 /** Older builds stored transactions without account_id — infer it from the name. */
@@ -229,7 +277,7 @@ function normalizeTxn(t: Partial<PortalTxn>): PortalTxn {
               : "other";
   return {
     id: t.id ?? uid("t"),
-    date: t.date ?? DEMO_TODAY,
+    date: t.date ?? ANCHOR,
     type: t.type ?? "Transaction",
     account: t.account ?? "",
     account_id: t.account_id ?? inferred,
@@ -241,8 +289,6 @@ function normalizeTxn(t: Partial<PortalTxn>): PortalTxn {
   };
 }
 
-/** "YYYY-MM" of an ISO date. */
-const monthKey = (iso: string) => iso.slice(0, 7);
 function shiftMonth(ym: string, delta: number): string {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -252,16 +298,55 @@ function shiftMonth(ym: string, delta: number): string {
 /** Accounts whose available balance moves with deposits (not locked/lien accounts). */
 const isLiquid = (a: PortalAccount) => a.code !== "SV-FIX" && a.code !== "SV-LGS";
 
+/**
+ * Months before the seed transactions in which the Regular standing order also
+ * ran: the seed account reports a streak of `streak` months up to its last activity.
+ */
+const SEED_REGULAR = MEMBER_SAVINGS.find((a) => a.id === "sa-001");
+const SEED_CREDIT_MONTHS: string[] = SEED_REGULAR
+  ? Array.from({ length: SEED_REGULAR.streak }, (_, i) => monthKey(addMonthsKey(SEED_REGULAR.last_activity, -i)))
+  : [];
+
+/**
+ * Apply standing orders that fell due between ANCHOR and today, once. Reads the
+ * stored records directly (never render-time closures) and writes them back in
+ * one synchronous step, so several mounted hooks or tabs cannot double-apply.
+ */
+function runStandingOrderCatchUp(today: string) {
+  const processed = loadFromStorage<string[]>(PROCESSED_KEY, []);
+  const state: ClockState<PortalAccount, PortalTxn> = {
+    accounts: loadFromStorage<PortalAccount[]>(KEYS.portalAccounts, MEMBER_SAVINGS as PortalAccount[]),
+    txns: loadFromStorage<PortalTxn[]>(KEYS.portalTransactions, RECENT_TRANSACTIONS),
+    schedule: loadFromStorage<ScheduleRow[]>(KEYS.portalLoanSchedule, LOAN_SCHEDULE),
+    members: loadFromStorage(KEYS.adminMembers, ADMIN_MEMBERS_LIST),
+    processed,
+  };
+  const { state: next, added, changed } = applyStandingOrders(state, today);
+  if (!changed) return;
+  // Mark processed first so a re-entrant run (change events) sees the ids.
+  saveToStorage(PROCESSED_KEY, next.processed);
+  if (!added.length) return;
+  saveToStorage(KEYS.portalLoanSchedule, next.schedule);
+  saveToStorage(KEYS.portalAccounts, next.accounts);
+  saveToStorage(KEYS.portalTransactions, next.txns);
+  saveToStorage(KEYS.adminMembers, next.members);
+}
+
 // ---------------------------------------------------------------- hook
 
 export function usePortalData() {
   const hydrated = useHydrated();
-  // Before hydration use the fixed demo date so server and client markup match.
-  const today = hydrated ? todayISO() : DEMO_TODAY;
+  // Demo clock: ANCHOR until hydration, then the visitor's date clamped to the story.
+  const today = useDemoToday();
+
+  // Standing orders due since the seed date (idempotent across mounts, reloads and tabs).
+  useEffect(() => {
+    if (hydrated) runStandingOrderCatchUp(today);
+  }, [hydrated, today]);
 
   const [rawAccounts, setAccounts] = usePersistedState<PortalAccount[]>(KEYS.portalAccounts, MEMBER_SAVINGS as PortalAccount[]);
   const [rawTxns, setTxns] = usePersistedState<PortalTxn[]>(KEYS.portalTransactions, RECENT_TRANSACTIONS);
-  const [schedule, setSchedule] = usePersistedState<ScheduleRow[]>(KEYS.portalLoanSchedule, LOAN_SCHEDULE);
+  const [rawSchedule, setSchedule] = usePersistedState<ScheduleRow[]>(KEYS.portalLoanSchedule, LOAN_SCHEDULE);
   const [rawShares, setShares] = usePersistedState<PortalShares>(KEYS.portalShares, SEED_SHARES);
   const [loanApps, setLoanApps] = usePersistedState<PortalLoanApp[]>(KEYS.portalLoanApps, []);
   const [adminApps, setAdminApps] = usePersistedState<AdminLoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
@@ -275,6 +360,13 @@ export function usePortalData() {
   const transactions = useMemo(
     () => rawTxns.map(normalizeTxn).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     [rawTxns]
+  );
+  // Installments due after the seed date are collected by standing order on their
+  // due date. Show them as paid straight away (the catch-up effect persists the
+  // same change), so no frame ever shows a collected installment as unpaid.
+  const schedule = useMemo(
+    () => rawSchedule.map((r) => (r.status !== "Paid" && r.due_date > ANCHOR && r.due_date <= today ? { ...r, status: "Paid" } : r)),
+    [rawSchedule, today]
   );
   const shares: PortalShares = useMemo(
     () => ({ ...SEED_SHARES, ...rawShares, iu: rawShares.iu ?? SEED_SHARES.iu }),
@@ -301,9 +393,10 @@ export function usePortalData() {
     const regular = accounts.find((a) => a.id === "sa-001");
     const monthlyTarget = regular?.monthly_target ?? 0;
     const thisMonth = monthKey(today);
-    const regularCreditMonths = new Set(
-      transactions.filter((t) => t.account_id === "sa-001" && t.direction === "credit" && t.status === "Posted").map((t) => monthKey(t.date))
-    );
+    const regularCreditMonths = new Set([
+      ...SEED_CREDIT_MONTHS,
+      ...transactions.filter((t) => t.account_id === "sa-001" && t.direction === "credit" && t.status === "Posted").map((t) => monthKey(t.date)),
+    ]);
     const monthlyContributed = transactions
       .filter((t) => t.account_id === "sa-001" && t.direction === "credit" && t.status === "Posted" && monthKey(t.date) === thisMonth)
       .reduce((s, t) => s + t.amount, 0);
@@ -311,14 +404,16 @@ export function usePortalData() {
     // Streak: consecutive months with a Regular deposit. The current month only
     // breaks the streak once it is over, so start from last month if needed.
     let streak = 0;
-    let cursor = regularCreditMonths.has(thisMonth) ? thisMonth : shiftMonth(thisMonth, -1);
+    const streakEnd = regularCreditMonths.has(thisMonth) ? thisMonth : shiftMonth(thisMonth, -1);
+    let cursor = streakEnd;
     while (regularCreditMonths.has(cursor)) {
       streak += 1;
       cursor = shiftMonth(cursor, -1);
     }
 
     // Financial health score — three simple, explainable ratios.
-    const last6 = Array.from({ length: 6 }, (_, i) => shiftMonth(thisMonth, -i));
+    // Same rule as the streak: the current month counts once it has a deposit.
+    const last6 = Array.from({ length: 6 }, (_, i) => shiftMonth(streakEnd, -i));
     const consistency = Math.round((last6.filter((m) => regularCreditMonths.has(m)).length / 6) * 100);
     const dueSoFar = schedule.filter((r) => r.due_date <= today);
     const onTime = dueSoFar.length ? Math.round((dueSoFar.filter((r) => r.status === "Paid").length / dueSoFar.length) * 100) : 100;
@@ -346,6 +441,7 @@ export function usePortalData() {
       eligibility,
       monthlyTarget,
       monthlyContributed,
+      nextSavingsOrder: nextSavingsOrderDate(today),
       streak,
       healthFactors,
       healthScore,
@@ -353,13 +449,13 @@ export function usePortalData() {
   }, [accounts, schedule, shares, transactions, today]);
 
   /** Whole days until the next installment — null before hydration (avoids SSR mismatch). */
-  const daysToNextPayment = hydrated && derived.nextPayment ? daysUntil(derived.nextPayment.due_date) : null;
+  const daysToNextPayment = hydrated && derived.nextPayment ? daysBetween(today, derived.nextPayment.due_date) : null;
 
   // ---------------------------------------------------------------- mutations
 
   const addTxns = useCallback(
     (txns: Omit<PortalTxn, "id" | "date">[]) => {
-      const date = todayISO();
+      const date = demoTodayISO();
       setTxns((prev) => [...txns.map((t) => ({ ...t, id: uid("t"), date })), ...prev]);
     },
     [setTxns]
@@ -368,7 +464,7 @@ export function usePortalData() {
   /** Change an account's balance (and available balance for liquid accounts). */
   const adjustAccounts = useCallback(
     (changes: { id: string; balance?: number; available?: number }[]) => {
-      const date = todayISO();
+      const date = demoTodayISO();
       setAccounts((prev) =>
         prev.map((a) => {
           const c = changes.find((x) => x.id === a.id);
@@ -479,7 +575,7 @@ export function usePortalData() {
   const buyShares = useCallback(
     (count: number, source: "sa-002" | "momo") => {
       const cost = count * shares.share_value;
-      const date = todayISO();
+      const date = demoTodayISO();
       setShares((prev) => {
         const p = { ...SEED_SHARES, ...prev };
         const maxNo = p.certificates.reduce((m, c) => Math.max(m, Number(c.number.replace(/\D/g, "")) || 0), 0);
@@ -554,7 +650,7 @@ export function usePortalData() {
       // (legacy ids like "la-1" or "la-xyz" are tolerated).
       const existing = [...loadFromStorage<AdminLoanApp[]>(KEYS.adminLoanApps, adminApps), ...loanApps];
       const next = existing.reduce((m, a) => Math.max(m, appSeq(a.id)), 0) + 1;
-      const applied_date = todayISO();
+      const applied_date = demoTodayISO();
       const id = `LA-${applied_date.slice(0, 4)}-${String(next).padStart(4, "0")}`;
       setLoanApps((prev) => [{ id, ...app, applied_date, status: "pending_review" }, ...prev]);
       setAdminApps((prev) => [
@@ -641,7 +737,7 @@ export function useLoanStatusNotifier() {
     const mine = loadFromStorage<PortalLoanApp[]>(KEYS.portalLoanApps, []);
     const admin = loadFromStorage<AdminLoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
     const notified = loadFromStorage<Record<string, string>>(LOAN_NOTIFIED_KEY, {});
-    const date = todayISO();
+    const date = demoTodayISO();
     const fresh: (typeof NOTIFICATIONS_DATA)[number][] = [];
     for (const app of mine) {
       const status = admin.find((x) => x.id === app.id)?.status;

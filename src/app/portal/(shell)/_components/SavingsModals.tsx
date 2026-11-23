@@ -6,22 +6,36 @@ import { showToast } from "@/lib/storage";
 import { exportToCsv } from "@/lib/export";
 import { generateTablePdf } from "@/lib/pdf-reports";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { addMonthsKey, daysBetween, monthLabel } from "@/lib/demo-clock";
 import { shortName, usePortalData, type PortalTxn } from "../_lib/usePortalData";
 import { DEFAULT_PHONE, isValidPhone, parseAmount } from "../_lib/forms";
 
 // ============================================================ Statement
 
-const PERIODS = [
-  { value: "month", label: "This month" },
-  { value: "3m", label: "Last 3 months" },
-  { value: "all", label: "All transactions" },
-];
-
 /** First day (YYYY-MM-01) of the month `back` months before `today`. */
-function monthStart(today: string, back: number): string {
-  const [y, m] = today.split("-").map(Number);
-  const d = new Date(y, m - 1 - back, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+const monthStart = (today: string, back: number) => addMonthsKey(today, -back);
+
+/** Statement periods labelled from the demo clock, e.g. "Last month (Nov 2026)". */
+function periodOptions(today: string) {
+  return [
+    { value: "month", label: `This month (${monthLabel(today)})` },
+    { value: "last", label: `Last month (${monthLabel(monthStart(today, 1))})` },
+    { value: "3m", label: `Last 3 months (${monthLabel(monthStart(today, 2))} – ${monthLabel(today)})` },
+    { value: "all", label: "All transactions" },
+  ];
+}
+
+/** [from, to] (inclusive YYYY-MM-DD) for a period on the demo clock. */
+function periodRange(period: string, today: string): [string, string] {
+  if (period === "month") return [monthStart(today, 0), today];
+  if (period === "last") {
+    // Last day of the previous month = the day before this month's 1st.
+    const end = monthStart(today, 0);
+    const prev = monthStart(today, 1);
+    return [prev, `${prev.slice(0, 8)}${String(daysBetween(prev, end)).padStart(2, "0")}`];
+  }
+  if (period === "3m") return [monthStart(today, 2), today];
+  return ["0000-00-00", today];
 }
 
 /** Transactions belonging to an account: posted to it, or paid out of it. */
@@ -38,13 +52,13 @@ function StatementDialog({ onClose, defaultAccount }: { onClose: () => void; def
   const [period, setPeriod] = useState("3m");
   const [busy, setBusy] = useState(false);
 
-  const from = period === "month" ? monthStart(today, 0) : period === "3m" ? monthStart(today, 2) : "0000-00-00";
-  const rows = transactions.filter((t) => t.date >= from && (account === "all" || txnInAccount(t, account)));
+  const [from, to] = periodRange(period, today);
+  const rows = transactions.filter((t) => t.date >= from && t.date <= to && (account === "all" || txnInAccount(t, account)));
   const acctLabel = account === "all" ? "All accounts" : shortName(accounts.find((a) => a.id === account)?.product ?? account);
   const balances = (account === "all" ? accounts : accounts.filter((a) => a.id === account)).map((a) => ({ label: shortName(a.product), amount: a.balance }));
   const slug = `${member.sv}-${account}-${period}`;
   const periodLabel =
-    period === "all" ? `All transactions to ${formatDate(today)}` : `${formatDate(from)} to ${formatDate(today)}`;
+    period === "all" ? `All transactions to ${formatDate(to)}` : `${formatDate(from)} to ${formatDate(to)}`;
 
   const downloadPdf = async () => {
     setBusy(true);
@@ -128,7 +142,7 @@ function StatementDialog({ onClose, defaultAccount }: { onClose: () => void; def
           />
         </FormField>
         <FormField label="Period">
-          <SelectInput value={period} onChange={setPeriod} options={PERIODS} />
+          <SelectInput value={period} onChange={setPeriod} options={periodOptions(today)} />
         </FormField>
         <p className="text-sm dm-text-secondary">
           {rows.length} transaction{rows.length === 1 ? "" : "s"} will be included

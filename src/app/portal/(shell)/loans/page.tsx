@@ -9,8 +9,9 @@ import { Button, FormField, SelectInput, TextInput } from "@/components/Modal";
 import { Badge, EmptyState, PageHeader } from "@/components/ui";
 import { showToast } from "@/lib/storage";
 import { generateLoanSchedulePdf } from "@/lib/pdf-reports";
-import { cn, daysUntil, formatCurrency, formatDate, formatRelativeDays } from "@/lib/utils";
-import { ACTIVE_LOAN, ELIGIBILITY_RULE, LOAN_PRODUCTS, monthlyInstallment, usePortalData } from "../_lib/usePortalData";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { daysBetween } from "@/lib/demo-clock";
+import { ACTIVE_LOAN, ELIGIBILITY_RULE, LOAN_PRODUCTS, monthlyInstallment, relativeDays, usePortalData } from "../_lib/usePortalData";
 import ApplyLoanModal, { type LoanPrefill } from "../_components/ApplyLoanModal";
 import RepayLoanModal from "../_components/RepayLoanModal";
 import ActionParam from "../_components/ActionParam";
@@ -37,7 +38,7 @@ export default function LoansPage() {
   const progress = schedule.length ? Math.round((paidCount / schedule.length) * 100) : 0;
   const maturity = schedule[schedule.length - 1]?.due_date ?? ACTIVE_LOAN.maturity_date;
   const overdue = schedule.filter((r) => r.status !== "Paid" && r.due_date < today);
-  const arrearsDays = hydrated && overdue.length ? -daysUntil(overdue[0].due_date) : 0;
+  const arrearsDays = hydrated && overdue.length ? daysBetween(overdue[0].due_date, today) : 0;
 
   const openApply = (p?: LoanPrefill) => {
     setPrefill(p);
@@ -110,7 +111,7 @@ export default function LoansPage() {
           value={nextPayment ? formatCurrency(nextPayment.total) : "—"}
           sub={
             nextPayment
-              ? `Due ${formatDate(nextPayment.due_date)}${daysToNextPayment !== null ? ` · ${formatRelativeDays(nextPayment.due_date)}` : ""}`
+              ? `Due ${formatDate(nextPayment.due_date)}${daysToNextPayment !== null ? ` · ${relativeDays(nextPayment.due_date, today)}` : ""} · standing order`
               : "No payments due"
           }
         />
@@ -148,6 +149,16 @@ export default function LoansPage() {
             <div className="bg-gradient-to-r from-[#4A90D9] to-[#22c55e] h-4 rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
           </div>
         </div>
+
+        {!fullyRepaid && (
+          <p className="flex items-start gap-2 text-xs dm-text-secondary mb-4">
+            <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0" />
+            <span>
+              Paid via standing order: {formatCurrency(ACTIVE_LOAN.monthly_installment)} is collected on the 1st of each month
+              {nextPayment ? `, next on ${formatDate(nextPayment.due_date)}` : ""}. Make Repayment to pay extra or settle early.
+            </span>
+          </p>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 dm-surface-hover rounded-xl">
           {[

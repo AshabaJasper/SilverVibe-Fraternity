@@ -18,15 +18,19 @@ import {
   Clock,
   Users,
   Receipt,
+  Landmark,
+  Building2,
+  Coins,
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import Modal, { Button } from "@/components/Modal";
 import { Badge, EmptyState } from "@/components/ui";
 import { useAuthStore } from "@/lib/store";
 import { ANNOUNCEMENTS, DEMO_MEMBER } from "@/lib/mock-data";
-import { cn, formatCurrency, formatDate, formatRelativeDays, getGreeting } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, getGreeting } from "@/lib/utils";
 import { useHydrated } from "@/lib/use-hydrated";
-import { AGM_DATE, liveSavingsHistory, usePortalData } from "./_lib/usePortalData";
+import { TIMELINE_EVENTS as EV, isRevealed } from "@/lib/demo-clock";
+import { AGM_DATE, DECLARED_DIVIDEND, liveSavingsHistory, relativeDays, usePortalData } from "./_lib/usePortalData";
 import DepositModal from "./_components/DepositModal";
 import ApplyLoanModal from "./_components/ApplyLoanModal";
 import ActionParam from "./_components/ActionParam";
@@ -77,12 +81,19 @@ const UPCOMING_TONES: Record<string, string> = {
   purple: "#a855f7",
 };
 
-/** 1st of the month after `iso` (YYYY-MM-DD). */
-function firstOfNextMonth(iso: string): string {
-  const [y, m] = iso.split("-").map(Number);
-  const d = new Date(y, m, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+interface UpcomingItem {
+  id: string;
+  title: string;
+  detail: string;
+  date: string;
+  icon: React.ElementType;
+  tone: keyof typeof UPCOMING_TONES;
+  /** Link target; items without one open the related announcement. */
+  href?: string;
+  announcementId?: string;
 }
+
+const targetPctOf = (contributed: number, target: number) => (target > 0 ? Math.min(100, Math.round((contributed / target) * 100)) : 0);
 
 export default function MemberDashboard() {
   const data = usePortalData();
@@ -109,6 +120,7 @@ export default function MemberDashboard() {
     nextPayment,
     monthlyTarget,
     monthlyContributed,
+    nextSavingsOrder,
     streak,
     healthFactors,
     healthScore,
@@ -117,15 +129,18 @@ export default function MemberDashboard() {
     today,
   } = data;
 
-  const targetPct = monthlyTarget > 0 ? Math.min(100, Math.round((monthlyContributed / monthlyTarget) * 100)) : 0;
+  const targetPct = targetPctOf(monthlyContributed, monthlyTarget);
   const fixed = accounts.find((a) => a.id === "sa-003");
   const paidCount = schedule.filter((r) => r.status === "Paid").length;
 
-  // Upcoming dates, computed from live data and sorted soonest first.
-  const upcoming = [
+  // Upcoming dates on the demo clock, sorted soonest first. Events drop off once
+  // they pass; the AGM is replaced by the dividend payment after 20 Feb 2027.
+  const agmHeld = today > AGM_DATE;
+  const agmAnnouncement = isRevealed(EV.agmNotice, today) ? "ann-agm-notice" : "ann-agm-save-date";
+  const candidates: (UpcomingItem | null | undefined | false)[] = [
     nextPayment && {
       id: "loan",
-      title: "Loan repayment",
+      title: "Loan installment (standing order)",
       detail: `${formatCurrency(nextPayment.total)} · installment ${nextPayment.installment} of ${schedule.length}`,
       date: nextPayment.due_date,
       icon: CreditCard,
@@ -133,42 +148,74 @@ export default function MemberDashboard() {
       href: "/portal/loans",
     },
     monthlyTarget > 0 && {
-      id: "target",
-      title: "Monthly savings target",
-      detail:
-        monthlyContributed >= monthlyTarget
-          ? `${formatCurrency(monthlyTarget)} for next month (this month done)`
-          : `${formatCurrency(monthlyTarget - monthlyContributed)} left for this month`,
-      date: firstOfNextMonth(today),
+      id: "savings-order",
+      title: "Regular Savings standing order",
+      detail: `${formatCurrency(EV.savingsStandingOrderAmount)} to Regular Savings`,
+      date: nextSavingsOrder,
       icon: PiggyBank,
       tone: "green",
       href: "/portal/savings",
     },
-    fixed?.maturity_date && {
-      id: "fixed",
-      title: "Fixed deposit matures",
-      detail: `${formatCurrency(fixed.balance + fixed.accrued_interest)} incl. interest`,
-      date: fixed.maturity_date,
-      icon: Clock,
-      tone: "amber",
-      href: "/portal/savings",
-    },
     {
-      id: "agm",
-      title: "Annual General Meeting",
-      detail: "Silver Springs Hotel, Kampala",
-      date: AGM_DATE,
-      icon: Users,
-      tone: "purple",
+      id: "board",
+      title: "Board meeting",
+      detail: "Quarterly review and AGM preparations",
+      date: EV.boardMeeting,
+      icon: Landmark,
+      tone: "amber",
       href: undefined,
+      announcementId: "ann-agm-save-date",
     },
-  ]
-    .filter((x): x is Exclude<typeof x, false | null | undefined | ""> => Boolean(x))
+    // Festive closure: shown once the notice is out, until the office reopens.
+    isRevealed(EV.festiveNotice, today) &&
+      (today < EV.officeClosedFrom
+        ? { id: "office", title: "Office closes for the holidays", detail: "Reopens Monday 4 January · portal stays open", date: EV.officeClosedFrom, icon: Building2, tone: "amber", href: undefined, announcementId: "ann-festive" }
+        : { id: "office", title: "Office reopens", detail: "Closed since 24 December · portal open throughout", date: EV.officeReopens, icon: Building2, tone: "amber", href: undefined, announcementId: "ann-festive" }),
+    agmHeld
+      ? {
+          id: "dividend",
+          title: `${EV.dividendFy} dividend payable`,
+          detail: `${EV.dividendRatePct}% declared at the AGM · ${formatCurrency(DECLARED_DIVIDEND)}`,
+          date: EV.dividendPayable,
+          icon: Coins,
+          tone: "purple",
+          href: "/portal/shares",
+        }
+      : {
+          id: "agm",
+          title: "Annual General Meeting",
+          detail: `${EV.agmVenue} · ${EV.dividendFy} dividend to be declared`,
+          date: AGM_DATE,
+          icon: Users,
+          tone: "purple",
+          href: undefined,
+          announcementId: agmAnnouncement,
+        },
+    fixed?.maturity_date
+      ? {
+          id: "fixed",
+          title: "Fixed deposit matures",
+          detail: `${formatCurrency(fixed.balance + fixed.accrued_interest)} incl. interest`,
+          date: fixed.maturity_date,
+          icon: Clock,
+          tone: "amber",
+          href: "/portal/savings",
+        }
+      : null,
+  ];
+  const upcoming = candidates
+    .filter((x): x is UpcomingItem => Boolean(x))
     .filter((x) => x.date >= today)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 
+  // Announcements published so far, newest first.
+  const announcements = ANNOUNCEMENTS.filter((a) => isRevealed(a.date, today)).sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  // Between the 1st and the 2nd the month's standing order is still to come.
+  const orderDueSoon = targetPctOf(monthlyContributed, monthlyTarget) < 100 && nextSavingsOrder.slice(0, 7) === today.slice(0, 7);
+
   const recent = transactions.slice(0, 5);
-  const history = liveSavingsHistory(accounts);
+  const history = liveSavingsHistory(accounts, today);
   const scoreColor = healthScore >= 75 ? "#22c55e" : healthScore >= 50 ? "#f59e0b" : "#ef4444";
 
   const quickActions = [
@@ -266,9 +313,11 @@ export default function MemberDashboard() {
           <p className={cn("text-xs font-medium mt-3", targetPct >= 100 ? "text-[#16a34a]" : "dm-text-secondary")}>
             {targetPct >= 100
               ? `Target met this month${streak > 1 ? ` — ${streak}-month streak, keep it up!` : "!"}`
-              : `${formatCurrency(monthlyTarget - monthlyContributed)} to go this month.`}
+              : orderDueSoon
+                ? `Standing order of ${formatCurrency(EV.savingsStandingOrderAmount)} due ${relativeDays(nextSavingsOrder, today)} (${formatDate(nextSavingsOrder)}).`
+                : `${formatCurrency(monthlyTarget - monthlyContributed)} to go this month.`}
           </p>
-          {targetPct < 100 && (
+          {targetPct < 100 && !orderDueSoon && (
             <Button variant="success" className="mt-4 w-full" onClick={() => setDepositOpen(true)}>
               <Wallet className="w-4 h-4" /> Deposit now
             </Button>
@@ -336,7 +385,7 @@ export default function MemberDashboard() {
                       <p className="text-xs dm-text-secondary">{u.detail}</p>
                       <p className="text-xs font-medium mt-1" style={{ color: c }}>
                         {formatDate(u.date)}
-                        {hydrated && ` · ${formatRelativeDays(u.date)}`}
+                        {` · ${relativeDays(u.date, today)}`}
                       </p>
                     </div>
                   </div>
@@ -350,7 +399,7 @@ export default function MemberDashboard() {
                     key={u.id}
                     type="button"
                     className="block w-full text-left hover:opacity-90"
-                    onClick={() => setAnnouncement(ANNOUNCEMENTS.find((a) => a.id === "ann-001") ?? null)}
+                    onClick={() => setAnnouncement(ANNOUNCEMENTS.find((a) => a.id === u.announcementId) ?? null)}
                   >
                     {body}
                   </button>
@@ -445,8 +494,9 @@ export default function MemberDashboard() {
         <h3 className="font-semibold dm-text mb-4 flex items-center gap-2">
           <Megaphone className="w-4 h-4 text-[#4A90D9]" /> Announcements
         </h3>
+        {announcements.length === 0 && <EmptyState icon={Megaphone} title="No announcements yet" />}
         <div className="space-y-3">
-          {ANNOUNCEMENTS.map((ann) => (
+          {announcements.map((ann) => (
             <button
               key={ann.id}
               type="button"

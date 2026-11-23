@@ -7,7 +7,8 @@ import {
   PlayCircle, ArrowRight,
 } from "lucide-react";
 import { usePersistedState, showToast } from "@/lib/storage";
-import { cn, formatDateTime, todayISO } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
+import { TIMELINE_EVENTS as EV, demoNowISO } from "@/lib/demo-clock";
 import Modal, { Button, FormField, SelectInput, TextAreaInput, TextInput } from "@/components/Modal";
 import { Badge, EmptyState, PageHeader } from "@/components/ui";
 
@@ -24,7 +25,7 @@ const FAQS = [
   { q: "My proof of address has expired. What do I do?", a: "Go to Profile > KYC Documents and click 'Replace' next to the expired document, or use 'Upload New Document'. The new file shows as 'Pending review' until member services verify it." },
   { q: "How do I turn on two-factor authentication?", a: "Go to Profile > Security and click 'Enable' next to Two-factor authentication, then enter the 6-digit code sent to your phone. You can also change your password and transaction PIN there." },
   { q: "How do I choose which alerts I receive?", a: "Go to Profile > Preferences, tick SMS, Email or Push for each category, and click 'Save preferences'." },
-  { q: "When are dividends paid?", a: "Dividends are declared at the Annual General Meeting — this year on 12 December 2026 at Silver Springs Hotel — and paid within 30 days of declaration." },
+  { q: "When are dividends paid?", a: `Dividends are declared at the Annual General Meeting. The ${EV.dividendFy} dividend is declared at the AGM on 20 February 2027 at ${EV.agmVenue} and is payable on 15 March 2027, straight to your Flexi/Wallet.` },
   { q: "What happens if I miss a loan payment?", a: "Late penalties apply after the grace period. You'll receive reminders 5 days before the due date and 1, 7, 30, 60 and 90 days after it if the installment is still unpaid." },
 ];
 
@@ -65,10 +66,24 @@ const TICKET_SEED: SupportTicket[] = [
     category: "Loans",
     subject: "Request for loan top-up options",
     message: "I would like to know if I can top up my current Short-Term Loan, and what the new installment would be.",
-    status: "in_progress",
+    status: "resolved",
     created_at: "2026-10-28T11:42:00",
     replies: [
       { from: "sacco", author: "Credit Officer · Daniel", text: "Hi James, your Short-Term Loan (SV-LN-2026-0042) has a good repayment record, so it qualifies for a top-up review. I'm preparing a revised schedule and will share it with you by Friday. You can also start an application from Loans > Apply for Loan.", at: "2026-10-29T10:15:00" },
+      { from: "member", author: "You", text: "Thank you Daniel, I'll wait for the schedule.", at: "2026-10-29T12:02:00" },
+      { from: "sacco", author: "Credit Officer · Daniel", text: "Hi James, a top-up of up to UGX 4,000,000 over 12 months would bring your installment to about UGX 750,000. When you are ready, apply from Loans > Apply for Loan and mention this ticket. I'm closing this ticket for now.", at: "2026-11-06T09:40:00" },
+    ],
+  },
+  {
+    id: "TCK-1063",
+    category: "Account",
+    subject: "Stamped statement for a visa application",
+    message: "I need a stamped statement of my savings for the last 6 months for an embassy visa application. Can I collect it at the branch?",
+    status: "resolved",
+    created_at: "2026-11-20T16:18:00",
+    replies: [
+      { from: "sacco", author: "Member Services · Agnes", text: "Hello James, yes. We have prepared a stamped statement for May–October 2026 and it is ready for collection at the Kampala Road branch. Please bring your National ID.", at: "2026-11-21T10:30:00" },
+      { from: "member", author: "You", text: "Collected today, thank you!", at: "2026-11-22T11:05:00" },
     ],
   },
 ];
@@ -96,11 +111,8 @@ const youtubeSearch = (topic: string) => `https://www.youtube.com/results?search
  * Helpers
  * ================================================================== */
 
-function nowLocalISO() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${todayISO()}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
-}
+/** Ticket timestamp on the demo clock ("YYYY-MM-DDTHH:MM:SS"). */
+const nowLocalISO = () => demoNowISO();
 function nextTicketId(list: SupportTicket[]) {
   const max = list.reduce((m, t) => Math.max(m, Number(t.id.replace(/\D/g, "")) || 0), 1000);
   return `TCK-${String(max + 1).padStart(4, "0")}`;

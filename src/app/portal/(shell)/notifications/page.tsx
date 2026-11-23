@@ -8,8 +8,8 @@ import {
 import { NOTIFICATIONS_DATA, type MemberNotification } from "@/lib/mock-data";
 import { KEYS } from "@/lib/keys";
 import { usePersistedState, showToast } from "@/lib/storage";
-import { cn, daysUntil, formatDate } from "@/lib/utils";
-import { useHydrated } from "@/lib/use-hydrated";
+import { cn, formatDate } from "@/lib/utils";
+import { daysBetween, isRevealed, useDemoToday } from "@/lib/demo-clock";
 import { Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, PageHeader } from "@/components/ui";
 import LoanStatusNotifier from "../_components/LoanStatusNotifier";
@@ -46,19 +46,21 @@ function matches(n: MemberNotification, f: Filter) {
   return n.type === f;
 }
 
-/** Bucket by age relative to today. Only called after hydration (uses the client clock). */
-function groupLabel(date: string) {
-  const d = daysUntil(date);
-  if (d >= 0) return "Today";
-  if (d >= -6) return "This week";
+/** Bucket by age relative to the demo clock's today. */
+function groupLabel(date: string, today: string) {
+  const age = daysBetween(date.slice(0, 10), today);
+  if (age <= 0) return "Today";
+  if (age <= 6) return "This week";
   return "Earlier";
 }
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const hydrated = useHydrated();
+  const today = useDemoToday();
   // Same key + seed as the portal header bell, so the badge stays in sync.
-  const [notifications, setNotifications] = usePersistedState(KEYS.memberNotifications, NOTIFICATIONS_DATA);
+  const [stored, setNotifications] = usePersistedState(KEYS.memberNotifications, NOTIFICATIONS_DATA);
+  // Seed notifications dated in the future appear on their date (as in the header bell).
+  const notifications = stored.filter((n) => isRevealed(n.date, today));
   const [filter, setFilter] = useState<Filter>("all");
   const [clearOpen, setClearOpen] = useState(false);
 
@@ -67,16 +69,13 @@ export default function NotificationsPage() {
   const sorted = [...notifications].sort((a, b) => b.date.localeCompare(a.date));
   const filtered = sorted.filter((n) => matches(n, filter));
 
-  // Before hydration render a single ungrouped list so server and client markup match.
+  // Grouped on the demo clock (ANCHOR before hydration, so markup matches the server).
   const groups: { label: string | null; items: MemberNotification[] }[] = [];
-  if (!hydrated) groups.push({ label: null, items: filtered });
-  else {
-    for (const n of filtered) {
-      const label = groupLabel(n.date);
-      const g = groups.find((x) => x.label === label);
-      if (g) g.items.push(n);
-      else groups.push({ label, items: [n] });
-    }
+  for (const n of filtered) {
+    const label = groupLabel(n.date, today);
+    const g = groups.find((x) => x.label === label);
+    if (g) g.items.push(n);
+    else groups.push({ label, items: [n] });
   }
 
   const setRead = (id: string, read: boolean) =>
@@ -88,7 +87,8 @@ export default function NotificationsPage() {
   };
 
   const markAllRead = () => {
-    setNotifications((list) => list.map((n) => ({ ...n, read: true })));
+    // Only what the member can see: future-dated notices arrive unread on their date.
+    setNotifications((list) => list.map((n) => (isRevealed(n.date, today) ? { ...n, read: true } : n)));
     showToast(`${unreadCount} notification${unreadCount === 1 ? "" : "s"} marked as read`);
   };
 
@@ -181,7 +181,7 @@ export default function NotificationsPage() {
         open={clearOpen}
         onClose={() => setClearOpen(false)}
         onConfirm={() => {
-          setNotifications((list) => list.filter((n) => !n.read));
+          setNotifications((list) => list.filter((n) => !n.read || !isRevealed(n.date, today)));
           showToast(`${readCount} read notification${readCount === 1 ? "" : "s"} cleared`, "info");
         }}
         title="Clear read notifications?"

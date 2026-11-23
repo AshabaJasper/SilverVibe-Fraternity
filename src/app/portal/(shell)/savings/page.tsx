@@ -18,14 +18,14 @@ import { StatementModal, TransferModal, WithdrawModal, txnInAccount } from "../_
 type ModalName = "statement" | "transfer" | "withdraw" | "deposit" | null;
 
 export default function SavingsPage() {
-  const { accounts, transactions, totalSavings, totalInterest, availableBalance } = usePortalData();
+  const { accounts, transactions, totalSavings, totalInterest, availableBalance, today } = usePortalData();
   const [selected, setSelected] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalName>(null);
 
   const account = selected ? accounts.find((a) => a.id === selected) ?? null : null;
   // Filter by account id (a payment made from Flexi also shows under Flexi).
   const rows = selected ? transactions.filter((t) => txnInAccount(t, selected)) : transactions;
-  const history = liveSavingsHistory(accounts);
+  const history = liveSavingsHistory(accounts, today);
   const pieData = accounts.map((a) => ({ name: shortName(a.product), value: a.balance, color: a.color }));
 
   return (

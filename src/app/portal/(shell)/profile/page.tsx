@@ -11,7 +11,8 @@ import { KEYS } from "@/lib/keys";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { useAuthStore } from "@/lib/store";
 import { DEMO_CREDENTIALS } from "@/lib/auth";
-import { cn, formatDate, formatDateTime, getInitials, todayISO, uid } from "@/lib/utils";
+import { cn, formatDate, formatDateTime, getInitials, uid } from "@/lib/utils";
+import { demoTodayISO, isRevealed, useDemoToday } from "@/lib/demo-clock";
 import Modal, {
   Button, ConfirmDialog, FormField, SelectInput, TextInput, ToggleSwitch,
 } from "@/components/Modal";
@@ -121,21 +122,40 @@ const SECURITY_SEED: SecurityState = {
   pinSet: true,
   pinUpdated: "2026-08-14",
   devices: [
-    { id: "dev-1", name: "Chrome on Windows (this device)", location: "Kampala, UG", last_active: "2026-11-04T08:12:00", current: true },
-    { id: "dev-2", name: "SilverVibe app · Samsung Galaxy A54", location: "Kampala, UG", last_active: "2026-11-03T19:40:00" },
-    { id: "dev-3", name: "Safari on iPad", location: "Entebbe, UG", last_active: "2026-10-27T10:05:00" },
+    { id: "dev-1", name: "Chrome on Windows (this device)", location: "Kampala, UG", last_active: "2026-11-23T08:12:00", current: true },
+    { id: "dev-2", name: "SilverVibe app · Samsung Galaxy A54", location: "Kampala, UG", last_active: "2026-11-21T19:40:00" },
+    { id: "dev-3", name: "Safari on iPad", location: "Entebbe, UG", last_active: "2026-11-18T10:05:00" },
   ],
 };
 
+/**
+ * Sign-ins on the story timeline, newest first. Entries after 23 Nov 2026 are
+ * revealed as the demo clock reaches them (statement days, the AGM, …).
+ */
 const LOGIN_HISTORY = [
-  { at: "2026-11-04T08:12:00", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
-  { at: "2026-11-03T19:40:00", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
-  { at: "2026-11-01T07:55:00", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
-  { at: "2026-10-30T21:14:00", device: "Unknown browser", location: "Nairobi, KE", ip: "197.248.5.90", ok: false },
-  { at: "2026-10-27T10:05:00", device: "Safari on iPad", location: "Entebbe, UG", ip: "196.43.180.12", ok: true },
-  { at: "2026-10-18T13:22:00", device: "SilverVibe app · Android", location: "Mukono, UG", ip: "41.210.150.33", ok: true },
-  { at: "2026-10-09T09:01:00", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2027-02-20T18:05:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
+  { at: "2027-02-13T09:20:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2027-02-02T08:10:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2027-01-20T12:30:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
+  { at: "2027-01-04T09:02:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2027-01-02T07:58:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2026-12-27T20:11:00", deviceId: "dev-3", device: "Safari on iPad", location: "Entebbe, UG", ip: "196.43.180.12", ok: true },
+  { at: "2026-12-18T13:45:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
+  { at: "2026-12-09T22:41:00", deviceId: null, device: "Unknown browser", location: "Nairobi, KE", ip: "197.248.5.90", ok: false },
+  { at: "2026-12-02T08:05:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2026-12-01T19:22:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
+  { at: "2026-11-23T08:12:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2026-11-21T19:40:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
+  { at: "2026-11-19T12:05:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Kampala, UG", ip: "41.210.143.7", ok: true },
+  { at: "2026-11-18T10:05:00", deviceId: "dev-3", device: "Safari on iPad", location: "Entebbe, UG", ip: "196.43.180.12", ok: true },
+  { at: "2026-11-10T09:14:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2026-11-02T07:55:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
+  { at: "2026-10-30T21:14:00", deviceId: null, device: "Unknown browser", location: "Nairobi, KE", ip: "197.248.5.90", ok: false },
+  { at: "2026-10-18T13:22:00", deviceId: "dev-2", device: "SilverVibe app · Android", location: "Mukono, UG", ip: "41.210.150.33", ok: true },
+  { at: "2026-10-09T09:01:00", deviceId: "dev-1", device: "Chrome on Windows", location: "Kampala, UG", ip: "102.85.14.22", ok: true },
 ];
+/** How many sign-ins the history dialog lists. */
+const LOGIN_HISTORY_ROWS = 12;
 
 type Channel = "sms" | "email" | "push";
 type Category = "transactions" | "loan_reminders" | "announcements" | "statements";
@@ -768,7 +788,7 @@ function KycSection() {
       file_name: upload.file.name,
       size_kb: Math.max(1, Math.round(upload.file.size / 1024)),
       status: "Pending review",
-      uploaded: todayISO(),
+      uploaded: demoTodayISO(),
     };
     setDocs((list) => (upload.replaceId ? list.map((d) => (d.id === upload.replaceId ? rec : d)) : [...list, rec]));
     showToast(`${upload.type} uploaded — pending review by member services`);
@@ -918,7 +938,14 @@ function SecuritySection() {
   const [pin, setPin] = useState({ next: "", confirm: "" });
   const [pinError, setPinError] = useState<string | null>(null);
 
-  const others = sec.devices.filter((d) => !d.current);
+  const today = useDemoToday();
+  const logins = LOGIN_HISTORY.filter((l) => isRevealed(l.at, today)).slice(0, LOGIN_HISTORY_ROWS);
+  // A device's last activity is its latest sign-in so far on the demo clock.
+  const devices = sec.devices.map((d) => {
+    const latest = LOGIN_HISTORY.find((l) => l.deviceId === d.id && isRevealed(l.at, today));
+    return latest && latest.at > d.last_active ? { ...d, last_active: latest.at } : d;
+  });
+  const others = devices.filter((d) => !d.current);
 
   const confirmOtp = () => {
     if (otp.trim() !== DEMO_CREDENTIALS.otp) return setOtpError(`Incorrect code. The demo code is ${DEMO_CREDENTIALS.otp}.`);
@@ -933,7 +960,7 @@ function SecuritySection() {
     if (/^(\d)\1{3}$/.test(pin.next) || ["1234", "4321", "0123", "9876"].includes(pin.next)) return setPinError("Choose a less predictable PIN (avoid 1234, 0000 …).");
     if (pin.next !== pin.confirm) return setPinError("PINs don't match.");
     const wasSet = sec.pinSet;
-    setSec((s) => ({ ...s, pinSet: true, pinUpdated: todayISO() }));
+    setSec((s) => ({ ...s, pinSet: true, pinUpdated: demoTodayISO() }));
     setPinOpen(false);
     showToast(wasSet ? "Transaction PIN changed" : "Transaction PIN set");
   };
@@ -990,14 +1017,14 @@ function SecuritySection() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <p className="text-sm font-medium dm-text">Active devices</p>
-            <p className="text-xs dm-text-secondary">{sec.devices.length} device{sec.devices.length === 1 ? "" : "s"} signed in to your account</p>
+            <p className="text-xs dm-text-secondary">{devices.length} device{devices.length === 1 ? "" : "s"} signed in to your account</p>
           </div>
           <Button variant="secondary" disabled={others.length === 0} onClick={() => setSignOutOpen(true)}>
             Sign out other devices
           </Button>
         </div>
         <div className="space-y-2">
-          {sec.devices.map((d) => (
+          {devices.map((d) => (
             <div key={d.id} className="p-3 bg-[#f1f5f9] rounded-xl flex items-center gap-3">
               <Monitor className="w-4 h-4 dm-text-secondary shrink-0" />
               <div className="flex-1 min-w-0">
@@ -1082,7 +1109,7 @@ function SecuritySection() {
               </tr>
             </thead>
             <tbody>
-              {LOGIN_HISTORY.map((l) => (
+              {logins.map((l) => (
                 <tr key={l.at} className="border-b dm-border last:border-0">
                   <td className="py-2.5 pr-4 dm-text whitespace-nowrap">{formatDateTime(l.at)}</td>
                   <td className="py-2.5 pr-4 dm-text whitespace-nowrap">{l.device}</td>

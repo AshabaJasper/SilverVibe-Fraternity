@@ -3,13 +3,18 @@ import { useState } from "react";
 import {
   BarChart3, Award, TrendingUp, Download, Calendar, DollarSign, FileText, ArrowUpRight, Plus, Minus, Loader2,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { Button } from "@/components/Modal";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { Badge, EmptyState, PageHeader } from "@/components/ui";
 import { showToast } from "@/lib/storage";
 import { generateShareCertificate, generateTablePdf } from "@/lib/pdf-reports";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { usePortalData, type ShareCertificate } from "../_lib/usePortalData";
+import { MEMBER_SHARES } from "@/lib/mock-data";
+import { TIMELINE_EVENTS as EV } from "@/lib/demo-clock";
+import { DECLARED_DIVIDEND, usePortalData, type ShareCertificate } from "../_lib/usePortalData";
+
+/** Paid dividends (seed history), oldest first. */
+const PAID_DIVIDENDS = MEMBER_SHARES.dividends;
 import { BuySharesModal, UnitsModal } from "../_components/SharesModals";
 
 export default function SharesPage() {
@@ -19,7 +24,21 @@ export default function SharesPage() {
   const [unitsMode, setUnitsMode] = useState<"buy" | "redeem" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const totalDividends = shares.dividends.reduce((s, d) => s + d.amount, 0);
+  // FY 2025/26: announced for the AGM, declared on the AGM date, payable later.
+  const declared = today >= EV.agm;
+  const currentFy = {
+    year: EV.dividendFy,
+    rate: `${EV.dividendRatePct}%`,
+    amount: declared ? DECLARED_DIVIDEND : 0,
+    note: declared
+      ? `declared · payable ${formatDate(EV.dividendPayable)}`
+      : `to be declared at the AGM on ${formatDate(EV.agm)}`,
+  };
+  const totalDividends = PAID_DIVIDENDS.reduce((s, d) => s + d.amount, 0);
+  const chartData = [
+    ...PAID_DIVIDENDS.map((d) => ({ year: d.year, amount: d.amount, paid: true })),
+    ...(declared ? [{ year: currentFy.year, amount: currentFy.amount, paid: false }] : []),
+  ];
   const iuReturnPct = iu.total_invested > 0 ? (iu.accrued_returns / iu.total_invested) * 100 : 0;
   // Newest certificate first, without mutating state.
   const certificates = [...shares.certificates].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -53,8 +72,14 @@ export default function SharesPage() {
           {
             heading: "Dividends paid",
             columns: ["Financial year", "Rate", "Paid on", "Amount (UGX)"],
-            rows: [...shares.dividends.map((d) => [d.year, d.rate, formatDate(d.paid_date), d.amount]), ["Total", "", "", totalDividends]],
-            boldRows: [shares.dividends.length],
+            rows: [...PAID_DIVIDENDS.map((d) => [d.year, d.rate, formatDate(d.paid_date), d.amount]), ["Total paid", "", "", totalDividends]],
+            boldRows: [PAID_DIVIDENDS.length],
+            numericCols: [3],
+          },
+          {
+            heading: `${currentFy.year} dividend`,
+            columns: ["Financial year", "Rate", "Status", "Amount (UGX)"],
+            rows: [[currentFy.year, declared ? currentFy.rate : `${currentFy.rate} proposed`, currentFy.note, declared ? currentFy.amount : "-"]],
             numericCols: [3],
           },
         ],
@@ -71,7 +96,7 @@ export default function SharesPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <PageHeader
         title="Shares & Investments"
-        subtitle="Your share capital and investment units"
+        subtitle={`Your share capital and investment units · as at ${formatDate(today)}`}
         actions={
           <>
             <Button variant="success" onClick={() => setBuyOpen(true)}>
@@ -88,7 +113,7 @@ export default function SharesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Summary icon={BarChart3} color="#22c55e" label="Share Capital" value={formatCurrency(shares.total_value)} sub={`${shares.num_shares} shares @ ${formatCurrency(shares.share_value)} each`} />
         <Summary icon={TrendingUp} color="#a855f7" label="Investment Units" value={formatCurrency(iu.current_value)} sub={`${iu.unit_balance} units`} />
-        <Summary icon={DollarSign} color="#f59e0b" label="Total Dividends" value={formatCurrency(totalDividends)} sub={`${shares.dividends.length} financial years`} />
+        <Summary icon={DollarSign} color="#f59e0b" label="Total Dividends" value={formatCurrency(totalDividends)} sub={declared ? `Paid over ${PAID_DIVIDENDS.length} years · ${formatCurrency(DECLARED_DIVIDEND)} declared` : `Paid over ${PAID_DIVIDENDS.length} financial years`} />
         <Summary icon={ArrowUpRight} color="#4A90D9" label="IU Returns" value={formatCurrency(iu.accrued_returns)} sub={`${iuReturnPct.toFixed(1)}% on ${formatCurrency(iu.total_invested)} invested`} />
       </div>
 
@@ -147,37 +172,51 @@ export default function SharesPage() {
               {busy === "dividends" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Statement
             </Button>
           </div>
-          {shares.dividends.length === 0 ? (
-            <EmptyState icon={DollarSign} title="No dividends paid yet" />
-          ) : (
-            <>
-              <div className="h-48 mb-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={shares.dividends}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--dm-border)" />
-                    <XAxis dataKey="year" tick={{ fontSize: 12, fill: "var(--dm-text-secondary)" }} />
-                    <YAxis tick={{ fontSize: 12, fill: "var(--dm-text-secondary)" }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} width={44} />
-                    <Tooltip formatter={(v) => [formatCurrency(Number(v ?? 0)), "Dividend"]} />
-                    <Bar dataKey="amount" fill="#22c55e" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+          <p className="text-xs dm-text-secondary -mt-2 mb-4">As at {formatDate(today)}</p>
+          <div className="h-48 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--dm-border)" />
+                <XAxis dataKey="year" tick={{ fontSize: 12, fill: "var(--dm-text-secondary)" }} />
+                <YAxis tick={{ fontSize: 12, fill: "var(--dm-text-secondary)" }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} width={44} />
+                <Tooltip formatter={(v) => [formatCurrency(Number(v ?? 0)), "Dividend"]} />
+                <Bar dataKey="amount" radius={[8, 8, 0, 0]}>
+                  {chartData.map((d) => (
+                    <Cell key={d.year} fill={d.paid ? "#22c55e" : "#4A90D9"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm p-3 rounded-xl gap-2 border border-[#4A90D9]/20 bg-[#4A90D9]/5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Calendar className="w-4 h-4 text-[#4A90D9]" />
+                <span className="dm-text font-medium">{currentFy.year}</span>
+                <span className="text-xs dm-text-secondary">
+                  @ {currentFy.rate}
+                  {declared ? "" : " proposed"} · {currentFy.note}
+                </span>
               </div>
-              <div className="space-y-2">
-                {shares.dividends.map((d) => (
-                  <div key={d.year} className="flex items-center justify-between text-sm p-3 dm-surface-hover rounded-xl gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Calendar className="w-4 h-4 dm-text-secondary" />
-                      <span className="dm-text font-medium">{d.year}</span>
-                      <span className="text-xs dm-text-secondary">
-                        @ {d.rate} · paid {formatDate(d.paid_date)}
-                      </span>
-                    </div>
-                    <span className="font-semibold text-[#16a34a]">{formatCurrency(d.amount)}</span>
-                  </div>
-                ))}
+              {declared ? (
+                <span className="font-semibold text-[#4A90D9]">{formatCurrency(currentFy.amount)}</span>
+              ) : (
+                <Badge status="Upcoming" tone="blue" />
+              )}
+            </div>
+            {[...PAID_DIVIDENDS].reverse().map((d) => (
+              <div key={d.year} className="flex items-center justify-between text-sm p-3 dm-surface-hover rounded-xl gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Calendar className="w-4 h-4 dm-text-secondary" />
+                  <span className="dm-text font-medium">{d.year}</span>
+                  <span className="text-xs dm-text-secondary">
+                    @ {d.rate} · paid {formatDate(d.paid_date)}
+                  </span>
+                </div>
+                <span className="font-semibold text-[#16a34a]">{formatCurrency(d.amount)}</span>
               </div>
-            </>
-          )}
+            ))}
+          </div>
         </div>
       </div>
 
