@@ -181,7 +181,7 @@ const SEED_AUDIT: AuditEntry[] = [
   { id: "au-14", timestamp: "2026-11-20T11:00:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: `New fixed savings rate (${EV.newFixedRatePct}% from 1 Jan 2027) by SMS to active members`, severity: "info" },
   { id: "au-08", timestamp: "2026-11-18T22:14:00", user: "Unknown", module: "Auth", action: "Failed login", detail: "3 failed attempts for diana.acan@silvervibe.coop from 41.202.230.7", severity: "warning" },
   { id: "au-05", timestamp: "2026-10-31T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "October 2026 savings interest computed and journalised", severity: "info" },
-  { id: "au-09", timestamp: "2026-10-28T16:40:00", user: "Sarah Nakamya", module: "Accounting", action: "Journal posted", detail: "Staff salaries — October 2026 UGX 11,800,000", severity: "info" },
+  { id: "au-09", timestamp: "2026-10-28T16:40:00", user: "Sarah Nakamya", module: "Accounting", action: "Month-end close posted", detail: "October 2026 summary journal (income, expenses and loan movements)", severity: "info" },
   { id: "au-10", timestamp: "2026-10-28T11:05:00", user: "Sarah Nakamya", module: "Reports", action: "Report exported", detail: "Member Register (CSV)", severity: "info" },
   { id: "au-12", timestamp: "2026-10-14T16:30:00", user: "Sarah Nakamya", module: "Settings", action: "User deactivated", detail: "Diana Acan set to inactive (extended leave)", severity: "important" },
   { id: "au-11", timestamp: "2026-10-05T09:30:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: "Mobile Money deposits now available (Push) to 847 members", severity: "info" },

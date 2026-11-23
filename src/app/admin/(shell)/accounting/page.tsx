@@ -8,17 +8,17 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, cn } from "@/lib/utils";
-import { useHydrated } from "@/lib/use-hydrated";
-import { DEMO_TODAY } from "@/lib/mock-data";
+import { formatCurrency, formatCompact, formatDate, formatNumber, cn } from "@/lib/utils";
+import { useDemoToday, fyOf, monthLabel, ANCHOR } from "@/lib/demo-clock";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { exportToCsv } from "@/lib/export";
 import { generateIncomeStatement, generateBalanceSheet, generateTrialBalance, generateTablePdf } from "@/lib/pdf-reports";
 import Modal, { FormField, TextInput, SelectInput, Button, ConfirmDialog } from "@/components/Modal";
 import { EmptyState, Badge, PageHeader, StatCard, Tabs } from "@/components/ui";
 import {
-  ACCOUNT_BY_CODE, ACCOUNT_OPTIONS, DEFAULT_JOURNAL, FY_START, HISTORY, JOURNAL_KEY, MONTHS, OPENING_DATE, PERIOD_START,
-  accountLabel, buildStatements, buildTrialBalance, cashFlowTable, nextJeId, trialBalanceRows,
+  ACCOUNT_OPTIONS, DEFAULT_JOURNAL, HISTORY, JOURNAL_KEY, OPENING_DATE, PERIOD_START,
+  accountLabel, buildStatements, buildTrialBalance, byDateDesc, cashFlowTable, monthlyChart, nextJeId, periodText, safeJournal,
+  trialBalanceRows, visibleJournal,
   type JournalEntry, type Statements, type TbRow,
 } from "../_lib/ledger";
 
@@ -45,63 +45,52 @@ function AccountingInner() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const hydrated = useHydrated();
   const tabParam = params.get("tab") as TabId | null;
   const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "overview";
   const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
-  const today = hydrated ? todayISO() : DEMO_TODAY;
+  // Demo clock: ANCHOR on the server/first paint, then the visitor's date clamped to the story window.
+  const today = useDemoToday();
+  const fy = fyOf(today);
 
-  const [entries, setEntries] = usePersistedState<JournalEntry[]>(JOURNAL_KEY, DEFAULT_JOURNAL);
+  const [rawEntries, setRawEntries] = usePersistedState<JournalEntry[]>(JOURNAL_KEY, DEFAULT_JOURNAL);
+  // Guard against a journal saved by an older build in a different shape.
+  const entries = useMemo(() => safeJournal(rawEntries), [rawEntries]);
+  const setEntries = (fn: (prev: JournalEntry[]) => JournalEntry[]) => setRawEntries((prev) => fn(safeJournal(prev)));
+  // Reveal rule: seed entries dated after today stay hidden (and out of every total) until their date.
+  const visible = useMemo(() => visibleJournal(entries, today), [entries, today]);
 
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
-  const [form, setForm] = useState({ date: DEMO_TODAY, description: "", debit: "5000", credit: "1100", amount: "", reference: "" });
+  const [form, setForm] = useState({ date: ANCHOR, description: "", debit: "5000", credit: "1100", amount: "", reference: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [viewId, setViewId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { action: "post" | "reverse" | "delete"; id: string }>(null);
   const [preview, setPreview] = useState<StatementKind | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const tb = useMemo(() => buildTrialBalance(entries), [entries]);
+  const tb = useMemo(() => buildTrialBalance(entries, today), [entries, today]);
   const st = useMemo(() => buildStatements(tb), [tb]);
   const tbTotals = useMemo(() => ({ debit: tb.reduce((a, r) => a + r.debit, 0), credit: tb.reduce((a, r) => a + r.credit, 0) }), [tb]);
   const balanced = tbTotals.debit === tbTotals.credit;
 
-  // Chart: Jan–Sep history + posted journal activity per month (Oct onwards).
-  const chart = useMemo(() => {
-    const rows = HISTORY.map((h) => ({ ...h }));
-    for (const e of entries) {
-      if (e.status !== "posted") continue;
-      const m = MONTHS[Number(e.date.slice(5, 7)) - 1];
-      let row = rows.find((r) => r.month === m);
-      if (!row) {
-        row = { month: m, income: 0, expense: 0 };
-        rows.push(row);
-      }
-      // Debit to income reduces it (reversals); credit increases it. Opposite for expenses.
-      for (const [code, sign] of [[e.debit, 1], [e.credit, -1]] as const) {
-        const t = ACCOUNT_BY_CODE[code]?.type;
-        if (t === "income") row.income -= sign * e.amount;
-        if (t === "expense") row.expense += sign * e.amount;
-      }
-    }
-    return rows.sort((a, b) => MONTHS.indexOf(a.month) - MONTHS.indexOf(b.month));
-  }, [entries]);
+  // Chart: FY months July → today's month. Jul–Oct come from the month closes (HISTORY);
+  // from November it is computed live from posted, revealed journal entries.
+  const chart = useMemo(() => monthlyChart(entries, today), [entries, today]);
 
   const expensePie = st.expenses.filter((l) => l.amount > 0).map((l, i) => ({ name: l.label, value: l.amount, color: EXPENSE_COLORS[i % EXPENSE_COLORS.length] }));
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return [...entries]
-      .sort((a, b) => b.id.localeCompare(a.id))
+    return [...visible]
+      .sort(byDateDesc)
       .filter((e) => {
         const shown = e.reversedBy ? "reversed" : e.status;
         if (statusFilter !== "all" && shown !== statusFilter) return false;
         if (!q) return true;
         return [e.id, e.description, e.reference, accountLabel(e.debit), accountLabel(e.credit)].some((s) => s.toLowerCase().includes(q));
       });
-  }, [entries, statusFilter, search]);
+  }, [visible, statusFilter, search]);
 
   const viewEntry = entries.find((e) => e.id === viewId) ?? null;
 
@@ -117,14 +106,14 @@ function AccountingInner() {
     const amount = Number(form.amount);
     if (!form.description.trim()) e.description = "Description is required";
     if (!form.date) e.date = "Pick a date";
-    else if (form.date < PERIOD_START) e.date = `Periods before ${formatDate(PERIOD_START)} are closed`;
-    else if (form.date > today) e.date = "Entries cannot be future-dated";
+    else if (form.date < PERIOD_START) e.date = `Periods before ${formatDate(PERIOD_START)} are closed (${fy} began ${formatDate(PERIOD_START)})`;
+    else if (form.date > today) e.date = `Entries cannot be dated after today (${formatDate(today)})`;
     if (form.debit === form.credit) e.credit = "Debit and credit accounts must differ";
     if (!form.amount.trim() || !(amount > 0)) e.amount = "Enter an amount greater than zero";
     else if (!/^\d+$/.test(form.amount.trim())) e.amount = "UGX amounts must be whole shillings (no decimals)";
     setErrors(e);
     if (Object.keys(e).length) return;
-    const id = nextJeId(entries);
+    const id = nextJeId(entries, form.date);
     setEntries((prev) => [
       { id, date: form.date, description: form.description.trim(), debit: form.debit, credit: form.credit, amount, reference: form.reference.trim(), status: post ? "posted" : "draft", by: "Sarah Nakamya" },
       ...prev,
@@ -145,9 +134,9 @@ function AccountingInner() {
       showToast(`Draft ${entry.id} deleted`, "info");
     } else {
       // Reversal = a new posted entry with debit/credit swapped; the original stays posted but flagged.
-      const id = nextJeId(entries);
+      const id = nextJeId(entries, today);
       setEntries((prev) => [
-        { id, date: todayISO(), description: `Reversal of ${entry.id}: ${entry.description}`, debit: entry.credit, credit: entry.debit, amount: entry.amount, reference: entry.reference, status: "posted", by: "Sarah Nakamya", reversalOf: entry.id },
+        { id, date: today, description: `Reversal of ${entry.id}: ${entry.description}`, debit: entry.credit, credit: entry.debit, amount: entry.amount, reference: entry.reference, status: "posted", by: "Sarah Nakamya", reversalOf: entry.id },
         ...prev.map((e) => (e.id === entry.id ? { ...e, reversedBy: id } : e)),
       ]);
       showToast(`${entry.id} reversed by ${id}`, "info");
@@ -158,7 +147,7 @@ function AccountingInner() {
   const tbExportRows = trialBalanceRows(tb);
   const exportJournal = () => {
     if (!filtered.length) return showToast("No journal entries to export", "info");
-    exportToCsv(`journal-${todayISO()}`, filtered.map((e) => ({ ...e, debit: accountLabel(e.debit), credit: accountLabel(e.credit), status: e.reversedBy ? "reversed" : e.status })), [
+    exportToCsv(`journal-${today}`, filtered.map((e) => ({ ...e, debit: accountLabel(e.debit), credit: accountLabel(e.credit), status: e.reversedBy ? "reversed" : e.status })), [
       { key: "id", label: "Entry" }, { key: "date", label: "Date" }, { key: "description", label: "Description" },
       { key: "debit", label: "Debit account" }, { key: "credit", label: "Credit account" }, { key: "amount", label: "Amount (UGX)" },
       { key: "reference", label: "Reference" }, { key: "status", label: "Status" }, { key: "by", label: "Prepared by" },
@@ -166,7 +155,7 @@ function AccountingInner() {
     showToast(`${filtered.length} journal entries exported`);
   };
   const exportTb = () => {
-    exportToCsv(`trial-balance-${todayISO()}`, [...tbExportRows, { code: "", name: "Totals", debit: tbTotals.debit, credit: tbTotals.credit }], [
+    exportToCsv(`trial-balance-${today}`, [...tbExportRows, { code: "", name: "Totals", debit: tbTotals.debit, credit: tbTotals.credit }], [
       { key: "code", label: "Code" }, { key: "name", label: "Account" }, { key: "debit", label: "Debit (UGX)" }, { key: "credit", label: "Credit (UGX)" },
     ]);
     showToast("Trial balance exported");
@@ -186,8 +175,8 @@ function AccountingInner() {
         const bold = cf.boldRows;
         await generateTablePdf({
           title: "Cash Flow Statement",
-          subtitle: `FY 2026 · for the period ${formatDate(FY_START)} to ${formatDate(todayISO())}`,
-          filename: `cash-flow-${todayISO()}`,
+          subtitle: `${fy} · for the period ${periodText(today)}`,
+          filename: `cash-flow-${today}`,
           summary: [["Net increase in cash", formatCurrency(st.netCash)], ["Closing cash & bank", formatCurrency(st.openingCash + st.netCash)]],
           sections: [{ columns: ["Item", "Amount (UGX)"], rows, boldRows: bold, numericCols: [1] }],
         });
@@ -201,13 +190,13 @@ function AccountingInner() {
   };
 
   const STATEMENT_CARDS: { kind: StatementKind; title: string; desc: string; icon: typeof BookOpen; figure: string }[] = [
-    { kind: "income", title: "Income Statement", desc: "Revenue and expenses, FY 2026 year to date", icon: TrendingUp, figure: `Surplus ${formatCompact(st.surplus)}` },
+    { kind: "income", title: "Income Statement", desc: `Revenue and expenses, ${fy} year to date`, icon: TrendingUp, figure: `Surplus ${formatCompact(st.surplus)}` },
     { kind: "balance", title: "Balance Sheet", desc: "Assets, liabilities and equity", icon: Scale, figure: `Assets ${formatCompact(st.totalAssets)}` },
-    { kind: "cashflow", title: "Cash Flow Statement", desc: `Cash movements since ${formatDate(FY_START)} (FY 2026 to date)`, icon: Landmark, figure: `Net ${formatCompact(st.netCash)}` },
+    { kind: "cashflow", title: "Cash Flow Statement", desc: `Cash movements ${periodText(today)} (${fy} to date)`, icon: Landmark, figure: `Net ${formatCompact(st.netCash)}` },
     { kind: "trial", title: "Trial Balance", desc: "Closing balances of every account", icon: FileSpreadsheet, figure: balanced ? "Balanced" : "Out of balance" },
   ];
 
-  const drafts = entries.filter((e) => e.status === "draft").length;
+  const drafts = visible.filter((e) => e.status === "draft").length;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -227,7 +216,7 @@ function AccountingInner() {
       <Tabs
         tabs={[
           { id: "overview" as TabId, label: "Overview" },
-          { id: "journal" as TabId, label: "Journal", count: entries.length },
+          { id: "journal" as TabId, label: "Journal", count: visible.length },
           { id: "trial" as TabId, label: "Trial Balance" },
           { id: "statements" as TabId, label: "Statements" },
         ]}
@@ -238,7 +227,7 @@ function AccountingInner() {
       {activeTab === "overview" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Total Income (YTD)" value={formatCompact(st.totalIncome)} icon={ArrowUpRight} color="#22c55e" sub="FY 2026, posted entries" />
+            <StatCard label="Total Income (YTD)" value={formatCompact(st.totalIncome)} icon={ArrowUpRight} color="#22c55e" sub={`${fy} to date, posted entries`} />
             <StatCard label="Total Expenses (YTD)" value={formatCompact(st.totalExpenses)} icon={ArrowDownRight} color="#ef4444" sub={`${drafts} draft entr${drafts === 1 ? "y" : "ies"} not yet posted`} />
             <StatCard label="Net Surplus" value={formatCompact(st.surplus)} icon={TrendingUp} color={st.surplus >= 0 ? "#4A90D9" : "#ef4444"}
               sub={st.totalIncome ? `${((st.surplus / st.totalIncome) * 100).toFixed(1)}% margin` : "—"} />
@@ -246,13 +235,15 @@ function AccountingInner() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 glass-card rounded-xl p-6">
-              <h3 className="font-semibold dm-text mb-1 text-sm">Income vs Expenses — FY 2026</h3>
-              <p className="text-xs dm-text-secondary mb-4">Oct onwards is computed live from posted journal entries</p>
+              <h3 className="font-semibold dm-text mb-1 text-sm">Income vs Expenses — {fy}</h3>
+              <p className="text-xs dm-text-secondary mb-4">
+                {monthLabel(HISTORY[0].key + "-01")} – {monthLabel(HISTORY[HISTORY.length - 1].key + "-01")} from month-end closes; later months computed live from posted journal entries
+              </p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chart}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.25} />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => String(v).slice(0, 3)} />
                     <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${(Number(v) / 1e6).toFixed(0)}M`} />
                     <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -362,7 +353,7 @@ function AccountingInner() {
             </div>
           )}
           <div className="px-4 py-3 text-xs dm-text-secondary border-t dm-border">
-            Showing {filtered.length} of {entries.length} entries · only posted entries affect the trial balance
+            Showing {filtered.length} of {visible.length} entries to {formatDate(today)} · only posted entries affect the trial balance · {monthLabel(HISTORY[0].key + "-01")} – {monthLabel(HISTORY[HISTORY.length - 1].key + "-01")} are summarised in the month-end closes
           </div>
         </div>
       )}
@@ -372,7 +363,7 @@ function AccountingInner() {
           <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b dm-border">
             <div>
               <h3 className="font-semibold dm-text text-sm">Trial Balance</h3>
-              <p className="text-xs dm-text-secondary">As at {formatDate(today)} · opening balances at {formatDate(OPENING_DATE)} + posted entries</p>
+              <p className="text-xs dm-text-secondary">{fy} · as at {formatDate(today)} · opening balances at {formatDate(OPENING_DATE)} + posted entries</p>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
               <Badge status={balanced ? "Balanced" : "Out of balance"} tone={balanced ? "green" : "red"} />
@@ -427,7 +418,7 @@ function AccountingInner() {
             </FormField>
             <div className="sm:col-span-2">
               <FormField label="Description" required error={errors.description}>
-                <TextInput value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="e.g. Office stationery — November" maxLength={120} />
+                <TextInput value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder={`e.g. Office stationery — ${monthLabel(today, true).split(" ")[0]}`} maxLength={120} />
               </FormField>
             </div>
           </div>
@@ -500,7 +491,7 @@ function AccountingInner() {
         }>
         {preview === "trial" && (
           <>
-            <p className="text-xs dm-text-secondary mb-3">As at {formatDate(today)}</p>
+            <p className="text-xs dm-text-secondary mb-3">{fy} · as at {formatDate(today)}</p>
             <TrialBalanceTable tb={tb} totals={tbTotals} />
           </>
         )}
@@ -606,7 +597,7 @@ function StatementPreview({ kind, st, today }: { kind: Exclude<StatementKind, "t
   if (kind === "income") {
     return (
       <>
-        <p className="text-xs dm-text-secondary mb-3">FY 2026 · for the period ended {formatDate(today)}</p>
+        <p className="text-xs dm-text-secondary mb-3">{fyOf(today)} · for the period ended {formatDate(today)}</p>
         <StatementTable rows={[
           { label: "Income", heading: true },
           ...st.income.map((l) => ({ label: l.label, amount: l.amount })),
@@ -644,7 +635,7 @@ function StatementPreview({ kind, st, today }: { kind: Exclude<StatementKind, "t
   const last = cf.rows.length - 1;
   return (
     <>
-      <p className="text-xs dm-text-secondary mb-3">FY 2026 · for the period {formatDate(FY_START)} to {formatDate(today)}</p>
+      <p className="text-xs dm-text-secondary mb-3">{fyOf(today)} · for the period {periodText(today)}</p>
       <StatementTable rows={cf.rows.map(([label, amount], i): StRow => ({
         label,
         amount: amount === "" ? undefined : amount,

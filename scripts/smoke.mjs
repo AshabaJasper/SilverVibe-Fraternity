@@ -155,6 +155,14 @@ try {
       check(dash.includes(`as at ${longDate(today)}`), "/admin", `dashboard is "as at ${longDate(today)}"`);
       const comms = await textOf("/admin/communications");
       check(comms.includes(`Messages sent (${monthLabel(today)})`), "/admin/communications", `month-to-date label is ${monthLabel(today)}`);
+      // Admin register and member portal must agree on the demo member's loan balance.
+      const reg = (await textOf("/admin/members?q=SV-0042")).match(/SV-0042[\s\S]*?Verified\s+UGX ([\d,]+)\s+UGX ([\d,]+)/);
+      const regLoan = reg?.[2];
+      await as("member");
+      const sched = [...(await textOf("/portal/loans")).matchAll(/UGX ([\d,]+)\s+(Paid|Pending)/g)].filter((m) => m[2] === "Paid");
+      const portalLoan = sched[sched.length - 1]?.[1];
+      check(!!regLoan && regLoan === portalLoan, "/admin/members", `SV-0042 loan ${regLoan} matches portal ${portalLoan}`);
+      await as("admin");
       const tb = await textOf("/admin/accounting?tab=trial");
       check(/balanced/i.test(tb), "/admin/accounting", "trial balance balances");
       check(tb.includes("FY 2026/27"), "/admin/accounting", "fiscal year labelled FY 2026/27");

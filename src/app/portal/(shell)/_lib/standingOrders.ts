@@ -67,7 +67,6 @@ export function applyStandingOrders<A extends AccountLike, T extends TxnLike>(
   let schedule = state.schedule;
   let accounts = state.accounts;
   let members = state.members;
-  let loanPaid = false;
   let saved = 0;
 
   // ---- 1st: loan installment
@@ -80,7 +79,6 @@ export function applyStandingOrders<A extends AccountLike, T extends TxnLike>(
     if (idx < 0) continue;
     const row = schedule[idx];
     schedule = schedule.map((r, i) => (i === idx ? { ...r, status: "Paid" } : r));
-    loanPaid = true;
     added.push({
       id,
       date,
@@ -122,12 +120,12 @@ export function applyStandingOrders<A extends AccountLike, T extends TxnLike>(
   const changed = done.size !== state.processed.length;
   if (!changed) return { state, added, changed };
 
-  // Keep the admin member register in step with the portal.
-  if (loanPaid || saved > 0) {
-    const owed = outstandingPrincipalOf(schedule);
-    members = members.map((m) =>
-      m.sv_number === DEMO_SV ? { ...m, savings: m.savings + saved, loans: loanPaid ? owed : m.loans } : m
-    );
+  // Keep the admin member register's savings in step with the portal. The loans
+  // column is NOT written here: admin pages derive today's outstanding from the
+  // seed loan and the date (see deriveLoan in admin _lib/seeds.ts), so writing it
+  // too would deduct each installment twice.
+  if (saved > 0) {
+    members = members.map((m) => (m.sv_number === DEMO_SV ? { ...m, savings: m.savings + saved } : m));
   }
 
   return {

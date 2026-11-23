@@ -13,13 +13,16 @@ import { useAuthStore } from "@/lib/store";
 import { exportToCsv, printArea } from "@/lib/export";
 import { generateBalanceSheet, generateIncomeStatement, generateTablePdf, generateTrialBalance } from "@/lib/pdf-reports";
 import {
-  ADMIN_KPI, ADMIN_LOAN_APPLICATIONS, ADMIN_LOAN_PERFORMANCE, ADMIN_MEMBERS_LIST, ADMIN_PRODUCT_DISTRIBUTION, DEMO_ADMIN, DEMO_TODAY,
-  MEMBER_GROWTH, PORTFOLIO_QUALITY,
+  ADMIN_KPI, ADMIN_LOAN_APPLICATIONS, ADMIN_MEMBERS_LIST, ADMIN_PRODUCT_DISTRIBUTION, DEMO_ADMIN, PORTFOLIO_QUALITY,
+  loanPerformance, memberGrowth,
 } from "@/lib/mock-data";
-import { cn, formatCurrency, formatDate, formatDateTime, formatNumber, parseDate, todayISO, uid } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, formatDateTime, formatNumber, parseDate, uid } from "@/lib/utils";
 import { useHydrated } from "@/lib/use-hydrated";
 import {
-  DEFAULT_JOURNAL, FY_START, JOURNAL_KEY, buildStatements, buildTrialBalance, cashFlowTable, safeJournal, trialBalanceRows,
+  ANCHOR, addMonthsKey, daysBetween, demoNowISO, fyOf, fyStartOf, isRevealed, monthKey, monthLabel, monthShort, useDemoToday,
+} from "@/lib/demo-clock";
+import {
+  DEFAULT_JOURNAL, JOURNAL_KEY, buildLedger, cashFlowTable, normalBal, periodText, safeJournal, trialBalanceRows,
   type JournalEntry, type Statements, type TbRow,
 } from "../_lib/ledger";
 
@@ -37,8 +40,10 @@ interface ReportDef {
   frequency: string;
   gen: Generator;
   csv?: CsvKind;
-  /** Seed "last generated" date; replaced by the latest entry in Recently Generated. */
-  last: string;
+  /** On-demand reports: the last manual run in the story. Scheduled ones derive it from the clock (see lastRunOn). */
+  last?: string;
+  /** Run day for quarterly reports (day of Jan/Apr/Jul/Oct). */
+  runDay?: number;
 }
 
 interface Category {
@@ -52,44 +57,44 @@ const CATEGORIES: Category[] = [
   {
     title: "Financial Reports", icon: BarChart3, color: "#4A90D9",
     reports: [
-      { id: "income", name: "Income Statement", desc: "Revenue and expense summary", frequency: "Monthly", gen: "income", last: "2026-11-01" },
-      { id: "balance", name: "Statement of Financial Position", desc: "Balance sheet: assets, liabilities and equity", frequency: "Monthly", gen: "balance", last: "2026-11-01" },
-      { id: "cashflow", name: "Cash Flow Statement", desc: "Operating, investing and financing flows", frequency: "Monthly", gen: "cashflow", last: "2026-11-01" },
-      { id: "trial", name: "Trial Balance", desc: "All general-ledger account balances", frequency: "Daily", gen: "trial", last: "2026-11-04" },
+      { id: "income", name: "Income Statement", desc: "Revenue and expense summary", frequency: "Monthly", gen: "income" },
+      { id: "balance", name: "Statement of Financial Position", desc: "Balance sheet: assets, liabilities and equity", frequency: "Monthly", gen: "balance" },
+      { id: "cashflow", name: "Cash Flow Statement", desc: "Operating, investing and financing flows", frequency: "Monthly", gen: "cashflow" },
+      { id: "trial", name: "Trial Balance", desc: "All general-ledger account balances", frequency: "Daily", gen: "trial" },
     ],
   },
   {
     title: "Savings Reports", icon: PiggyBank, color: "#22c55e",
     reports: [
-      { id: "savings", name: "Savings Portfolio Summary", desc: "Balances and share of portfolio by product", frequency: "Monthly", gen: "savings", csv: "savings", last: "2026-11-01" },
-      { id: "dormant", name: "Dormant Accounts", desc: "Accounts with no activity for over 6 months", frequency: "Quarterly", gen: "custom", last: "2026-10-01" },
-      { id: "interest", name: "Interest Computation", desc: "Monthly interest accrual per member", frequency: "Monthly", gen: "custom", last: "2026-11-03" },
+      { id: "savings", name: "Savings Portfolio Summary", desc: "Balances and share of portfolio by product", frequency: "Monthly", gen: "savings", csv: "savings" },
+      { id: "dormant", name: "Dormant Accounts", desc: "Accounts with no activity for over 6 months", frequency: "Quarterly", gen: "custom", runDay: 1 },
+      { id: "interest", name: "Interest Computation", desc: "Monthly interest accrual per member", frequency: "Monthly", gen: "custom" },
     ],
   },
   {
     title: "Loan Reports", icon: CreditCard, color: "#f59e0b",
     reports: [
-      { id: "loans", name: "Loan Portfolio Report", desc: "Disbursements, recoveries and borrowers", frequency: "Monthly", gen: "loans", csv: "loans", last: "2026-11-01" },
-      { id: "par", name: "Portfolio at Risk (PAR)", desc: "Outstanding loans by ageing bucket", frequency: "Weekly", gen: "par", last: "2026-11-02" },
-      { id: "disbursement", name: "Disbursement Report", desc: "Loans disbursed during the period", frequency: "Monthly", gen: "custom", last: "2026-11-01" },
-      { id: "collection", name: "Collection Report", desc: "Loan repayments received", frequency: "Daily", gen: "custom", last: "2026-11-04" },
-      { id: "arrears", name: "Arrears Report", desc: "Overdue loans and follow-up status", frequency: "Weekly", gen: "custom", last: "2026-11-02" },
+      { id: "loans", name: "Loan Portfolio Report", desc: "Disbursements, recoveries and borrowers", frequency: "Monthly", gen: "loans", csv: "loans" },
+      { id: "par", name: "Portfolio at Risk (PAR)", desc: "Outstanding loans by ageing bucket", frequency: "Weekly", gen: "par" },
+      { id: "disbursement", name: "Disbursement Report", desc: "Loans disbursed during the period", frequency: "Monthly", gen: "custom" },
+      { id: "collection", name: "Collection Report", desc: "Loan repayments received", frequency: "Daily", gen: "custom" },
+      { id: "arrears", name: "Arrears Report", desc: "Overdue loans and follow-up status", frequency: "Weekly", gen: "custom" },
     ],
   },
   {
     title: "Member Reports", icon: Users, color: "#a855f7",
     reports: [
       { id: "register", name: "Member Register", desc: "Complete list of members with balances", frequency: "On demand", gen: "members", csv: "members", last: "2026-10-28" },
-      { id: "registrations", name: "New Registrations", desc: "Members registered during the period", frequency: "Monthly", gen: "custom", last: "2026-11-01" },
-      { id: "kyc", name: "KYC Compliance", desc: "Member KYC verification status", frequency: "Quarterly", gen: "custom", last: "2026-10-01" },
+      { id: "registrations", name: "New Registrations", desc: "Members registered during the period", frequency: "Monthly", gen: "custom" },
+      { id: "kyc", name: "KYC Compliance", desc: "Member KYC verification status", frequency: "Quarterly", gen: "custom", runDay: 1 },
     ],
   },
   {
     title: "Regulatory Reports", icon: Shield, color: "#ef4444",
     reports: [
-      { id: "umra", name: "UMRA Quarterly Return", desc: "Uganda Microfinance Regulatory Authority submission", frequency: "Quarterly", gen: "custom", last: "2026-10-05" },
-      { id: "aml", name: "AML/CTF Report", desc: "Suspicious transaction reporting", frequency: "Monthly", gen: "custom", last: "2026-11-01" },
-      { id: "capital", name: "Capital Adequacy", desc: "Regulatory capital ratios", frequency: "Quarterly", gen: "custom", last: "2026-10-05" },
+      { id: "umra", name: "UMRA Quarterly Return", desc: "Uganda Microfinance Regulatory Authority submission", frequency: "Quarterly", gen: "custom", runDay: 5 },
+      { id: "aml", name: "AML/CTF Report", desc: "Suspicious transaction reporting", frequency: "Monthly", gen: "custom" },
+      { id: "capital", name: "Capital Adequacy", desc: "Regulatory capital ratios", frequency: "Quarterly", gen: "custom", runDay: 5 },
     ],
   },
 ];
@@ -113,37 +118,121 @@ interface ReportSpec {
   sections: ReportSection[];
   orientation?: "portrait" | "landscape";
 }
-/** Ledger snapshot the financial statements are built from (same as Accounting). */
-interface Ledger { tb: TbRow[]; st: Statements }
+/** Ledger snapshot the financial statements are built from (same as Accounting), on the demo `today`. */
+interface Ledger { tb: TbRow[]; st: Statements; today: string }
 
 const pct = (n: number, d = 1) => `${n.toFixed(d)}%`;
 const memberBySv = (sv: string) => ADMIN_MEMBERS_LIST.find((m) => m.sv_number === sv);
 
+/* ---------- date helpers (all relative to the demo clock's `today`) ---------- */
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const isoOf = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const addDays = (date: string, n: number) => {
+  const d = parseDate(date.slice(0, 10));
+  d.setDate(d.getDate() + n);
+  return isoOf(d);
+};
+/** "Jun–Nov 2026" or "Sep 2026–Feb 2027" for a run of YYYY-MM keys. */
+function monthRange(keys: string[]): string {
+  if (!keys.length) return "—";
+  const a = `${keys[0]}-01`;
+  const b = `${keys[keys.length - 1]}-01`;
+  return a.slice(0, 4) === b.slice(0, 4) ? `${monthShort(a)}–${monthLabel(b)}` : `${monthLabel(a)}–${monthLabel(b)}`;
+}
+const FQ_MONTHS = ["Jul–Sep", "Oct–Dec", "Jan–Mar", "Apr–Jun"];
+/** Last COMPLETED quarter of the July–June fiscal year, e.g. "Q1 FY 2026/27 (Jul–Sep)". */
+function lastCompletedQuarter(today: string): string {
+  const prev = addMonthsKey(today, -3); // any date in the previous quarter
+  const fyMonth = (Number(prev.slice(5, 7)) + 5) % 12; // Jul → 0 … Jun → 11
+  const q = Math.floor(fyMonth / 3);
+  return `Q${q + 1} ${fyOf(prev)} (${FQ_MONTHS[q]})`;
+}
+
+/**
+ * When a catalogue report last ran on `today`: scheduled frequencies are derived from the
+ * clock (daily = today, weekly = the latest Monday, monthly = the 1st of this month,
+ * quarterly = run day of Jan/Apr/Jul/Oct); on-demand reports keep their story date.
+ */
+function lastRunOn(r: ReportDef, today: string): string {
+  if (r.frequency === "Daily") return today;
+  if (r.frequency === "Weekly") return addDays(today, -((parseDate(today).getDay() + 6) % 7));
+  if (r.frequency === "Monthly") return `${monthKey(today)}-01`;
+  if (r.frequency === "Quarterly") {
+    const day = pad2(r.runDay ?? 1);
+    for (let i = 0; i < 4; i++) {
+      const first = addMonthsKey(today, -i);
+      const d = `${monthKey(first)}-${day}`;
+      if ([1, 4, 7, 10].includes(Number(first.slice(5, 7))) && d <= today) return d;
+    }
+  }
+  return r.last ?? today;
+}
+
 // Savings product rates (% p.a.) — the same rates the Savings page uses.
 const PRODUCT_RATES: Record<string, number> = { "Regular Savings": 5, "Flexi/Wallet": 3, "Fixed Savings": 12, "Young Savers": 6, "Loan Guarantee": 3 };
 // Last account activity for dormant / at-risk members (dormancy = no activity for 6+ months).
-const LAST_ACTIVITY: Record<string, string> = { "SV-0067": "2026-03-14", "SV-0095": "2026-06-02" };
-// Arrears follow-up for borrowers (PAR review, 2 Nov 2026).
-const ARREARS_FOLLOW_UP: Record<string, { days: number; action: string }> = {
-  "SV-0095": { days: 74, action: "Account suspended · referred to recovery" },
-  "SV-0034": { days: 18, action: "SMS reminder sent 2 Nov" },
-  "SV-0023": { days: 0, action: "Current" },
+// SV-0095's last activity is the cash deposit flagged in the AML report.
+const LAST_ACTIVITY: Record<string, string> = { "SV-0067": "2026-03-14", "SV-0095": "2026-09-30" };
+// Borrowers in arrears: the date the missed installment fell due, and dated follow-ups
+// (each shows once its date arrives; the latest revealed one is the current status).
+const ARREARS: Record<string, { since: string; steps: [string, string][] }> = {
+  "SV-0095": {
+    since: "2026-09-10",
+    steps: [
+      ["2026-09-25", "SMS reminder sent 25 Sep"],
+      ["2026-10-14", "Guarantors notified"],
+      ["2026-11-02", "Account suspended · referred to recovery"],
+      ["2026-12-01", "In recovery · arrears reminder SMS sent 1 Dec"],
+      ["2027-01-15", "Recovery agent assigned · collateral review"],
+      ["2027-02-10", "Recovery agent: part-payment plan proposed"],
+    ],
+  },
+  "SV-0034": {
+    since: "2026-11-05",
+    steps: [
+      ["2026-11-20", "SMS reminder sent 20 Nov"],
+      ["2026-12-01", "Arrears reminder SMS sent 1 Dec"],
+      ["2026-12-08", "Guarantor (Peter Okello) notified"],
+      ["2027-01-12", "Demand letter issued"],
+      ["2027-02-09", "Referred to credit committee"],
+    ],
+  },
 };
-// Cash transactions at or above the reporting threshold (FIA large cash transaction reports).
+function arrearsStatus(sv: string, today: string): { days: number; action: string } {
+  const a = ARREARS[sv];
+  if (!a || a.since > today) return { days: 0, action: "Current" };
+  const step = a.steps.filter(([d]) => d <= today).pop();
+  return { days: daysBetween(a.since, today), action: step?.[1] ?? "Follow-up pending" };
+}
+// Cash transactions at or above the reporting threshold (FIA large cash transaction reports),
+// authored across the story; each appears once its date arrives.
 const LCT_THRESHOLD = 20_000_000;
 const LARGE_CASH_TXNS: { date: string; sv: string; type: string; channel: string; amount: number; status: string }[] = [
+  { date: "2027-02-22", sv: "SV-0056", type: "Deposit", channel: "Cash — Kampala branch", amount: 20_500_000, status: "LCTR filed" },
+  { date: "2027-02-08", sv: "SV-0089", type: "Deposit", channel: "Cash — Kampala branch", amount: 26_000_000, status: "LCTR filed" },
+  { date: "2027-01-26", sv: "SV-0012", type: "Deposit", channel: "Cash — Kampala branch", amount: 21_000_000, status: "LCTR filed" },
+  { date: "2027-01-11", sv: "SV-0001", type: "Deposit", channel: "Cash — Kampala branch", amount: 30_000_000, status: "LCTR filed" },
+  { date: "2026-12-21", sv: "SV-0056", type: "Withdrawal", channel: "Cash — Kampala branch", amount: 22_000_000, status: "LCTR filed" },
+  { date: "2026-12-04", sv: "SV-0089", type: "Deposit", channel: "Cash — Kampala branch", amount: 28_000_000, status: "LCTR filed" },
+  { date: "2026-11-20", sv: "SV-0012", type: "Deposit", channel: "Cash — Kampala branch", amount: 24_000_000, status: "LCTR filed" },
   { date: "2026-11-03", sv: "SV-0089", type: "Deposit", channel: "Cash — Kampala branch", amount: 32_000_000, status: "LCTR filed" },
   { date: "2026-10-27", sv: "SV-0056", type: "Deposit", channel: "Cash — Kampala branch", amount: 25_000_000, status: "LCTR filed" },
   { date: "2026-10-19", sv: "SV-0012", type: "Withdrawal", channel: "Cash — Kampala branch", amount: 21_500_000, status: "LCTR filed" },
   { date: "2026-10-08", sv: "SV-0001", type: "Deposit", channel: "Cash — Kampala branch", amount: 20_000_000, status: "LCTR filed" },
   { date: "2026-09-30", sv: "SV-0095", type: "Deposit", channel: "Cash — Kampala branch", amount: 19_800_000, status: "Below threshold · structuring review" },
 ];
+/** Suspicious transaction reports filed with the FIA (dates). */
+const STR_FILED = ["2026-10-06"];
 
-function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
+function buildSpec(r: CatalogReport, { tb, st, today }: Ledger): ReportSpec {
   const bal = (code: string) => {
     const row = tb.find((x) => x.code === code);
-    return row ? (row.normal === "debit" ? row.net : -row.net) : 0;
+    return row ? normalBal(row) : 0;
   };
+  // Six months of loan activity ending in today's month (year-aware keys).
+  const perf = loanPerformance(today);
+  const perfRange = monthRange(perf.map((m) => m.key));
+  const perfLabel = (key: string) => monthLabel(`${key}-01`);
   switch (r.gen) {
     // ---- Financial statements: same lines/ordering the pdf-reports generators print ----
     case "income":
@@ -200,7 +289,7 @@ function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
         title: "Loan Portfolio Report",
         summary: [["Gross loan book", formatCurrency(ADMIN_KPI.total_loan_book.value)], ["PAR > 30 days", `${ADMIN_KPI.par_30.value}%`]],
         sections: [
-          { heading: "Disbursements vs recoveries (6 months)", columns: ["Month", "Disbursed (UGX)", "Recovered (UGX)"], rows: ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, m.recovered]), numericCols: [1, 2] },
+          { heading: `Disbursements vs recoveries (${perfRange})`, columns: ["Month", "Disbursed (UGX)", "Recovered (UGX)"], rows: perf.map((m) => [perfLabel(m.key), m.disbursed, m.recovered]), numericCols: [1, 2] },
           { heading: "Borrowers", columns: ["SV No.", "Member", "Outstanding (UGX)"], rows: ADMIN_MEMBERS_LIST.filter((m) => m.loans > 0).map((m) => [m.sv_number, m.name, m.loans]), numericCols: [2] },
         ],
       };
@@ -250,31 +339,31 @@ function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
         title: "Interest Computation",
         summary: [["Savings balances", formatCurrency(totalBal)], ["Monthly interest accrual", formatCurrency(total)], ["Method", "Balance × annual rate ÷ 12"]],
         sections: [
-          { heading: "By product — November 2026", columns: ["Product", "Balance (UGX)", "Rate p.a.", "Monthly interest (UGX)"], rows: [...products.map((p) => [p.name, p.balance, `${p.rate}%`, monthly(p.balance, p.rate)]), ["Total", totalBal, "", total]], boldRows: [products.length], numericCols: [1, 2, 3] },
+          { heading: `By product — ${monthLabel(today, true)}`, columns: ["Product", "Balance (UGX)", "Rate p.a.", "Monthly interest (UGX)"], rows: [...products.map((p) => [p.name, p.balance, `${p.rate}%`, monthly(p.balance, p.rate)]), ["Total", totalBal, "", total]], boldRows: [products.length], numericCols: [1, 2, 3] },
           { heading: `Member accruals (savings balance at ${regRate}% p.a.)`, columns: ["SV No.", "Member", "Savings (UGX)", "Monthly interest (UGX)"], rows: members.map((m) => [m.sv_number, m.name, m.savings, monthly(m.savings, regRate)]), numericCols: [2, 3] },
         ],
       };
     }
     case "disbursement": {
-      const total = ADMIN_LOAN_PERFORMANCE.reduce((a, m) => a + m.disbursed, 0);
-      const approved = ADMIN_LOAN_APPLICATIONS.filter((a) => a.status === "approved");
+      const total = perf.reduce((a, m) => a + m.disbursed, 0);
+      const approved = ADMIN_LOAN_APPLICATIONS.filter((a) => a.status === "approved" && isRevealed(a.applied_date, today));
       return {
         title: "Disbursement Report",
-        summary: [["Disbursed (Jun–Nov 2026)", formatCurrency(total)], ["Average per month", formatCurrency(Math.round(total / ADMIN_LOAN_PERFORMANCE.length))], ["Approved, awaiting disbursement", String(approved.length)]],
+        summary: [[`Disbursed (${perfRange})`, formatCurrency(total)], ["Average per month", formatCurrency(Math.round(total / Math.max(1, perf.length)))], ["Approved, awaiting disbursement", String(approved.length)]],
         sections: [
-          { heading: "Monthly disbursements", columns: ["Month (2026)", "Disbursed (UGX)", "Share of period"], rows: [...ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, pct((m.disbursed / total) * 100)]), ["Total", total, "100%"]], boldRows: [ADMIN_LOAN_PERFORMANCE.length], numericCols: [1, 2] },
+          { heading: "Monthly disbursements", columns: ["Month", "Disbursed (UGX)", "Share of period"], rows: [...perf.map((m) => [perfLabel(m.key), m.disbursed, pct((m.disbursed / total) * 100)]), ["Total", total, "100%"]], boldRows: [perf.length], numericCols: [1, 2] },
           { heading: "Approved applications", columns: ["SV No.", "Member", "Product", "Term", "Amount (UGX)"], rows: approved.map((a) => [a.sv, a.member, a.product, a.term, a.amount]), numericCols: [4] },
         ],
       };
     }
     case "collection": {
-      const total = ADMIN_LOAN_PERFORMANCE.reduce((a, m) => a + m.recovered, 0);
+      const total = perf.reduce((a, m) => a + m.recovered, 0);
       const mc = ADMIN_KPI.monthly_collections;
       return {
         title: "Collection Report",
-        summary: [["Collected (Jun–Nov 2026)", formatCurrency(total)], ["This month vs target", `${formatCurrency(mc.value)} of ${formatCurrency(mc.target)} (${mc.percent}%)`]],
+        summary: [[`Collected (${perfRange})`, formatCurrency(total)], [`${monthLabel(today)} vs target`, `${formatCurrency(mc.value)} of ${formatCurrency(mc.target)} (${mc.percent}%)`]],
         sections: [
-          { heading: "Loan repayments received", columns: ["Month (2026)", "Disbursed (UGX)", "Recovered (UGX)", "Recovery ratio"], rows: [...ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, m.recovered, pct((m.recovered / m.disbursed) * 100)]), ["Total", ADMIN_LOAN_PERFORMANCE.reduce((a, m) => a + m.disbursed, 0), total, ""]], boldRows: [ADMIN_LOAN_PERFORMANCE.length], numericCols: [1, 2, 3] },
+          { heading: "Loan repayments received", columns: ["Month", "Disbursed (UGX)", "Recovered (UGX)", "Recovery ratio"], rows: [...perf.map((m) => [perfLabel(m.key), m.disbursed, m.recovered, pct((m.recovered / m.disbursed) * 100)]), ["Total", perf.reduce((a, m) => a + m.disbursed, 0), total, ""]], boldRows: [perf.length], numericCols: [1, 2, 3] },
           { heading: "Monthly collections target", columns: ["Measure", "Amount (UGX)"], rows: [["Target", mc.target], ["Collected", mc.value], ["Shortfall", mc.target - mc.value]], boldRows: [2], numericCols: [1] },
         ],
       };
@@ -288,19 +377,22 @@ function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
         summary: [["Loans in arrears", formatCurrency(arrears)], ["PAR > 30 days", `${ADMIN_KPI.par_30.value}%`], ["Borrowers reviewed", String(borrowers.length)]],
         sections: [
           { heading: "Arrears by ageing bucket", columns: ["Bucket", "Outstanding (UGX)", "% of portfolio"], rows: [...buckets.map((p) => [p.category, p.amount, `${p.percent}%`]), ["Total in arrears", arrears, `${buckets.reduce((a, p) => a + p.percent, 0)}%`]], boldRows: [buckets.length], numericCols: [1, 2] },
-          { heading: "Borrower follow-up", columns: ["SV No.", "Member", "Outstanding (UGX)", "Days overdue", "Follow-up"], rows: borrowers.map((m) => { const f = ARREARS_FOLLOW_UP[m.sv_number] ?? { days: 0, action: "Current" }; return [m.sv_number, m.name, m.loans, f.days, f.action]; }), numericCols: [2, 3] },
+          { heading: `Borrower follow-up — as at ${formatDate(today)}`, columns: ["SV No.", "Member", "Outstanding (UGX)", "Days in arrears", "Follow-up"], rows: borrowers.map((m) => { const f = arrearsStatus(m.sv_number, today); return [m.sv_number, m.name, m.loans, f.days, f.action]; }), numericCols: [2, 3] },
         ],
       };
     }
     case "registrations": {
-      const joined = ADMIN_MEMBERS_LIST.filter((m) => m.joined.startsWith("2026"));
-      const growth = MEMBER_GROWTH.map((g, i) => [g.month, g.members, i === 0 ? "—" : g.members - MEMBER_GROWTH[i - 1].members]);
-      const ytd = MEMBER_GROWTH[MEMBER_GROWTH.length - 1].members - MEMBER_GROWTH[0].members;
+      // Registrations in the current fiscal year (July–June), and 12 months of growth ending this month.
+      const fy = fyOf(today);
+      const joined = ADMIN_MEMBERS_LIST.filter((m) => m.joined >= fyStartOf(today) && m.joined <= today);
+      const series = memberGrowth(today);
+      const growth = series.map((g, i) => [monthLabel(`${g.key}-01`), g.members, i === 0 ? "—" : g.members - series[i - 1].members]);
+      const net = series[series.length - 1].members - series[0].members;
       return {
         title: "New Registrations",
-        summary: [["Members now", formatNumber(ADMIN_KPI.total_members.value)], ["Net new since Dec 2025", formatNumber(ytd)], ["Joined in 2026 (this extract)", String(joined.length)]],
+        summary: [["Members now", formatNumber(ADMIN_KPI.total_members.value)], [`Net new since ${monthLabel(`${series[0].key}-01`)}`, formatNumber(net)], [`Joined in ${fy} (this extract)`, String(joined.length)]],
         sections: [
-          { heading: "Members registered in 2026", columns: ["SV No.", "Member", "Joined", "Status", "KYC"], rows: joined.map((m) => [m.sv_number, m.name, formatDate(m.joined), m.status, m.kyc]) },
+          { heading: `Members registered in ${fy}`, columns: ["SV No.", "Member", "Joined", "Status", "KYC"], rows: joined.map((m) => [m.sv_number, m.name, formatDate(m.joined), m.status, m.kyc]) },
           { heading: "Membership growth", columns: ["Month", "Members", "Net new"], rows: growth, numericCols: [1, 2] },
         ],
       };
@@ -334,7 +426,7 @@ function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
       ];
       return {
         title: "UMRA Quarterly Return",
-        summary: [["Return period", "Q3 FY 2026 (Jul–Sep), updated to date"], ["Total assets", formatCurrency(st.totalAssets)], ["Ratios within limits", `${ratios.filter((x) => x[3]).length} of ${ratios.length}`]],
+        summary: [["Return period", `${lastCompletedQuarter(today)}, updated to ${formatDate(today)}`], ["Total assets", formatCurrency(st.totalAssets)], ["Ratios within limits", `${ratios.filter((x) => x[3]).length} of ${ratios.length}`]],
         sections: [
           { heading: "Prudential ratios", columns: ["Ratio", "Value", "Requirement", "Status"], rows: ratios.map(([label, v, req, ok]) => [label, pct(v), req, ok ? "Compliant" : "Breach"]), numericCols: [1] },
           { heading: "Key balances", columns: ["Item", "Amount (UGX)"], rows: [["Gross loans to members", loans], ["Member savings deposits", deposits], ["Cash, bank & mobile money", liquid], ["Core capital (share capital + reserves + surplus)", capital], ["Total assets", st.totalAssets]], numericCols: [1] },
@@ -342,14 +434,19 @@ function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
       };
     }
     case "aml": {
-      const reportable = LARGE_CASH_TXNS.filter((t) => t.amount >= LCT_THRESHOLD);
+      // Trailing three calendar months up to today; future-dated transactions stay hidden.
+      const from = addMonthsKey(today, -2);
+      const inWindow = LARGE_CASH_TXNS.filter((t) => t.date >= from && isRevealed(t.date, today));
+      const reportable = inWindow.filter((t) => t.amount >= LCT_THRESHOLD);
+      const flagged = LARGE_CASH_TXNS.filter((t) => t.amount < LCT_THRESHOLD && isRevealed(t.date, today));
+      const strs = STR_FILED.filter((d) => monthKey(d) === monthKey(today) && isRevealed(d, today)).length;
       const row = (t: (typeof LARGE_CASH_TXNS)[number]) => [formatDate(t.date), t.sv, memberBySv(t.sv)?.name ?? t.sv, t.type, t.amount, t.status];
       return {
         title: "AML/CTF Report",
-        summary: [["Large cash threshold", formatCurrency(LCT_THRESHOLD)], ["Reportable transactions", String(reportable.length)], ["Under review", String(LARGE_CASH_TXNS.length - reportable.length)], ["Suspicious transaction reports", "0 filed this month"]],
+        summary: [["Large cash threshold", formatCurrency(LCT_THRESHOLD)], [`Reportable transactions (${monthRange([monthKey(from), monthKey(today)])})`, String(reportable.length)], ["Under review", String(flagged.length)], ["Suspicious transaction reports", `${strs} filed in ${monthLabel(today)}`]],
         sections: [
           { heading: `Cash transactions ≥ ${formatCurrency(LCT_THRESHOLD)}`, columns: ["Date", "SV No.", "Member", "Type", "Amount (UGX)", "Status"], rows: reportable.map(row), numericCols: [4] },
-          { heading: "Flagged for review (possible structuring)", columns: ["Date", "SV No.", "Member", "Type", "Amount (UGX)", "Status"], rows: LARGE_CASH_TXNS.filter((t) => t.amount < LCT_THRESHOLD).map(row), numericCols: [4] },
+          { heading: "Flagged for review (possible structuring)", columns: ["Date", "SV No.", "Member", "Type", "Amount (UGX)", "Status"], rows: flagged.map(row), numericCols: [4] },
         ],
       };
     }
@@ -373,10 +470,10 @@ function buildSpec(r: CatalogReport, { tb, st }: Ledger): ReportSpec {
 }
 
 /** Subtitle printed under the title — identical on screen and in the PDF. */
-function reportSubtitle(r: CatalogReport, dateLabel: string) {
-  if (r.gen === "income") return `FY 2026 · for the period ended ${dateLabel}`;
-  if (r.gen === "cashflow") return `FY 2026 · for the period ${formatDate(FY_START)} to ${dateLabel}`;
-  return `${r.category} · As at ${dateLabel}`;
+function reportSubtitle(r: CatalogReport, today: string) {
+  if (r.gen === "income") return `${fyOf(today)} · for the period ended ${formatDate(today)}`;
+  if (r.gen === "cashflow") return `${fyOf(today)} · for the period ${periodText(today)}`;
+  return `${r.category} · ${fyOf(today)} · as at ${formatDate(today)}`;
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -392,7 +489,7 @@ async function runPdf(r: CatalogReport, ledger: Ledger, subtitle: string) {
   return generateTablePdf({
     title: spec.title,
     subtitle,
-    filename: `${slug(spec.title)}-${todayISO()}`,
+    filename: `${slug(spec.title)}-${ledger.today}`,
     summary: spec.summary,
     orientation: spec.orientation,
     sections: spec.sections.map((s) => ({ ...s, rows: s.rows.map((row, i) => (r.gen === "cashflow" && !s.boldRows?.includes(i) ? [`   ${row[0]}`, ...row.slice(1)] : row)) })),
@@ -451,12 +548,35 @@ interface Schedule {
   enabled: boolean;
 }
 
+// Generation history across the story (Sep 2026 → Feb 2027). Future-dated rows are hidden
+// until their date (reveal rule); monthly statements run on the 1st, the trial balance daily.
+const SYS_RUN = "System (scheduled)";
+const SARAH = "Sarah Nakamya";
+const rr = (id: string, report_id: string, generated_at: string, generated_by: string, format: "PDF" | "CSV" = "PDF"): RecentReport => {
+  const def = ALL_REPORTS.find((r) => r.id === report_id);
+  return { id, report_id, name: def?.name ?? report_id, category: def?.category ?? "Financial", generated_at, generated_by, format, size: fileSize(report_id, format) };
+};
 const SEED_RECENT: RecentReport[] = [
-  { id: "rr-1", report_id: "trial", name: "Trial Balance", category: "Financial", generated_at: "2026-11-04T06:00:00", generated_by: "System (scheduled)", format: "PDF", size: fileSize("trial", "PDF") },
-  { id: "rr-2", report_id: "par", name: "Portfolio at Risk (PAR)", category: "Loan", generated_at: "2026-11-02T08:00:00", generated_by: "System (scheduled)", format: "PDF", size: fileSize("par", "PDF") },
-  { id: "rr-3", report_id: "income", name: "Income Statement", category: "Financial", generated_at: "2026-11-01T07:30:00", generated_by: "Sarah Nakamya", format: "PDF", size: fileSize("income", "PDF") },
-  { id: "rr-4", report_id: "register", name: "Member Register", category: "Member", generated_at: "2026-10-28T11:05:00", generated_by: "Sarah Nakamya", format: "CSV", size: fileSize("register", "CSV") },
-  { id: "rr-5", report_id: "umra", name: "UMRA Quarterly Return", category: "Regulatory", generated_at: "2026-10-05T15:40:00", generated_by: "Sarah Nakamya", format: "PDF", size: fileSize("umra", "PDF") },
+  rr("rr-2702d", "income", "2027-02-15T10:20:00", SARAH),
+  rr("rr-2702c", "cashflow", "2027-02-15T10:15:00", SARAH),
+  rr("rr-2702b", "balance", "2027-02-15T10:10:00", SARAH),
+  rr("rr-2702a", "income", "2027-02-01T07:00:00", SYS_RUN),
+  rr("rr-2701c", "register", "2027-01-19T14:30:00", SARAH, "CSV"),
+  rr("rr-2701b", "umra", "2027-01-05T15:40:00", SARAH),
+  rr("rr-2701a", "income", "2027-01-01T07:00:00", SYS_RUN),
+  rr("rr-2612c", "capital", "2026-12-11T16:05:00", SARAH),
+  rr("rr-2612b", "loans", "2026-12-11T15:50:00", SARAH),
+  rr("rr-2612a", "income", "2026-12-01T07:00:00", SYS_RUN),
+  rr("rr-2611f", "trial", "2026-11-23T06:00:00", SYS_RUN),
+  rr("rr-2611e", "par", "2026-11-23T08:00:00", SYS_RUN),
+  rr("rr-2611d", "arrears", "2026-11-20T11:45:00", SARAH),
+  rr("rr-2611c", "par", "2026-11-16T08:00:00", SYS_RUN),
+  rr("rr-2611b", "aml", "2026-11-03T12:10:00", SARAH),
+  rr("rr-2611a", "income", "2026-11-01T07:00:00", SYS_RUN),
+  rr("rr-2610c", "register", "2026-10-28T11:05:00", SARAH, "CSV"),
+  rr("rr-2610b", "umra", "2026-10-05T15:40:00", SARAH),
+  rr("rr-2610a", "income", "2026-10-01T07:00:00", SYS_RUN),
+  rr("rr-2609a", "income", "2026-09-01T07:00:00", SYS_RUN),
 ];
 
 const SEED_SCHEDULES: Schedule[] = [
@@ -597,13 +717,18 @@ function ReportsInner() {
   const tab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "catalog";
   const setTab = (t: TabId) => router.replace(`/admin/reports?tab=${t}`, { scroll: false });
 
-  const [recent, setRecent] = useSafeList<RecentReport>("admin_recent_reports", SEED_RECENT, "report_id");
-  // Same persisted journal as the Accounting page, so posted entries flow into these statements.
+  // Demo clock: ANCHOR on the server/first paint, then the visitor's date clamped to the story window.
+  const today = useDemoToday();
+  // Versioned key: the history is re-authored across Sep 2026 → Feb 2027.
+  const [allRecent, setRecent] = useSafeList<RecentReport>("admin_recent_reports_v2", SEED_RECENT, "report_id");
+  // Reveal rule: future-dated history rows appear once their date arrives. Newest first.
+  const recent = useMemo(
+    () => allRecent.filter((r) => isRevealed(r.generated_at, today)).sort((a, b) => b.generated_at.localeCompare(a.generated_at)),
+    [allRecent, today]
+  );
+  // Same persisted journal and reveal rule as the Accounting page, so the statements agree.
   const [journal] = usePersistedState<JournalEntry[]>(JOURNAL_KEY, DEFAULT_JOURNAL);
-  const ledger = useMemo<Ledger>(() => {
-    const tb = buildTrialBalance(safeJournal(journal));
-    return { tb, st: buildStatements(tb) };
-  }, [journal]);
+  const ledger = useMemo<Ledger>(() => ({ ...buildLedger(safeJournal(journal), today), today }), [journal, today]);
   const [schedules, setSchedules] = useSafeList<Schedule>("admin_scheduled_reports", SEED_SCHEDULES, "frequency");
 
   const [expanded, setExpanded] = useState<string[]>(["Financial Reports"]);
@@ -616,21 +741,23 @@ function ReportsInner() {
   const [schedErr, setSchedErr] = useState<string | null>(null);
   const [schedDelete, setSchedDelete] = useState<Schedule | null>(null);
 
-  // Before hydration use the fixed demo date so server and client render the same text.
-  const now = hydrated ? new Date() : parseDate(DEMO_TODAY);
+  // Before hydration use the anchor date so server and client render the same text; after
+  // that, the current time on the demo clock (real time, date clamped to the story window).
+  const now = hydrated ? new Date(demoNowISO()) : parseDate(ANCHOR);
 
-  /** Latest generation per catalog report: persisted history wins over the seed date. */
+  /** Latest generation per catalog report: the later of the schedule-derived run and the visible history. */
   const lastGenerated = useMemo(() => {
     const map: Record<string, string> = {};
-    for (const r of recent) if (!map[r.report_id] || r.generated_at > map[r.report_id]) map[r.report_id] = r.generated_at;
+    for (const r of ALL_REPORTS) map[r.id] = lastRunOn(r, today);
+    for (const r of recent) if (!map[r.report_id] || r.generated_at.slice(0, 10) > map[r.report_id]) map[r.report_id] = r.generated_at.slice(0, 10);
     return map;
-  }, [recent]);
+  }, [recent, today]);
 
   const generatedBy = user?.name ?? DEMO_ADMIN.full_name;
 
   const record = (r: CatalogReport, format: "PDF" | "CSV") => {
     const entry: RecentReport = {
-      id: uid("rr"), report_id: r.id, name: r.name, category: r.category, generated_at: new Date().toISOString(),
+      id: uid("rr"), report_id: r.id, name: r.name, category: r.category, generated_at: demoNowISO(),
       generated_by: generatedBy, format, size: fileSize(r.id, format),
     };
     setRecent((prev) => [entry, ...prev].slice(0, 50));
@@ -640,7 +767,7 @@ function ReportsInner() {
     if (busy) return;
     setBusy(`${r.id}:PDF`);
     try {
-      await runPdf(r, ledger, reportSubtitle(r, formatDate(new Date())));
+      await runPdf(r, ledger, reportSubtitle(r, today));
       if (opts.log) record(r, "PDF");
       showToast(`${r.name} downloaded`);
     } catch {
@@ -699,7 +826,7 @@ function ReportsInner() {
   };
 
   const pdfCount = recent.filter((r) => r.format === "PDF").length;
-  const thisMonth = recent.filter((r) => r.generated_at.startsWith("2026-11")).length;
+  const thisMonth = recent.filter((r) => monthKey(r.generated_at) === monthKey(today)).length;
   const activeSchedules = schedules.filter((s) => s.enabled);
   const upcoming = activeSchedules.map((s) => nextRun(s, now)).sort((a, b) => a.getTime() - b.getTime())[0];
 
@@ -719,7 +846,7 @@ function ReportsInner() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Reports in catalog" value={ALL_REPORTS.length} sub={`${CATEGORIES.length} categories`} icon={FileText} />
-        <StatCard label="Generated this month" value={thisMonth} sub={`${pdfCount} PDF · ${recent.length - pdfCount} CSV in history`} icon={Download} color="#22c55e" />
+        <StatCard label={`Generated in ${monthLabel(today)}`} value={thisMonth} sub={`${pdfCount} PDF · ${recent.length - pdfCount} CSV in history`} icon={Download} color="#22c55e" />
         <StatCard label="Active schedules" value={activeSchedules.length} sub={`${schedules.length - activeSchedules.length} disabled`} icon={CalendarClock} color="#f59e0b" />
         <StatCard label="Next scheduled run" value={upcoming ? formatDate(upcoming) : "—"} sub={upcoming ? formatDateTime(upcoming).split(", ")[1] ?? "" : "No active schedules"} icon={Clock} color="#a855f7" />
       </div>
@@ -774,7 +901,7 @@ function ReportsInner() {
                     <div className="border-t dm-border">
                       {cat.reports.map((def) => {
                         const r = findReport(def.id)!;
-                        const last = lastGenerated[r.id] ?? r.last;
+                        const last = lastGenerated[r.id] ?? lastRunOn(r, today);
                         const pdfBusy = busy === `${r.id}:PDF`;
                         return (
                           <div key={r.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b dm-border last:border-0 hover:dm-surface-hover">
@@ -934,7 +1061,7 @@ function ReportsInner() {
           <div id="print-area">
             <p className="text-xs opacity-70">SilverVibe Fraternity Cooperative Society Ltd</p>
             <h2 className="text-lg font-bold">{buildSpec(preview, ledger).title}</h2>
-            <p className="text-xs opacity-70 mb-4">{reportSubtitle(preview, formatDate(now))}</p>
+            <p className="text-xs opacity-70 mb-4">{reportSubtitle(preview, today)}</p>
             <PreviewTables spec={buildSpec(preview, ledger)} />
           </div>
         )}
