@@ -4,7 +4,10 @@
 // route in light and dark mode and fails on console errors, uncaught
 // exceptions, hydration warnings, 404s, or placeholder text.
 //
-// Usage:  BASE_URL=http://localhost:3000 node scripts/smoke.mjs [--shots DIR] [--only /admin/loans]
+// Usage:  BASE_URL=http://localhost:3000 node scripts/smoke.mjs [--shots DIR] [--only /admin/loans] [--date YYYY-MM-DD]
+//
+// --date freezes the browser clock on that day (10:00 local) so the demo timeline
+// (Nov 2026 → Feb 2027) can be checked on any date, and adds date-specific checks.
 // ============================================================
 import { createRequire } from "node:module";
 // Playwright is pre-installed globally in CI/dev containers; require() resolves it, ESM import may not.
@@ -16,6 +19,12 @@ const BASE = process.env.BASE_URL || "http://localhost:3000";
 const args = process.argv.slice(2);
 const shotsDir = args.includes("--shots") ? args[args.indexOf("--shots") + 1] : null;
 const only = args.includes("--only") ? args[args.indexOf("--only") + 1] : null;
+const date = args.includes("--date") ? args[args.indexOf("--date") + 1] : null;
+if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`--date must be YYYY-MM-DD, got ${date}`);
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "15 Dec 2026" — matches formatDate() in the app (en-GB, short month). */
+const longDate = (d) => `${Number(d.slice(8, 10))} ${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
+const monthLabel = (d) => `${MONTHS[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
 if (shotsDir) fs.mkdirSync(shotsDir, { recursive: true });
 
 const ADMIN = ["/admin", "/admin/members", "/admin/savings", "/admin/loans", "/admin/shares", "/admin/accounting",
@@ -63,6 +72,10 @@ const browser = await chromium.launch();
 try {
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 } });
   const page = await ctx.newPage();
+  if (date) {
+    await page.clock.setFixedTime(new Date(`${date}T10:00:00`));
+    console.log(`Clock frozen at ${date} 10:00`);
+  }
 
   console.log("Auth gating");
   await page.goto(BASE + "/admin/members", { waitUntil: "networkidle" });
@@ -111,6 +124,40 @@ try {
     if (!only) {
       await page.evaluate(() => localStorage.removeItem("silvervibe_auth"));
       for (const r of PUBLIC) await visit(page, r, theme);
+    }
+  }
+
+  // ---- Timeline checks: the demo must look current and consistent on this date ----
+  if (!only) {
+    const today = date ?? new Date().toISOString().slice(0, 10);
+    const inWindow = today >= "2026-11-23" && today <= "2027-02-28";
+    console.log(`\nTimeline checks for ${today}${inWindow ? "" : " (outside the demo window; clamped)"}`);
+    const as = async (role) => {
+      const s = role === "admin"
+        ? { isAuthenticated: true, userType: "admin", user: { name: "Sarah Nakamya", email: "admin@silvervibe.coop", role: "Super Admin" } }
+        : { isAuthenticated: true, userType: "member", user: { name: "James Mukasa", email: "james.mukasa@silvervibe.coop", role: "Member", sv: "SV-0042" } };
+      await page.evaluate((x) => localStorage.setItem("silvervibe_auth", JSON.stringify({ state: x, version: 0 })), s);
+    };
+    const textOf = async (route) => {
+      await page.goto(BASE + route, { waitUntil: "networkidle" });
+      await page.waitForTimeout(700);
+      return page.locator("main").innerText();
+    };
+    const check = (ok, where, msg) => (ok ? console.log(`  ✓ ${where}: ${msg}`) : fail(where, msg));
+    if (inWindow) {
+      await as("member");
+      const loans = await textOf("/portal/loans");
+      check(!/overdue/i.test(loans), "/portal/loans", "demo member has no overdue installment");
+      const portal = await textOf("/portal");
+      check(/upcoming/i.test(portal), "/portal", "upcoming events listed");
+      await as("admin");
+      const dash = await textOf("/admin");
+      check(dash.includes(`as at ${longDate(today)}`), "/admin", `dashboard is "as at ${longDate(today)}"`);
+      const comms = await textOf("/admin/communications");
+      check(comms.includes(`Messages sent (${monthLabel(today)})`), "/admin/communications", `month-to-date label is ${monthLabel(today)}`);
+      const tb = await textOf("/admin/accounting?tab=trial");
+      check(/balanced/i.test(tb), "/admin/accounting", "trial balance balances");
+      check(tb.includes("FY 2026/27"), "/admin/accounting", "fiscal year labelled FY 2026/27");
     }
   }
 } finally {

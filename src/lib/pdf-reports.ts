@@ -12,10 +12,11 @@ import {
   ADMIN_MEMBERS_LIST,
   ADMIN_PRODUCT_DISTRIBUTION,
   PORTFOLIO_QUALITY,
-  ADMIN_LOAN_PERFORMANCE,
+  loanPerformance,
   DEMO_MEMBER,
 } from "./mock-data";
 import { formatDate } from "./utils";
+import { demoTodayISO, fyOf } from "./demo-clock";
 
 const SACCO_NAME = "SilverVibe Fraternity Cooperative Society Ltd";
 const SACCO_ADDRESS = "Plot 22, Kampala Road · Kampala, Uganda · info@silvervibe.coop";
@@ -146,8 +147,10 @@ export async function generateTablePdf(opts: PdfOptions): Promise<void> {
   doc.save(opts.filename.endsWith(".pdf") ? opts.filename : `${opts.filename}.pdf`);
 }
 
-const stamp = () => new Date().toISOString().slice(0, 10);
-const periodLabel = () => `For the period ended ${formatDate(new Date())}`;
+const stamp = () => docDate();
+/** Documents are dated on the demo clock (see demo-clock.ts). */
+const docDate = () => demoTodayISO();
+const periodLabel = () => `${fyOf(docDate())} · for the period ended ${formatDate(docDate())}`;
 
 // ============================================================
 // Financial statements
@@ -228,7 +231,7 @@ export async function generateBalanceSheet(
   const te = eqBase + retained;
   await generateTablePdf({
     title: "Statement of Financial Position",
-    subtitle: `As at ${formatDate(new Date())}`,
+    subtitle: `As at ${formatDate(docDate())}`,
     filename: `balance-sheet-${stamp()}`,
     summary: [
       ["Total assets", ugx(ta)],
@@ -267,7 +270,7 @@ export async function generateTrialBalance(rows: { code: string; name: string; d
   const tc = rows.reduce((a, r) => a + r.credit, 0);
   await generateTablePdf({
     title: "Trial Balance",
-    subtitle: `As at ${formatDate(new Date())}`,
+    subtitle: `As at ${formatDate(docDate())}`,
     filename: `trial-balance-${stamp()}`,
     summary: [
       ["Total debits", ugx(td)],
@@ -322,7 +325,7 @@ export async function generateLoanPortfolio() {
       {
         heading: "Disbursements vs recoveries (6 months)",
         columns: ["Month", "Disbursed (UGX)", "Recovered (UGX)"],
-        rows: ADMIN_LOAN_PERFORMANCE.map((m) => [m.month, m.disbursed, m.recovered]),
+        rows: loanPerformance(demoTodayISO()).map((m) => [m.month, m.disbursed, m.recovered]),
         numericCols: [1, 2],
       },
       {
@@ -354,7 +357,7 @@ export async function generatePARReport() {
 export async function generateMemberRegister() {
   await generateTablePdf({
     title: "Member Register",
-    subtitle: `As at ${formatDate(new Date())}`,
+    subtitle: `As at ${formatDate(docDate())}`,
     filename: `member-register-${stamp()}`,
     orientation: "landscape",
     summary: [["Members listed", String(ADMIN_MEMBERS_LIST.length)]],

@@ -9,6 +9,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { usePersistedState } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { ADMIN_NOTIFICATIONS, ADMIN_MEMBERS_LIST } from "@/lib/mock-data";
+import { useDemoToday, isRevealed } from "@/lib/demo-clock";
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -34,6 +35,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
 function AdminShell({ children }: { children: React.ReactNode }) {
   const [notifs, setNotifs] = usePersistedState(KEYS.adminNotifications, ADMIN_NOTIFICATIONS);
+  // Notifications dated in the future appear only once the demo clock reaches them.
+  const today = useDemoToday();
+  const visible = notifs.filter((n) => isRevealed(n.time, today));
   // The members page persists edits under "admin_members"; search reads the same list.
   const [members] = usePersistedState(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
 
@@ -52,9 +56,9 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       navItems={navItems}
       rootHref="/admin"
       subtitle="Admin Dashboard"
-      notifications={notifs.map((n) => ({ id: n.id, title: n.title, body: n.desc, when: n.time, read: n.read, href: n.href }))}
+      notifications={visible.map((n) => ({ id: n.id, title: n.title, body: n.desc, when: n.time, read: n.read, href: n.href }))}
       onMarkRead={(id) => setNotifs((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)))}
-      onMarkAllRead={() => setNotifs((p) => p.map((n) => ({ ...n, read: true })))}
+      onMarkAllRead={() => setNotifs((p) => p.map((n) => (isRevealed(n.time, today) ? { ...n, read: true } : n)))}
       allNotificationsHref="/admin/communications?tab=notifications"
       searchExtra={searchExtra}
       searchPlaceholder="Search pages or members (name / SV number)…"

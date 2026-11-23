@@ -6,6 +6,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { usePersistedState } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { NOTIFICATIONS_DATA } from "@/lib/mock-data";
+import { useDemoToday, isRevealed } from "@/lib/demo-clock";
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/portal", icon: LayoutDashboard },
@@ -36,6 +37,9 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
 function PortalShell({ children }: { children: React.ReactNode }) {
   const [notifs, setNotifs] = usePersistedState(KEYS.memberNotifications, NOTIFICATIONS_DATA);
+  // Notifications dated in the future appear only once the demo clock reaches them.
+  const today = useDemoToday();
+  const visible = notifs.filter((n) => isRevealed(n.date, today));
 
   const searchExtra = useCallback(
     (q: string) =>
@@ -49,9 +53,9 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       navItems={navItems}
       rootHref="/portal"
       subtitle="Member Portal"
-      notifications={notifs.map((n) => ({ id: n.id, title: n.title, body: n.message, when: n.date, read: n.read, href: n.href }))}
+      notifications={visible.map((n) => ({ id: n.id, title: n.title, body: n.message, when: n.date, read: n.read, href: n.href }))}
       onMarkRead={(id) => setNotifs((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)))}
-      onMarkAllRead={() => setNotifs((p) => p.map((n) => ({ ...n, read: true })))}
+      onMarkAllRead={() => setNotifs((p) => p.map((n) => (isRevealed(n.date, today) ? { ...n, read: true } : n)))}
       allNotificationsHref="/portal/notifications"
       searchExtra={searchExtra}
       searchPlaceholder="Search pages and actions (deposit, loan, statement)…"

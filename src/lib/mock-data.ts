@@ -1,6 +1,11 @@
 // ============================================================
 // DEMO DATA — SilverVibe Fraternity Cooperative Society Ltd
+//
+// The data tells one story from Sep 2026 to Feb 2027 (see demo-clock.ts).
+// Everything up to ANCHOR (23 Nov 2026) is history; records dated after it
+// are revealed as the real date reaches them.
 // ============================================================
+import { ANCHOR, TIMELINE_EVENTS as EV, trailingSeries, monthKey } from "./demo-clock";
 
 export const DEMO_MEMBER = {
   id: "m-001",
@@ -24,7 +29,7 @@ export const DEMO_ADMIN = {
   full_name: "Sarah Nakamya",
   email: "admin@silvervibe.coop",
   role: "Super Admin",
-  last_login: "2026-11-04T08:30:00",
+  last_login: "2026-11-23T08:30:00",
 };
 
 // Member savings accounts
@@ -41,7 +46,7 @@ export const MEMBER_SAVINGS = [
     monthly_target: 200_000,
     monthly_contributed: 200_000,
     status: "Active",
-    last_activity: "2026-10-10",
+    last_activity: "2026-11-02",
     streak: 6,
     color: "#1A1A1A",
   },
@@ -57,7 +62,7 @@ export const MEMBER_SAVINGS = [
     monthly_target: 0,
     monthly_contributed: 0,
     status: "Active",
-    last_activity: "2026-11-02",
+    last_activity: "2026-11-19",
     streak: 0,
     color: "#4A90D9",
   },
@@ -165,8 +170,8 @@ export const MEMBER_SHARES = {
     { number: "SV-CERT-0134", shares: 75, date: "2026-02-20", amount: 1_500_000 },
   ],
   dividends: [
-    { year: "FY 2024", rate: "8%", amount: 160_000, paid_date: "2025-03-15" },
-    { year: "FY 2025", rate: "10%", amount: 350_000, paid_date: "2026-03-20" },
+    { year: "FY 2023/24", rate: "8%", amount: 160_000, paid_date: "2025-03-15" },
+    { year: "FY 2024/25", rate: "10%", amount: 350_000, paid_date: "2026-03-20" },
   ],
 };
 
@@ -178,66 +183,106 @@ export const MEMBER_IU = {
 };
 
 export const RECENT_TRANSACTIONS = [
-  { id: "t-001", date: "2026-11-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
-  { id: "t-002", date: "2026-11-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Bank Transfer", status: "Posted", direction: "debit" },
-  { id: "t-003", date: "2026-10-18", type: "Deposit", account: "Flexi/Wallet", account_id: "sa-002", amount: 500_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
+  { id: "t-001", date: "2026-11-19", type: "Deposit", account: "Flexi/Wallet", account_id: "sa-002", amount: 500_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
+  { id: "t-002", date: "2026-11-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Standing Order", status: "Posted", direction: "credit" },
+  { id: "t-003", date: "2026-11-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Standing Order", status: "Posted", direction: "debit" },
   { id: "t-004", date: "2026-10-09", type: "Withdrawal", account: "Flexi/Wallet", account_id: "sa-002", amount: 1_000_000, channel: "Bank Transfer", status: "Posted", direction: "debit" },
-  { id: "t-005", date: "2026-10-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Mobile Money", status: "Posted", direction: "credit" },
-  { id: "t-006", date: "2026-09-10", type: "Share Purchase", account: "Share Capital", account_id: "shares", amount: 500_000, channel: "Cash", status: "Posted", direction: "debit" },
-  { id: "t-007", date: "2026-10-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Bank Transfer", status: "Posted", direction: "debit" },
-  { id: "t-008", date: "2026-08-20", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 300_000, channel: "Cash", status: "Posted", direction: "credit" },
+  { id: "t-005", date: "2026-10-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Standing Order", status: "Posted", direction: "credit" },
+  { id: "t-006", date: "2026-10-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Standing Order", status: "Posted", direction: "debit" },
+  { id: "t-007", date: "2026-09-10", type: "Share Purchase", account: "Share Capital", account_id: "shares", amount: 500_000, channel: "Cash", status: "Posted", direction: "debit" },
+  { id: "t-008", date: "2026-09-02", type: "Deposit", account: "Regular Savings", account_id: "sa-001", amount: 200_000, channel: "Standing Order", status: "Posted", direction: "credit" },
+  { id: "t-009", date: "2026-09-01", type: "Loan Repayment", account: "Short-Term Loan", account_id: "ln-001", amount: 733_440, channel: "Standing Order", status: "Posted", direction: "debit" },
 ];
 
-export const SAVINGS_HISTORY = [
-  { month: "Jun", regular: 9_800_000, flexi: 1_800_000, fixed: 10_000_000 },
-  { month: "Jul", regular: 10_200_000, flexi: 2_100_000, fixed: 10_000_000 },
-  { month: "Aug", regular: 10_600_000, flexi: 2_400_000, fixed: 10_000_000 },
-  { month: "Sep", regular: 11_200_000, flexi: 2_800_000, fixed: 10_000_000 },
-  { month: "Oct", regular: 11_850_000, flexi: 3_750_000, fixed: 10_000_000 },
-  { month: "Nov", regular: 12_450_000, flexi: 3_250_000, fixed: 10_000_000 },
-];
+/** Member savings by account for the 6 months ending at `today` (Regular grows by the standing order). */
+export function savingsHistory(today: string) {
+  const regular = trailingSeries(today, 6, 12_450_000, [EV.savingsStandingOrderAmount / 12_000_000]);
+  const flexi = trailingSeries(today, 6, 3_250_000, [0.06, -0.03, 0.08, 0.02]);
+  return regular.map((r, i) => ({ key: r.key, month: r.month, regular: r.value, flexi: Math.round(flexi[i].value / 10_000) * 10_000, fixed: 10_000_000 }));
+}
+/** @deprecated use savingsHistory(today) */
+export const SAVINGS_HISTORY = savingsHistory(ANCHOR);
 
+/** Member-facing announcements. Future-dated ones appear when their date arrives. */
 export const ANNOUNCEMENTS = [
   {
-    id: "ann-001",
-    title: "Annual General Meeting 2026",
-    content: "Dear Members, you are invited to the Annual General Meeting scheduled for December 12, 2026 at Silver Springs Hotel, Kampala. Agenda includes financial reports, dividend declaration, and board elections.",
-    date: "2026-10-10",
+    id: "ann-agm-notice",
+    title: "Notice of Annual General Meeting",
+    content: `Dear Members, the Annual General Meeting will be held on Saturday 20 February 2027 at ${EV.agmVenue} from 9:00 AM. Agenda: FY 2025/26 audited accounts, dividend declaration and board elections. Please confirm attendance through the portal.`,
+    date: "2027-01-20",
     priority: "high",
   },
   {
-    id: "ann-002",
-    title: "New Fixed Savings Rate",
-    content: "We are pleased to announce an increased fixed savings rate of 13% p.a. for 12-month tenor, effective December 1, 2026. Lock in your savings today!",
-    date: "2026-10-08",
+    id: "ann-festive",
+    title: "Festive season office hours",
+    content: "Our offices will be closed from 24 December 2026 and reopen on Monday 4 January 2027. Mobile Money deposits and the member portal remain available throughout.",
+    date: "2026-12-18",
     priority: "normal",
   },
   {
-    id: "ann-003",
-    title: "Mobile Money Deposits Now Available",
-    content: "You can now make deposits directly from your mobile money account. Dial *165# and follow the prompts to deposit into your SilverVibe account.",
-    date: "2026-09-25",
+    id: "ann-agm-save-date",
+    title: "Save the date: AGM on 20 February 2027",
+    content: `The Annual General Meeting will take place on 20 February 2027 at ${EV.agmVenue}. The FY 2025/26 dividend will be declared at the meeting.`,
+    date: "2026-11-21",
+    priority: "high",
+  },
+  {
+    id: "ann-fixed-rate",
+    title: "New fixed savings rate from 1 January",
+    content: "We are pleased to announce an increased fixed savings rate of 13% p.a. for the 12-month tenor, effective 1 January 2027. Lock in your savings today!",
+    date: "2026-11-20",
+    priority: "normal",
+  },
+  {
+    id: "ann-momo",
+    title: "Mobile Money deposits now available",
+    content: "You can now deposit directly from your mobile money account. Dial *165# and follow the prompts to deposit into your SilverVibe account.",
+    date: "2026-10-05",
     priority: "normal",
   },
 ];
 
+/**
+ * Member notifications. Records dated after ANCHOR are revealed on their date
+ * (pages and the header filter with isRevealed). Dates are YYYY-MM-DD.
+ */
 export const NOTIFICATIONS_DATA = [
-  { id: "n-001", type: "transaction", title: "Deposit Confirmed", message: "Your deposit of UGX 200,000 to Regular Savings has been posted.", date: "2026-11-02", read: false, href: "/portal/savings" },
-  { id: "n-002", type: "reminder", title: "Loan Repayment Due", message: "Your loan repayment of UGX 733,440 is due on 1 December 2026.", date: "2026-11-01", read: false, href: "/portal/loans" },
-  { id: "n-003", type: "transaction", title: "Loan Payment Received", message: "Your loan repayment of UGX 733,440 has been posted.", date: "2026-11-01", read: false, href: "/portal/loans" },
-  { id: "n-004", type: "announcement", title: "AGM 2026", message: "Annual General Meeting on 12 December 2026 at Silver Springs Hotel.", date: "2026-10-20", read: true, href: "/portal" },
-  { id: "n-005", type: "loan", title: "Guarantor Request", message: "Fatima Nankya (SV-0056) listed you as a guarantor for a Business Loan.", date: "2026-10-12", read: true, href: "/portal/loans" },
-  { id: "n-006", type: "system", title: "Statement Ready", message: "Your October 2026 statement is ready for download.", date: "2026-11-01", read: true, href: "/portal/savings" },
+  // ---- future, revealed as the date arrives ----
+  { id: "n-2027-02-20", type: "announcement", title: "FY 2025/26 dividend declared", message: "The AGM declared an 11% dividend for FY 2025/26, payable on 15 March 2027.", date: "2027-02-20", read: false, href: "/portal/shares" },
+  { id: "n-2027-02-13", type: "reminder", title: "AGM this Saturday", message: "Reminder: the AGM is on 20 February 2027 at Silver Springs Hotel from 9:00 AM.", date: "2027-02-13", read: false, href: "/portal" },
+  { id: "n-2027-02-01", type: "system", title: "Statement Ready", message: "Your January 2027 statement is ready for download.", date: "2027-02-01", read: false, href: "/portal/savings?action=statement" },
+  { id: "n-2027-01-27", type: "reminder", title: "Loan Repayment Due", message: "Your loan repayment of UGX 733,440 will be collected on 1 February 2027.", date: "2027-01-27", read: false, href: "/portal/loans" },
+  { id: "n-2027-01-20", type: "announcement", title: "AGM notice", message: "The Annual General Meeting will be held on 20 February 2027. Please confirm attendance.", date: "2027-01-20", read: false, href: "/portal" },
+  { id: "n-2027-01-01", type: "system", title: "Statement Ready", message: "Your December 2026 statement is ready for download.", date: "2027-01-01", read: false, href: "/portal/savings?action=statement" },
+  { id: "n-2026-12-27", type: "reminder", title: "Loan Repayment Due", message: "Your loan repayment of UGX 733,440 will be collected on 1 January 2027.", date: "2026-12-27", read: false, href: "/portal/loans" },
+  { id: "n-2026-12-18", type: "announcement", title: "Festive season office hours", message: "Offices close on 24 December and reopen on 4 January. The portal stays open.", date: "2026-12-18", read: false, href: "/portal" },
+  { id: "n-2026-12-01", type: "system", title: "Statement Ready", message: "Your November 2026 statement is ready for download.", date: "2026-12-01", read: false, href: "/portal/savings?action=statement" },
+  { id: "n-2026-11-26", type: "reminder", title: "Loan Repayment Due", message: "Your loan repayment of UGX 733,440 will be collected on 1 December 2026.", date: "2026-11-26", read: false, href: "/portal/loans" },
+  // ---- history up to ANCHOR ----
+  { id: "n-001", type: "announcement", title: "Save the date: AGM", message: "The Annual General Meeting is on 20 February 2027 at Silver Springs Hotel.", date: "2026-11-21", read: false, href: "/portal" },
+  { id: "n-002", type: "transaction", title: "Deposit Confirmed", message: "Your Mobile Money deposit of UGX 500,000 to Flexi/Wallet has been posted.", date: "2026-11-19", read: false, href: "/portal/savings" },
+  { id: "n-003", type: "loan", title: "Guarantor Request", message: "Fatima Nankya (SV-0056) listed you as a guarantor for a Business Loan.", date: "2026-11-10", read: true, href: "/portal/loans" },
+  { id: "n-004", type: "transaction", title: "Standing order paid", message: "UGX 200,000 was saved to Regular Savings by standing order.", date: "2026-11-02", read: true, href: "/portal/savings" },
+  { id: "n-005", type: "transaction", title: "Loan Payment Received", message: "Your loan repayment of UGX 733,440 has been posted.", date: "2026-11-01", read: true, href: "/portal/loans" },
+  { id: "n-006", type: "system", title: "Statement Ready", message: "Your October 2026 statement is ready for download.", date: "2026-11-01", read: true, href: "/portal/savings?action=statement" },
 ];
 
 export type MemberNotification = (typeof NOTIFICATIONS_DATA)[number];
 
+/** Admin bell notifications. Times after ANCHOR are revealed when reached. */
 export const ADMIN_NOTIFICATIONS = [
-  { id: "an-1", title: "New member registered", desc: "Martha Apio (SV-0078) submitted a registration form", time: "2026-11-04T08:45:00", read: false, href: "/admin/members?q=SV-0078" },
-  { id: "an-2", title: "Loan approval pending", desc: "Grace Nabirye (SV-0023) applied for UGX 5,000,000", time: "2026-11-04T09:02:00", read: false, href: "/admin/loans?tab=applications" },
-  { id: "an-3", title: "Savings deposit", desc: "UGX 500,000 deposited by Fatima Nankya (SV-0056)", time: "2026-11-04T09:15:00", read: false, href: "/admin/savings?tab=transactions" },
-  { id: "an-4", title: "System backup completed", desc: "Daily backup completed successfully", time: "2026-11-04T03:00:00", read: true, href: "/admin/settings?tab=system" },
-  { id: "an-5", title: "Interest computation done", desc: "Monthly interest calculated for all accounts", time: "2026-11-03T23:00:00", read: true, href: "/admin/accounting?tab=journal" },
+  // ---- future, revealed as the time arrives ----
+  { id: "an-2027-02-20", title: "AGM concluded", desc: "FY 2025/26 dividend of 11% declared; payable 15 Mar 2027", time: "2027-02-20T15:30:00", read: false, href: "/admin/shares?tab=dividends" },
+  { id: "an-2027-01-20", title: "AGM notice sent", desc: "Notice of AGM sent to 847 members by SMS and email", time: "2027-01-20T09:01:00", read: false, href: "/admin/communications?tab=history" },
+  { id: "an-2027-01-01", title: "Fixed savings rate updated", desc: "New 13% p.a. rate on 12-month fixed savings is now live", time: "2027-01-01T00:05:00", read: false, href: "/admin/savings?tab=products" },
+  { id: "an-2026-12-12", title: "Board meeting today", desc: "Quarterly board meeting at 2:00 PM — PAR and AGM preparations", time: "2026-12-12T07:30:00", read: false, href: "/admin" },
+  { id: "an-2026-12-01", title: "Arrears reminders sent", desc: "SMS reminders sent to members with overdue installments", time: "2026-12-01T09:01:00", read: false, href: "/admin/communications?tab=history" },
+  // ---- history up to ANCHOR ----
+  { id: "an-1", title: "Savings deposit", desc: "UGX 500,000 deposited by Fatima Nankya (SV-0056)", time: "2026-11-23T09:15:00", read: false, href: "/admin/savings?tab=transactions" },
+  { id: "an-2", title: "Loan approval pending", desc: "Grace Nabirye (SV-0023) applied for UGX 5,000,000", time: "2026-11-22T15:02:00", read: false, href: "/admin/loans?tab=applications" },
+  { id: "an-3", title: "New member registered", desc: "Martha Apio (SV-0078) submitted a registration form", time: "2026-11-22T10:45:00", read: false, href: "/admin/members?q=SV-0078" },
+  { id: "an-4", title: "System backup completed", desc: "Daily backup completed successfully", time: "2026-11-23T03:00:00", read: true, href: "/admin/settings?tab=system" },
+  { id: "an-5", title: "Interest computation done", desc: "Monthly interest calculated for all accounts", time: "2026-10-31T23:00:00", read: true, href: "/admin/accounting?tab=journal" },
 ];
 
 export type AdminNotification = (typeof ADMIN_NOTIFICATIONS)[number];
@@ -268,29 +313,39 @@ export const ADMIN_MEMBERS_LIST = [
   { sv_number: "SV-0095", name: "Christine Tumwine", phone: "+256 700 999 999", email: "christine@email.com", status: "suspended", kyc: "verified", savings: 3_100_000, loans: 4_500_000, shares: 2_000_000, joined: "2023-03-14" },
 ];
 
-export const ADMIN_SAVINGS_GROWTH = [
-  { month: "Dec", amount: 3_200_000_000 },
-  { month: "Jan", amount: 3_350_000_000 },
-  { month: "Feb", amount: 3_520_000_000 },
-  { month: "Mar", amount: 3_680_000_000 },
-  { month: "Apr", amount: 3_850_000_000 },
-  { month: "May", amount: 4_010_000_000 },
-  { month: "Jun", amount: 4_180_000_000 },
-  { month: "Jul", amount: 4_350_000_000 },
-  { month: "Aug", amount: 4_520_000_000 },
-  { month: "Sep", amount: 4_640_000_000 },
-  { month: "Oct", amount: 4_750_000_000 },
-  { month: "Nov", amount: 4_820_000_000 },
-];
+/** Total savings for the 12 months ending at `today`; the last point equals the KPI. */
+export function savingsGrowth(today: string) {
+  return trailingSeries(today, 12, ADMIN_KPI.total_savings.value, [0.012, 0.02, 0.035, 0.03, 0.04, 0.035, 0.03, 0.03, 0.028, 0.02, 0.018, 0.015], 10_000_000)
+    .map((p) => ({ key: p.key, month: p.month, amount: p.value }));
+}
+/** @deprecated use savingsGrowth(today) */
+export const ADMIN_SAVINGS_GROWTH = savingsGrowth(ANCHOR);
 
-export const ADMIN_LOAN_PERFORMANCE = [
-  { month: "Jun", disbursed: 280_000_000, recovered: 310_000_000 },
-  { month: "Jul", disbursed: 320_000_000, recovered: 290_000_000 },
-  { month: "Aug", disbursed: 250_000_000, recovered: 305_000_000 },
-  { month: "Sep", disbursed: 190_000_000, recovered: 340_000_000 },
-  { month: "Oct", disbursed: 350_000_000, recovered: 280_000_000 },
-  { month: "Nov", disbursed: 300_000_000, recovered: 320_000_000 },
+/** Monthly disbursements vs recoveries, authored by calendar month across the story. */
+const LOAN_PERFORMANCE_BY_MONTH: { key: string; disbursed: number; recovered: number }[] = [
+  { key: "2026-03", disbursed: 240_000_000, recovered: 270_000_000 },
+  { key: "2026-04", disbursed: 260_000_000, recovered: 285_000_000 },
+  { key: "2026-05", disbursed: 300_000_000, recovered: 290_000_000 },
+  { key: "2026-06", disbursed: 280_000_000, recovered: 310_000_000 },
+  { key: "2026-07", disbursed: 320_000_000, recovered: 290_000_000 },
+  { key: "2026-08", disbursed: 250_000_000, recovered: 305_000_000 },
+  { key: "2026-09", disbursed: 190_000_000, recovered: 340_000_000 },
+  { key: "2026-10", disbursed: 350_000_000, recovered: 280_000_000 },
+  { key: "2026-11", disbursed: 300_000_000, recovered: 320_000_000 },
+  { key: "2026-12", disbursed: 220_000_000, recovered: 335_000_000 },
+  { key: "2027-01", disbursed: 380_000_000, recovered: 300_000_000 },
+  { key: "2027-02", disbursed: 330_000_000, recovered: 325_000_000 },
 ];
+const SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** The `n` months of loan performance ending at today's month. */
+export function loanPerformance(today: string, n = 6) {
+  const end = monthKey(today);
+  return LOAN_PERFORMANCE_BY_MONTH.filter((m) => m.key <= end)
+    .slice(-n)
+    .map((m) => ({ key: m.key, month: SHORT[Number(m.key.slice(5, 7)) - 1], disbursed: m.disbursed, recovered: m.recovered }));
+}
+/** @deprecated use loanPerformance(today) */
+export const ADMIN_LOAN_PERFORMANCE = loanPerformance(ANCHOR);
 
 export const ADMIN_PRODUCT_DISTRIBUTION = [
   { name: "Regular Savings", value: 2_100_000_000, color: "#1A1A1A" },
@@ -310,34 +365,27 @@ export const ADMIN_RECENT_ACTIVITY = [
 ];
 
 export const ADMIN_PENDING_APPROVALS = [
-  { id: "pa-1", type: "Loan Application", member: "Grace Nabirye (SV-0023)", amount: 5_000_000, submitted: "2026-11-03", priority: "high" },
-  { id: "pa-2", type: "Withdrawal", member: "David Ssempala (SV-0034)", amount: 3_000_000, submitted: "2026-11-03", priority: "medium" },
-  { id: "pa-3", type: "Profile Update", member: "Peter Okello (SV-0067)", amount: null, submitted: "2026-11-02", priority: "low" },
-  { id: "pa-4", type: "Loan Disbursement", member: "Fatima Nankya (SV-0056)", amount: 12_000_000, submitted: "2026-11-02", priority: "high" },
-  { id: "pa-5", type: "Manual Journal", member: "Accountant Entry", amount: 1_500_000, submitted: "2026-11-01", priority: "medium" },
+  { id: "pa-1", type: "Loan Application", member: "Grace Nabirye (SV-0023)", amount: 5_000_000, submitted: "2026-11-22", priority: "high" },
+  { id: "pa-2", type: "Withdrawal", member: "David Ssempala (SV-0034)", amount: 3_000_000, submitted: "2026-11-22", priority: "medium" },
+  { id: "pa-3", type: "Profile Update", member: "Peter Okello (SV-0067)", amount: null, submitted: "2026-11-21", priority: "low" },
+  { id: "pa-4", type: "Loan Disbursement", member: "Fatima Nankya (SV-0056)", amount: 12_000_000, submitted: "2026-11-21", priority: "high" },
+  { id: "pa-5", type: "Manual Journal", member: "Accountant Entry", amount: 1_500_000, submitted: "2026-11-20", priority: "medium" },
 ];
 
 export const ADMIN_LOAN_APPLICATIONS = [
-  { id: "la-1", sv: "SV-0023", member: "Grace Nabirye", product: "Short-Term Loan", amount: 5_000_000, term: "12 months", status: "pending_review", applied_date: "2026-11-03", score: 78, guarantors: ["Alice Namugga", "Robert Kizza"] },
-  { id: "la-2", sv: "SV-0056", member: "Fatima Nankya", product: "Business Loan", amount: 25_000_000, term: "36 months", status: "under_appraisal", applied_date: "2026-10-10", score: 92, guarantors: ["Samuel Byaruhanga", "James Mukasa"] },
-  { id: "la-3", sv: "SV-0089", member: "Samuel Byaruhanga", product: "Emergency Loan", amount: 2_000_000, term: "3 months", status: "approved", applied_date: "2026-10-05", score: 95, guarantors: ["Fatima Nankya"] },
-  { id: "la-4", sv: "SV-0034", member: "David Ssempala", product: "Short-Term Loan", amount: 10_000_000, term: "12 months", status: "rejected", applied_date: "2026-09-28", score: 45, guarantors: ["Peter Okello"] },
+  { id: "la-1", sv: "SV-0023", member: "Grace Nabirye", product: "Short-Term Loan", amount: 5_000_000, term: "12 months", status: "pending_review", applied_date: "2026-11-22", score: 78, guarantors: ["Alice Namugga", "Robert Kizza"] },
+  { id: "la-2", sv: "SV-0056", member: "Fatima Nankya", product: "Business Loan", amount: 25_000_000, term: "36 months", status: "under_appraisal", applied_date: "2026-11-10", score: 92, guarantors: ["Samuel Byaruhanga", "James Mukasa"] },
+  { id: "la-3", sv: "SV-0089", member: "Samuel Byaruhanga", product: "Emergency Loan", amount: 2_000_000, term: "3 months", status: "approved", applied_date: "2026-11-05", score: 95, guarantors: ["Fatima Nankya"] },
+  { id: "la-4", sv: "SV-0034", member: "David Ssempala", product: "Short-Term Loan", amount: 10_000_000, term: "12 months", status: "rejected", applied_date: "2026-10-20", score: 45, guarantors: ["Peter Okello"] },
 ];
 
-export const MEMBER_GROWTH = [
-  { month: "Dec", members: 720 },
-  { month: "Jan", members: 735 },
-  { month: "Feb", members: 748 },
-  { month: "Mar", members: 762 },
-  { month: "Apr", members: 775 },
-  { month: "May", members: 788 },
-  { month: "Jun", members: 800 },
-  { month: "Jul", members: 812 },
-  { month: "Aug", members: 823 },
-  { month: "Sep", members: 832 },
-  { month: "Oct", members: 840 },
-  { month: "Nov", members: 847 },
-];
+/** Member count for the 12 months ending at `today`; the last point equals the KPI. */
+export function memberGrowth(today: string) {
+  return trailingSeries(today, 12, ADMIN_KPI.total_members.value, [0.018, 0.016, 0.015, 0.012, 0.011, 0.01, 0.012, 0.014, 0.012, 0.011, 0.01, 0.009])
+    .map((p) => ({ key: p.key, month: p.month, members: p.value }));
+}
+/** @deprecated use memberGrowth(today) */
+export const MEMBER_GROWTH = memberGrowth(ANCHOR);
 
 export const PORTFOLIO_QUALITY = [
   { category: "Current", amount: 1_720_000_000, percent: 80 },
@@ -347,5 +395,8 @@ export const PORTFOLIO_QUALITY = [
   { category: "Loss (90+)", amount: 43_000_000, percent: 2 },
 ];
 
-// Demo "today" — keeps relative dates (due in N days, etc.) stable for the showcase.
-export const DEMO_TODAY = "2026-11-04";
+/**
+ * @deprecated Use useDemoToday() from "@/lib/demo-clock" for anything shown to
+ * the user. Kept as the server-render anchor for older call sites.
+ */
+export const DEMO_TODAY = ANCHOR;
