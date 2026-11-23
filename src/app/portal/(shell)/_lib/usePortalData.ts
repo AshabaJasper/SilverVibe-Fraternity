@@ -312,7 +312,7 @@ const SEED_CREDIT_MONTHS: string[] = SEED_REGULAR
  * stored records directly (never render-time closures) and writes them back in
  * one synchronous step, so several mounted hooks or tabs cannot double-apply.
  */
-function runStandingOrderCatchUp(today: string) {
+export function runStandingOrderCatchUp(today: string) {
   const processed = loadFromStorage<string[]>(PROCESSED_KEY, []);
   const state: ClockState<PortalAccount, PortalTxn> = {
     accounts: loadFromStorage<PortalAccount[]>(KEYS.portalAccounts, MEMBER_SAVINGS as PortalAccount[]),

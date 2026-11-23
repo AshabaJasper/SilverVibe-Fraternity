@@ -1,5 +1,5 @@
 "use client";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { LayoutDashboard, PiggyBank, CreditCard, BarChart3, User, Bell, HelpCircle, Settings } from "lucide-react";
 import AppShell, { type NavItem } from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
@@ -7,6 +7,8 @@ import { usePersistedState } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { NOTIFICATIONS_DATA } from "@/lib/mock-data";
 import { useDemoToday, isRevealed } from "@/lib/demo-clock";
+import { useHydrated } from "@/lib/use-hydrated";
+import { runStandingOrderCatchUp } from "@/app/portal/(shell)/_lib/usePortalData";
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/portal", icon: LayoutDashboard },
@@ -27,6 +29,18 @@ const QUICK_LINKS = [
   { label: "Contact support", sub: "Support", href: "/portal/support", keywords: "help support ticket message" },
 ];
 
+/**
+ * Apply James's standing orders that fell due since the seed date, whichever
+ * page a visitor opens first (admin or portal). Idempotent: see standingOrders.ts.
+ */
+function useStandingOrderCatchUp() {
+  const hydrated = useHydrated();
+  const today = useDemoToday();
+  useEffect(() => {
+    if (hydrated) runStandingOrderCatchUp(today);
+  }, [hydrated, today]);
+}
+
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard require="member">
@@ -36,6 +50,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 }
 
 function PortalShell({ children }: { children: React.ReactNode }) {
+  useStandingOrderCatchUp();
   const [notifs, setNotifs] = usePersistedState(KEYS.memberNotifications, NOTIFICATIONS_DATA);
   // Notifications dated in the future appear only once the demo clock reaches them.
   const today = useDemoToday();

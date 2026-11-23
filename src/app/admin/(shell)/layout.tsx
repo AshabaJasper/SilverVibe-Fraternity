@@ -1,5 +1,5 @@
 "use client";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   LayoutDashboard, Users, PiggyBank, CreditCard, BarChart3, BookOpen, Megaphone,
   FileBarChart, Settings, ClipboardList, User,
@@ -10,6 +10,8 @@ import { usePersistedState } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { ADMIN_NOTIFICATIONS, ADMIN_MEMBERS_LIST } from "@/lib/mock-data";
 import { useDemoToday, isRevealed } from "@/lib/demo-clock";
+import { useHydrated } from "@/lib/use-hydrated";
+import { runStandingOrderCatchUp } from "@/app/portal/(shell)/_lib/usePortalData";
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -25,6 +27,18 @@ const navItems: NavItem[] = [
 ];
 
 
+/**
+ * Apply James's standing orders that fell due since the seed date, whichever
+ * page a visitor opens first (admin or portal). Idempotent: see standingOrders.ts.
+ */
+function useStandingOrderCatchUp() {
+  const hydrated = useHydrated();
+  const today = useDemoToday();
+  useEffect(() => {
+    if (hydrated) runStandingOrderCatchUp(today);
+  }, [hydrated, today]);
+}
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard require="admin">
@@ -34,6 +48,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 }
 
 function AdminShell({ children }: { children: React.ReactNode }) {
+  useStandingOrderCatchUp();
   const [notifs, setNotifs] = usePersistedState(KEYS.adminNotifications, ADMIN_NOTIFICATIONS);
   // Notifications dated in the future appear only once the demo clock reaches them.
   const today = useDemoToday();
