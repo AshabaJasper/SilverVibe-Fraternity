@@ -1,0 +1,71 @@
+# Checks every push and pull request: lint, types, production build, then a
+# Playwright smoke test of every route in light and dark mode. The smoke test
+# also runs with the browser clock frozen on dates across the demo timeline
+# (Nov 2026 → Feb 2027) to catch anything that goes stale as time passes.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Start production server
+        run: |
+          npx next start -p 3000 > next.log 2>&1 &
+          npx --yes wait-on@8 http://localhost:3000 --timeout 60000
+
+      - name: Smoke test (today)
+        run: node scripts/smoke.mjs --shots shots/today
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Smoke test (frozen at 15 Dec 2026)
+        run: node scripts/smoke.mjs --date 2026-12-15 --shots shots/2026-12-15
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Smoke test (frozen at 25 Feb 2027)
+        run: node scripts/smoke.mjs --date 2027-02-25 --shots shots/2027-02-25
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Upload screenshots and server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: |
+            shots/
+            next.log
+          retention-days: 7

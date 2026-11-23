@@ -76,7 +76,7 @@ The platform is designed to comply with Uganda's cooperative regulations, IFRS r
 | MOD-009 | Reporting & Analytics | Management reports, regulatory reports, member statements |
 | MOD-010 | Governance & Audit | Audit trails, activity logs, maker-checker, compliance |
 
-> Detailed specifications for each module are in [MODULES.md](MODULES.md).
+> Module status (built in the demo vs. planned) is tracked in the in-app **Feature Checklist** (`/admin/checklist`); the server-side design is in [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 ---
 
@@ -207,7 +207,7 @@ Storage: Supabase Storage with RLS, encrypted at rest.
 
 ### 3.3 Savings Management
 
-> Full specification in [MODULES.md](MODULES.md) § Savings Management
+> Backend design for Savings Management: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 #### Preconfigured Savings Products
 
@@ -222,7 +222,7 @@ Storage: Supabase Storage with RLS, encrypted at rest.
 
 ### 3.4 Loans Management
 
-> Full specification in [MODULES.md](MODULES.md) § Loans Management
+> Backend design for Loans Management: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 #### Loan Application Workflow
 1. **Application** — Member submits (online or through officer)
@@ -240,11 +240,11 @@ Storage: Supabase Storage with RLS, encrypted at rest.
 
 ### 3.5 Share Capital Management
 
-> Full specification in [MODULES.md](MODULES.md) § Share Capital
+> Backend design for Share Capital: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 ### 3.6 General Ledger & Accounting
 
-> Full specification in [MODULES.md](MODULES.md) § General Ledger
+> Backend design for General Ledger: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 #### Chart of Accounts Structure
 | Code | Category | Subcategories |
@@ -257,15 +257,15 @@ Storage: Supabase Storage with RLS, encrypted at rest.
 
 ### 3.7 Communications
 
-> Full specification in [MODULES.md](MODULES.md) § Communications
+> Backend design for Communications: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 ### 3.8 Reporting
 
-> Full specification in [MODULES.md](MODULES.md) § Reporting
+> Backend design for Reporting: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 ### 3.9 Governance & Security
 
-> Full specification in [MODULES.md](MODULES.md) § Governance
+> Backend design for Governance: see [BACKEND_PLAN.md](BACKEND_PLAN.md).
 
 ---
 

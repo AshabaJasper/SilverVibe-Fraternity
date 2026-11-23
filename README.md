@@ -163,14 +163,33 @@ See [docs/PRD.md](docs/PRD.md) for the Product Requirements Document.
 - Charts use Recharts with responsive containers
 - The Feature Checklist page (`/admin/checklist`) tracks what's implemented vs. planned
 
+### Demo timeline (Nov 2026 → Feb 2027)
+
+The sample data tells one story from September 2026 to February 2027, and "today" is the visitor's real date (clamped to 23 Nov 2026 – 28 Feb 2027). All clock logic lives in `src/lib/demo-clock.ts`.
+
+| When | What happens in the demo |
+| --- | --- |
+| 1st of each month | James Mukasa's loan installment is paid by standing order; statements are announced |
+| 2nd of each month | His UGX 200,000 Regular Savings standing order lands |
+| 1 Dec 2026 | Arrears reminder SMS is sent automatically |
+| 18 Dec 2026 | Festive office-hours notice (closed 24 Dec – 4 Jan) |
+| 1 Jan 2027 | 13% fixed-savings rate goes live |
+| 20 Jan 2027 | AGM notice goes out |
+| 20 Feb 2027 | AGM held; FY 2025/26 dividend (11%) declared, payable 15 Mar 2027 |
+
+Future-dated records (notifications, transactions, journal entries, audit entries) appear on their date; scheduled messages flip to "sent"; the fiscal year runs July–June so the whole window is FY 2026/27.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: lint, type check, production build, and the Playwright smoke test of every route in light and dark mode, both on today's date and with the browser clock frozen on 15 Dec 2026 and 25 Feb 2027.
+
+```bash
+npm run build && npx next start -p 3000 &
+BASE_URL=http://localhost:3000 npm run smoke -- --date 2026-12-15
+```
+
 ---
 
 ## Next Steps (Backend Integration)
 
-1. Set up Supabase (PostgreSQL + Auth + Storage)
-2. Create API routes for all CRUD operations
-3. Replace `usePersistedState` with TanStack Query + Supabase client
-4. Add real authentication with JWT
-5. Implement SMS gateway (Africa's Talking) and email (Resend)
-6. Add PDF report generation
-7. Deploy to Vercel
+The demo is complete as a frontend. The backend phase is planned in [docs/BACKEND_PLAN.md](docs/BACKEND_PLAN.md): Supabase (Postgres, Auth, Storage) with Row Level Security, server-side maker-checker and audit, Africa's Talking SMS, Resend email, MTN MoMo / Airtel Money, and scheduled jobs for standing orders, interest and penalties.
