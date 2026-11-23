@@ -5,9 +5,13 @@ import {
   Search, Download, UserPlus, Eye, Edit2, CheckCircle, XCircle, Clock, Shield, Phone, Mail,
   Save, Trash2, AlertTriangle, Users, CreditCard, PiggyBank, FileText, Loader2, BadgeCheck, X,
 } from "lucide-react";
-import { formatCurrency, formatDate, getInitials, todayISO } from "@/lib/utils";
+import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
+import { ANCHOR, TIMELINE_EVENTS as EV, addMonthsKey, monthlyOccurrences, useDemoToday } from "@/lib/demo-clock";
 import { ADMIN_KPI, ADMIN_MEMBERS_LIST, DEMO_MEMBER, RECENT_TRANSACTIONS } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
+import {
+  LOANS_KEY, SEED_LOANS, deriveLoan, memberAutoPaid, memberLoanOutstanding, type ActiveLoan,
+} from "../_lib/seeds";
 import { KEYS } from "@/lib/keys";
 import { exportToCsv } from "@/lib/export";
 import { generateMemberStatement, type StatementTxn } from "@/lib/pdf-reports";
@@ -82,10 +86,10 @@ function matchesSearch(m: Member, term: string): boolean {
   return q.length >= 3 && phoneDigits(m.phone).includes(q);
 }
 
-function emptyMember(): Member {
+function emptyMember(today: string): Member {
   return {
     sv_number: "", name: "", phone: "+256 ", email: "", status: "pending", kyc: "pending",
-    savings: 0, loans: 0, shares: 0, joined: todayISO(),
+    savings: 0, loans: 0, shares: 0, joined: today,
   };
 }
 
@@ -118,30 +122,49 @@ function validateMember(form: Member, members: Member[], isEdit: boolean): FormE
   return errors;
 }
 
+/** Last day of the month of a YYYY-MM-DD date. */
+const monthEnd = (date: string) => {
+  const days = new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)), 0).getDate();
+  return `${date.slice(0, 7)}-${String(days).padStart(2, "0")}`;
+};
+
+/** Statement period start: the story's history begins in September 2026. */
+const STATEMENT_FROM = "2026-08-31";
+
 /**
- * Statement lines for a member. James Mukasa uses the real portal transactions; for
- * everyone else a short, deterministic history is derived from their balances.
+ * Statement lines for a member, Sep 2026 up to `today`. James Mukasa uses the real
+ * portal transactions plus the standing orders (loan installment on the 1st, savings
+ * on the 2nd) that have run since; everyone else gets a short, deterministic history
+ * derived from their balances, with loan repayments taken from their loan account so
+ * the statement agrees with the Loans page.
  */
-function statementFor(m: Member): StatementTxn[] {
+function statementFor(m: Member, loan: ActiveLoan | undefined, today: string): StatementTxn[] {
   if (m.sv_number === DEMO_MEMBER.sv_number) {
-    return [...RECENT_TRANSACTIONS].sort((a, b) => a.date.localeCompare(b.date));
+    const standing: StatementTxn[] = [
+      ...monthlyOccurrences(EV.loanInstallmentDay, ANCHOR, today).map((date) => ({
+        date, type: "Loan Repayment", account: "Short-Term Loan", amount: 733_440, direction: "debit", channel: "Standing Order",
+      })),
+      ...monthlyOccurrences(EV.savingsStandingOrderDay, ANCHOR, today).map((date) => ({
+        date, type: "Deposit", account: "Regular Savings", amount: EV.savingsStandingOrderAmount, direction: "credit", channel: "Standing Order",
+      })),
+    ];
+    return [...RECENT_TRANSACTIONS, ...standing].sort((a, b) => a.date.localeCompare(b.date));
   }
   const round = (n: number) => Math.max(10_000, Math.round(n / 10_000) * 10_000);
   const deposit = round(m.savings * 0.015);
-  const txns: StatementTxn[] = [
-    { date: "2026-08-05", type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: "Mobile Money" },
-    { date: "2026-09-05", type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: "Mobile Money" },
-    { date: "2026-09-18", type: "Share Purchase", account: "Share Capital", amount: round(m.shares * 0.05), direction: "debit", channel: "Cash" },
-    { date: "2026-10-05", type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: "Bank Transfer" },
-  ];
-  if (m.loans > 0) {
-    const repay = round(m.loans / 10);
-    txns.push(
-      { date: "2026-09-01", type: "Loan Repayment", account: "Loan Account", amount: repay, direction: "debit", channel: "Bank Transfer" },
-      { date: "2026-10-01", type: "Loan Repayment", account: "Loan Account", amount: repay, direction: "debit", channel: "Bank Transfer" }
-    );
+  const txns: StatementTxn[] = monthlyOccurrences(5, STATEMENT_FROM, today).map((date, i) => ({
+    date, type: "Deposit", account: "Regular Savings", amount: deposit, direction: "credit", channel: i % 2 ? "Bank Transfer" : "Mobile Money",
+  }));
+  txns.push({ date: "2026-09-18", type: "Share Purchase", account: "Share Capital", amount: round(m.shares * 0.05), direction: "debit", channel: "Cash" });
+  for (const r of loan?.repayments ?? []) {
+    if (r.date > STATEMENT_FROM && r.date <= today) {
+      txns.push({ date: r.date, type: "Loan Repayment", account: loan?.product ?? "Loan Account", amount: r.amount, direction: "debit", channel: r.auto ? "Standing Order" : "Bank Transfer" });
+    }
   }
-  txns.push({ date: "2026-10-31", type: "Interest", account: "Regular Savings", amount: round(m.savings * 0.01), direction: "credit", channel: "System" });
+  // Interest is credited on the last day of each month that has closed.
+  for (let k = "2026-09-01"; monthEnd(k) <= today; k = addMonthsKey(k, 1)) {
+    txns.push({ date: monthEnd(k), type: "Interest", account: "Regular Savings", amount: round(m.savings * 0.004), direction: "credit", channel: "System" });
+  }
   return txns.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -237,7 +260,20 @@ function MembersInner() {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
+  const today = useDemoToday();
+  const [storedMembers, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
+  // Same loan records and derivation as the Loans page: the stored loans column is the
+  // position at the demo anchor (plus anything recorded since), and standing-order
+  // installments that have fallen due by today are taken off for display.
+  const [loans] = usePersistedState<ActiveLoan[]>(LOANS_KEY, SEED_LOANS);
+  const members = storedMembers.map((m) => {
+    const outstanding = memberLoanOutstanding(m, loans, today);
+    return outstanding === m.loans ? m : { ...m, loans: outstanding };
+  });
+  const loanFor = (sv: string) => {
+    const l = loans.find((x) => x.sv === sv && x.balance > 0) ?? loans.find((x) => x.sv === sv);
+    return l ? deriveLoan(l, today) : undefined;
+  };
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedSv, setSelectedSv] = useState<string | null>(null);
@@ -247,12 +283,12 @@ function MembersInner() {
   const [editOpen, setEditOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [form, setForm] = useState<Member>(emptyMember);
+  const [form, setForm] = useState<Member>(() => emptyMember(ANCHOR));
   const [errors, setErrors] = useState<FormErrors>({});
   const [pdfBusy, setPdfBusy] = useState(false);
 
   const openRegister = () => {
-    setForm(emptyMember());
+    setForm(emptyMember(today));
     setErrors({});
     setRegisterOpen(true);
   };
@@ -341,7 +377,9 @@ function MembersInner() {
     const errs = validateMember(candidate, members, true);
     setErrors(errs);
     if (Object.keys(errs).length) return;
-    setMembers((prev) => prev.map((m) => (m.sv_number === candidate.sv_number ? candidate : m)));
+    // The form shows today's loan balance; store it on the anchor basis the register uses.
+    const stored = { ...candidate, loans: candidate.loans + memberAutoPaid(candidate.sv_number, loans, today) };
+    setMembers((prev) => prev.map((m) => (m.sv_number === candidate.sv_number ? stored : m)));
     setEditOpen(false);
     showToast(`${candidate.name}'s details updated`);
   };
@@ -370,14 +408,14 @@ function MembersInner() {
       showToast("No members to export", "error");
       return;
     }
-    exportToCsv(`silvervibe-members-${label}-${todayISO()}`, rows, CSV_COLUMNS);
+    exportToCsv(`silvervibe-members-${label}-${today}`, rows, CSV_COLUMNS);
     showToast(`Exported ${rows.length} member${rows.length === 1 ? "" : "s"} to CSV`);
   };
 
   const downloadStatement = async (m: Member) => {
     setPdfBusy(true);
     try {
-      await generateMemberStatement({ name: m.name, sv: m.sv_number, email: m.email, phone: m.phone }, statementFor(m), [
+      await generateMemberStatement({ name: m.name, sv: m.sv_number, email: m.email, phone: m.phone }, statementFor(m, loanFor(m.sv_number), today), [
         { label: "Savings", amount: m.savings },
         { label: "Share capital", amount: m.shares },
         { label: "Loan outstanding", amount: m.loans },

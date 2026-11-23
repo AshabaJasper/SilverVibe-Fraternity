@@ -8,7 +8,8 @@ import {
 import {
   AreaChart, Area, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from "recharts";
-import { formatCurrency, formatCompact, formatNumber, formatDate, todayISO, cn } from "@/lib/utils";
+import { formatCurrency, formatCompact, formatNumber, formatDate, cn } from "@/lib/utils";
+import { TIMELINE_EVENTS as EV, monthLabel, trailingSeries, useDemoToday } from "@/lib/demo-clock";
 import { ADMIN_KPI, ADMIN_MEMBERS_LIST } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
@@ -46,7 +47,11 @@ interface Dividend {
   shareholders: number;
   declared: string;
   paid?: string;
-  status: "paid" | "declared";
+  /** "proposed" only for the AGM row derived from the demo clock (never stored). */
+  status: "paid" | "declared" | "proposed";
+  /** Derived from the demo clock rather than stored. */
+  derived?: boolean;
+  payable?: string;
 }
 
 interface IuHolding {
@@ -85,35 +90,52 @@ const DEFAULT_SHAREHOLDERS: Shareholder[] = [
   },
 ];
 
-// FY 2024 and FY 2025 rates match the member portal's dividend history.
+// Fiscal years run July–June; each year's dividend is declared at the AGM the following
+// February and paid in March. FY 2023/24 (8%) and FY 2024/25 (10%) match the member
+// portal's dividend history. FY 2025/26 is not stored: see agmDividend().
 const DEFAULT_DIVIDENDS: Dividend[] = [
-  { fy: "FY 2021", rate: 7, amount: 57_400_000, shareholders: 268, declared: "2022-02-25", paid: "2022-03-18", status: "paid" },
-  { fy: "FY 2022", rate: 7.5, amount: 68_250_000, shareholders: 289, declared: "2023-02-24", paid: "2023-03-17", status: "paid" },
-  { fy: "FY 2023", rate: 9, amount: 90_000_000, shareholders: 305, declared: "2024-02-23", paid: "2024-03-15", status: "paid" },
-  { fy: "FY 2024", rate: 8, amount: 84_800_000, shareholders: 321, declared: "2025-02-28", paid: "2025-03-15", status: "paid" },
-  { fy: "FY 2025", rate: 10, amount: 113_800_000, shareholders: 334, declared: "2026-02-27", paid: "2026-03-20", status: "paid" },
+  { fy: "FY 2020/21", rate: 7, amount: 57_400_000, shareholders: 268, declared: "2022-02-25", paid: "2022-03-18", status: "paid" },
+  { fy: "FY 2021/22", rate: 7.5, amount: 68_250_000, shareholders: 289, declared: "2023-02-24", paid: "2023-03-17", status: "paid" },
+  { fy: "FY 2022/23", rate: 9, amount: 90_000_000, shareholders: 305, declared: "2024-02-23", paid: "2024-03-15", status: "paid" },
+  { fy: "FY 2023/24", rate: 8, amount: 84_800_000, shareholders: 321, declared: "2025-02-28", paid: "2025-03-15", status: "paid" },
+  { fy: "FY 2024/25", rate: 10, amount: 113_800_000, shareholders: 334, declared: "2026-02-27", paid: "2026-03-20", status: "paid" },
 ];
+
+/**
+ * The FY 2025/26 dividend on the demo clock: proposed until the AGM (20 Feb 2027),
+ * declared at 11% from that day, payable 15 Mar 2027. Derived from `today`, never written,
+ * so it flips on the right day for every visitor. A stored row for the same year
+ * (e.g. after "Mark paid") takes precedence.
+ */
+function agmDividend(today: string, capital: number, holders: number): Dividend {
+  const held = today >= EV.agm;
+  return {
+    fy: EV.dividendFy,
+    rate: EV.dividendRatePct,
+    amount: Math.round((capital * EV.dividendRatePct) / 100),
+    shareholders: holders,
+    declared: EV.agm,
+    payable: EV.dividendPayable,
+    status: held ? "declared" : "proposed",
+    derived: true,
+  };
+}
 
 // James Mukasa (SV-0042) matches the member portal: 15 units, UGX 1.5M invested.
 const DEFAULT_IU: IuHolding[] = [
   { sv: "SV-0089", name: "Samuel Byaruhanga", units: 200, invested: 20_000_000, updated: "2026-09-14" },
-  { sv: "SV-0012", name: "Robert Kizza", units: 120, invested: 12_400_000, updated: "2026-08-30" },
+  { sv: "SV-0012", name: "Robert Kizza", units: 120, invested: 12_400_000, updated: "2026-09-03" },
   { sv: "SV-0056", name: "Fatima Nankya", units: 60, invested: 6_300_000, updated: "2026-10-02" },
-  { sv: "SV-0001", name: "Alice Namugga", units: 40, invested: 4_000_000, updated: "2026-06-11" },
-  { sv: "SV-0023", name: "Grace Nabirye", units: 25, invested: 2_650_000, updated: "2026-10-21" },
-  { sv: "SV-0042", name: "James Mukasa", units: 15, invested: 1_500_000, updated: "2026-03-20" },
+  { sv: "SV-0001", name: "Alice Namugga", units: 40, invested: 4_000_000, updated: "2026-09-28" },
+  { sv: "SV-0023", name: "Grace Nabirye", units: 25, invested: 2_650_000, updated: "2026-11-09" },
+  { sv: "SV-0042", name: "James Mukasa", units: 15, invested: 1_500_000, updated: "2026-10-14" },
   { sv: "SV-0034", name: "David Ssempala", units: 10, invested: 1_080_000, updated: "2026-09-05" },
 ];
 
-// Total shares in issue, Dec 2025 – Nov 2026 (+12.5% YoY). The last point is replaced by the live total.
-const SHARE_GROWTH = [
-  { month: "Dec", shares: 57_400 }, { month: "Jan", shares: 57_900 }, { month: "Feb", shares: 58_300 },
-  { month: "Mar", shares: 58_900 }, { month: "Apr", shares: 59_500 }, { month: "May", shares: 60_100 },
-  { month: "Jun", shares: 60_700 }, { month: "Jul", shares: 61_300 }, { month: "Aug", shares: 62_000 },
-  { month: "Sep", shares: 62_700 }, { month: "Oct", shares: 63_300 }, { month: "Nov", shares: 64_000 },
-];
+// Monthly growth in shares in issue by calendar month (Jan…Dec), about +12.5% a year.
+const SHARE_GROWTH_RATES = [0.009, 0.007, 0.01, 0.01, 0.01, 0.01, 0.01, 0.011, 0.011, 0.01, 0.011, 0.009];
 
-const FY_OPTIONS = ["FY 2021", "FY 2022", "FY 2023", "FY 2024", "FY 2025", "FY 2026"];
+const FY_OPTIONS = ["FY 2020/21", "FY 2021/22", "FY 2022/23", "FY 2023/24", "FY 2024/25", "FY 2025/26", "FY 2026/27"];
 
 type TabId = "overview" | "shareholders" | "dividends" | "units";
 const TAB_IDS: TabId[] = ["overview", "shareholders", "dividends", "units"];
@@ -147,6 +169,7 @@ function SharesInner() {
   const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "overview";
   const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
 
+  const today = useDemoToday();
   const [shareholders, setShareholders] = usePersistedState<Shareholder[]>("admin_shareholders", DEFAULT_SHAREHOLDERS);
   const [config, setConfig] = usePersistedState<ShareConfig>("admin_share_config", DEFAULT_SHARE_CONFIG);
   const [dividends, setDividends] = usePersistedState<Dividend[]>("admin_share_dividends", DEFAULT_DIVIDENDS);
@@ -184,12 +207,23 @@ function SharesInner() {
     () => [...shareholders].sort((a, b) => (a.holders ? 1 : 0) - (b.holders ? 1 : 0) || b.shares - a.shares),
     [shareholders]
   );
-  const sortedDividends = useMemo(() => [...dividends].sort((a, b) => a.fy.localeCompare(b.fy)), [dividends]);
-  const latestDividend = sortedDividends[sortedDividends.length - 1];
+  // Stored history plus the FY 2025/26 AGM row derived from today (unless already stored).
+  const sortedDividends = useMemo(() => {
+    const rows = dividends.some((d) => d.fy === EV.dividendFy) ? dividends : [...dividends, agmDividend(today, totalCapital, holderCount)];
+    return [...rows].sort((a, b) => a.fy.localeCompare(b.fy));
+  }, [dividends, today, totalCapital, holderCount]);
+  const declaredDividends = sortedDividends.filter((d) => d.status !== "proposed");
+  const latestDividend = declaredDividends[declaredDividends.length - 1];
+  const proposedDividend = sortedDividends.find((d) => d.status === "proposed");
+  // 12 months ending today; the last point is replaced by the live total.
   const growth = useMemo(
-    () => SHARE_GROWTH.map((g, i, arr) => (i === arr.length - 1 ? { ...g, shares: totalShares } : g)),
-    [totalShares]
+    () =>
+      trailingSeries(today, 12, TOTAL_SEED_SHARES, SHARE_GROWTH_RATES, 100).map((g, i, arr) => ({
+        key: g.key, month: g.month, shares: i === arr.length - 1 ? totalShares : g.value,
+      })),
+    [today, totalShares]
   );
+  const growthRange = `${monthLabel(growth[0].key)} – ${monthLabel(growth[growth.length - 1].key)}`;
   const iuTotals = useMemo(() => {
     const units = iu.reduce((a, h) => a + h.units, 0);
     const invested = iu.reduce((a, h) => a + h.invested, 0);
@@ -226,7 +260,7 @@ function SharesInner() {
     setShareholders((prev) =>
       exists
         ? prev.map((s) => (s.sv === m.sv_number ? { ...s, shares: s.shares + issueQty } : s))
-        : [...prev, { sv: m.sv_number, name: m.name, shares: issueQty, cert, since: todayISO() }]
+        : [...prev, { sv: m.sv_number, name: m.name, shares: issueQty, cert, since: today }]
     );
     syncMemberShares({ [m.sv_number]: holdingOf(m.sv_number) + issueQty });
     showToast(`${formatNumber(issueQty)} shares (${formatCurrency(issueQty * config.shareValue)}) issued to ${m.name}`);
@@ -301,7 +335,7 @@ function SharesInner() {
       const moved = prev.map((s) =>
         s.sv === from.sv ? { ...s, shares: s.shares - qty } : s.sv === toMember.sv_number ? { ...s, shares: s.shares + qty } : s
       );
-      return toExists ? moved : [...moved, { sv: toMember.sv_number, name: toMember.name, shares: qty, cert, since: todayISO() }];
+      return toExists ? moved : [...moved, { sv: toMember.sv_number, name: toMember.name, shares: qty, cert, since: today }];
     });
     syncMemberShares({ [from.sv]: from.shares - qty, [toMember.sv_number]: holdingOf(toMember.sv_number) + qty });
     showToast(`${formatNumber(qty)} shares transferred from ${from.name} to ${toMember.name}`);
@@ -309,7 +343,7 @@ function SharesInner() {
   };
 
   // ---------------- Dividends ----------------
-  const availableFy = FY_OPTIONS.filter((fy) => !dividends.some((d) => d.fy === fy));
+  const availableFy = FY_OPTIONS.filter((fy) => !sortedDividends.some((d) => d.fy === fy));
   const declareRate = Number(declareForm.rate) || 0;
   const declarePayout = Math.round((totalCapital * declareRate) / 100);
   const openDeclare = () => {
@@ -325,7 +359,7 @@ function SharesInner() {
     if (Object.keys(e).length) return;
     setDividends((prev) => [
       ...prev,
-      { fy: declareForm.fy, rate: declareRate, amount: declarePayout, shareholders: holderCount, declared: todayISO(), status: "declared" },
+      { fy: declareForm.fy, rate: declareRate, amount: declarePayout, shareholders: holderCount, declared: today, status: "declared" },
     ]);
     showToast(`${declareForm.fy} dividend of ${declareRate}% declared — payout ${formatCurrency(declarePayout)}`);
     setDeclareOpen(false);
@@ -333,7 +367,13 @@ function SharesInner() {
   const runDivConfirm = () => {
     if (!divConfirm) return;
     if (divConfirm.action === "pay") {
-      setDividends((prev) => prev.map((d) => (d.fy === divConfirm.fy ? { ...d, status: "paid", paid: todayISO() } : d)));
+      // The AGM row is derived until paid; paying it stores it.
+      const agmRow = sortedDividends.find((d) => d.fy === divConfirm.fy && d.derived);
+      setDividends((prev) =>
+        agmRow
+          ? [...prev, { fy: agmRow.fy, rate: agmRow.rate, amount: agmRow.amount, shareholders: agmRow.shareholders, declared: agmRow.declared, paid: today, status: "paid" }]
+          : prev.map((d) => (d.fy === divConfirm.fy ? { ...d, status: "paid", paid: today } : d))
+      );
       showToast(`${divConfirm.fy} dividend marked as paid`);
     } else {
       setDividends((prev) => prev.filter((d) => d.fy !== divConfirm.fy));
@@ -362,8 +402,8 @@ function SharesInner() {
     if (iuModal === "buy") {
       setIu((prev) =>
         prev.some((h) => h.sv === m.sv_number)
-          ? prev.map((h) => (h.sv === m.sv_number ? { ...h, units: h.units + iuQty, invested: h.invested + amount, updated: todayISO() } : h))
-          : [...prev, { sv: m.sv_number, name: m.name, units: iuQty, invested: amount, updated: todayISO() }]
+          ? prev.map((h) => (h.sv === m.sv_number ? { ...h, units: h.units + iuQty, invested: h.invested + amount, updated: today } : h))
+          : [...prev, { sv: m.sv_number, name: m.name, units: iuQty, invested: amount, updated: today }]
       );
       showToast(`${iuQty} units bought for ${m.name} (${formatCurrency(amount)})`);
     } else if (holding) {
@@ -371,7 +411,7 @@ function SharesInner() {
       const costOut = Math.round((holding.invested / holding.units) * iuQty);
       setIu((prev) =>
         prev
-          .map((h) => (h.sv === m.sv_number ? { ...h, units: h.units - iuQty, invested: h.invested - costOut, updated: todayISO() } : h))
+          .map((h) => (h.sv === m.sv_number ? { ...h, units: h.units - iuQty, invested: h.invested - costOut, updated: today } : h))
           .filter((h) => h.units > 0)
       );
       showToast(`${iuQty} units redeemed for ${m.name} — payout ${formatCurrency(amount)}`);
@@ -383,7 +423,7 @@ function SharesInner() {
   const downloadCert = async (s: Shareholder) => {
     setCertBusy(s.sv);
     try {
-      await generateShareCertificate({ number: s.cert, holder: s.name, sv: s.sv, shares: s.shares, amount: s.shares * config.shareValue, date: todayISO() });
+      await generateShareCertificate({ number: s.cert, holder: s.name, sv: s.sv, shares: s.shares, amount: s.shares * config.shareValue, date: today });
       showToast(`Certificate ${s.cert} downloaded`);
     } catch {
       showToast("Could not generate PDF", "error");
@@ -394,7 +434,7 @@ function SharesInner() {
 
   const exportShareholders = () => {
     exportToCsv(
-      `shareholders-${todayISO()}`,
+      `shareholders-${today}`,
       sortedShareholders.map((s) => ({
         sv: s.holders ? "" : s.sv,
         name: s.holders ? `${s.name} (${s.holders})` : s.name,
@@ -459,7 +499,13 @@ function SharesInner() {
             <StatCard label="Shareholders" value={formatNumber(holderCount)} icon={Users} color="#22c55e"
               sub={`Avg ${formatNumber(Math.round(totalShares / Math.max(holderCount, 1)))} shares each`} />
             <StatCard label="Latest Dividend" value={latestDividend ? `${latestDividend.rate}%` : "—"} icon={Percent} color="#a855f7"
-              sub={latestDividend ? `${latestDividend.fy} · ${formatCompact(latestDividend.amount)} (${latestDividend.status})` : "None declared"} />
+              sub={
+                proposedDividend
+                  ? `${latestDividend ? `${latestDividend.fy} · ` : ""}${proposedDividend.fy} to be declared at AGM, ${formatDate(EV.agm)}`
+                  : latestDividend
+                    ? `${latestDividend.fy} · ${formatCompact(latestDividend.amount)} (${latestDividend.status === "declared" && latestDividend.payable ? `declared · payable ${formatDate(latestDividend.payable)}` : latestDividend.status})`
+                    : "None declared"
+              } />
             <StatCard label="Investment Units" value={formatCompact(iuTotals.value)} icon={Wallet} color="#f59e0b"
               sub={`${formatNumber(iuTotals.units)} units · ${iuTotals.holders} holders`} />
           </div>
@@ -467,7 +513,7 @@ function SharesInner() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="glass-card rounded-xl p-6">
               <h3 className="font-semibold dm-text mb-1 text-sm">Shares in Issue</h3>
-              <p className="text-xs dm-text-secondary mb-4">Dec 2025 – Nov 2026 · latest month is live</p>
+              <p className="text-xs dm-text-secondary mb-4">{growthRange} · latest month is live</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={growth}>
@@ -484,7 +530,7 @@ function SharesInner() {
               <h3 className="font-semibold dm-text mb-1 text-sm">Dividend History</h3>
               <p className="text-xs dm-text-secondary mb-4">Bars: payout · line: rate</p>
               <div className="h-64">
-                <DividendChart data={sortedDividends} />
+                <DividendChart data={declaredDividends} />
               </div>
             </div>
           </div>
@@ -569,7 +615,7 @@ function SharesInner() {
               <Button onClick={openDeclare}><Award className="w-4 h-4" /> Declare dividend</Button>
             </div>
             <div className="h-64">
-              <DividendChart data={sortedDividends} />
+              <DividendChart data={declaredDividends} />
             </div>
           </div>
           <div className="glass-card rounded-xl overflow-hidden">
@@ -597,20 +643,32 @@ function SharesInner() {
                         <td className={cn(td, "text-right dm-text")}>{d.rate}%</td>
                         <td className={cn(td, "text-right dm-text font-medium")}>{formatCurrency(d.amount)}</td>
                         <td className={cn(td, "text-right dm-text-secondary")}>{formatNumber(d.shareholders)}</td>
-                        <td className={cn(td, "dm-text-secondary")}>{formatDate(d.declared)}</td>
-                        <td className={cn(td, "dm-text-secondary")}>{d.paid ? formatDate(d.paid) : "—"}</td>
-                        <td className={td}><Badge status={d.status} tone={d.status === "declared" ? "blue" : undefined} /></td>
+                        <td className={cn(td, "dm-text-secondary")}>
+                          {d.status === "proposed" ? `To be declared at AGM, ${formatDate(d.declared)}` : formatDate(d.declared)}
+                        </td>
+                        <td className={cn(td, "dm-text-secondary")}>{d.paid ? formatDate(d.paid) : d.payable ? `Payable ${formatDate(d.payable)}` : "—"}</td>
+                        <td className={td}>
+                          <Badge
+                            status={d.status === "declared" && d.payable ? `declared · payable ${formatDate(d.payable)}` : d.status === "proposed" ? "to be declared" : d.status}
+                            tone={d.status === "declared" ? "blue" : d.status === "proposed" ? "amber" : undefined}
+                          />
+                        </td>
                         <td className={cn(td, "text-right")}>
-                          {d.status === "declared" ? (
+                          {d.status === "proposed" ? (
+                            <span className="text-[10px] dm-text-secondary">Awaiting AGM</span>
+                          ) : d.status === "declared" ? (
                             <div className="flex justify-end gap-1.5">
                               <button onClick={() => setDivConfirm({ action: "pay", fy: d.fy })}
                                 className="inline-flex items-center gap-1 px-2 py-1 bg-[#16a34a] text-white rounded-lg text-[10px] font-medium hover:bg-[#15803d]">
                                 <CheckCircle className="w-3 h-3" /> Mark paid
                               </button>
-                              <button onClick={() => setDivConfirm({ action: "cancel", fy: d.fy })} aria-label={`Cancel ${d.fy} declaration`}
-                                className="p-1.5 rounded-lg hover:bg-[#ef4444]/10 text-[#ef4444]">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {/* The AGM's declaration can't be cancelled here; it is a resolution of the meeting. */}
+                              {!d.derived && (
+                                <button onClick={() => setDivConfirm({ action: "cancel", fy: d.fy })} aria-label={`Cancel ${d.fy} declaration`}
+                                  className="p-1.5 rounded-lg hover:bg-[#ef4444]/10 text-[#ef4444]">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <span className="text-[10px] dm-text-secondary">—</span>
@@ -773,7 +831,7 @@ function SharesInner() {
             {availableFy.length ? (
               <SelectInput value={declareForm.fy} onChange={(v) => setDeclareForm({ ...declareForm, fy: v })} options={availableFy.map((f) => ({ value: f, label: f }))} />
             ) : (
-              <p className="text-sm dm-text-secondary">Every fiscal year up to FY 2026 has a declaration. Cancel an unpaid one to re-declare.</p>
+              <p className="text-sm dm-text-secondary">Every fiscal year up to {FY_OPTIONS[FY_OPTIONS.length - 1]} has a declaration. Cancel an unpaid one to re-declare.</p>
             )}
           </FormField>
           <FormField label="Dividend rate (%)" required error={errors.rate}>

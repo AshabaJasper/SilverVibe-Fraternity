@@ -8,9 +8,9 @@ import {
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell,
 } from "recharts";
-import { formatCurrency, formatCompact, formatDate, formatNumber, todayISO, cn } from "@/lib/utils";
-import { useHydrated } from "@/lib/use-hydrated";
-import { ADMIN_SAVINGS_GROWTH, ADMIN_MEMBERS_LIST, DEMO_TODAY } from "@/lib/mock-data";
+import { formatCurrency, formatCompact, formatDate, formatNumber, cn } from "@/lib/utils";
+import { monthKey, monthLabel, revealed, useDemoToday } from "@/lib/demo-clock";
+import { ADMIN_MEMBERS_LIST, savingsGrowth } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
 import { exportToCsv } from "@/lib/export";
@@ -60,13 +60,19 @@ function SavingsInner() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const hydrated = useHydrated();
+  const today = useDemoToday();
   const tabParam = params.get("tab") as TabId | null;
   const activeTab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "overview";
   const setTab = (t: TabId) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
 
   const [products, setProducts] = usePersistedState<SavingsProduct[]>(SAVINGS_PRODUCTS_KEY, DEFAULT_SAVINGS_PRODUCTS);
   const [transactions, setTransactions] = usePersistedState<SavingsTxn[]>(SAVINGS_TXN_KEY, DEFAULT_SAVINGS_TXN);
+  // Seed history runs to Feb 2027; records dated after today stay hidden until their date.
+  // They were never applied to balances (the stored totals are as at the demo anchor).
+  const visibleTxns = useMemo(
+    () => revealed(transactions, today, "date").sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id, undefined, { numeric: true })),
+    [transactions, today]
+  );
   // Live member register: pickers follow registrations/removals, and posted money moves its savings column.
   const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
 
@@ -88,10 +94,9 @@ function SavingsInner() {
   const activeProducts = products.filter((p) => p.status === "active");
 
   // ---------------- Overview metrics (computed from state) ----------------
-  // Before hydration use the fixed demo date so server and client markup match.
-  const month = (hydrated ? todayISO() : DEMO_TODAY).slice(0, 7);
+  const month = monthKey(today);
   const metrics = useMemo(() => {
-    const monthPosted = transactions.filter((t) => t.status === "posted" && t.date.startsWith(month));
+    const monthPosted = visibleTxns.filter((t) => t.status === "posted" && t.date.startsWith(month));
     const dep = monthPosted.filter((t) => t.type === "Deposit");
     const wd = monthPosted.filter((t) => t.type === "Withdrawal");
     const deposits = dep.reduce((a, t) => a + t.amount, 0);
@@ -100,27 +105,28 @@ function SavingsInner() {
     const weightedRate = total ? products.reduce((a, p) => a + p.rate * p.balance, 0) / total : 0;
     return {
       deposits, withdrawals, depCount: dep.length, wdCount: wd.length, net: deposits - withdrawals, total, weightedRate,
-      pending: transactions.filter((t) => t.status === "pending").length,
+      pending: visibleTxns.filter((t) => t.status === "pending").length,
     };
-  }, [transactions, products, month]);
+  }, [visibleTxns, products, month]);
 
-  // Growth chart: history from mock data, latest month replaced by the live total.
+  // Growth chart: 12 months ending today, latest month replaced by the live total.
   const growth = useMemo(
-    () => ADMIN_SAVINGS_GROWTH.map((g, i, arr) => (i === arr.length - 1 ? { ...g, amount: metrics.total } : g)),
-    [metrics.total]
+    () => savingsGrowth(today).map((g, i, arr) => (i === arr.length - 1 ? { ...g, amount: metrics.total } : g)),
+    [today, metrics.total]
   );
+  const growthRange = growth.length ? `${monthLabel(growth[0].key)} – ${monthLabel(growth[growth.length - 1].key)}` : "";
   const pieData = products.filter((p) => p.balance > 0);
 
   // ---------------- Transactions filtering ----------------
   const filteredTxns = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return transactions.filter((t) => {
+    return visibleTxns.filter((t) => {
       if (typeFilter !== "all" && t.type !== typeFilter) return false;
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
       if (!q) return true;
       return [t.id, t.member, t.sv, t.reference].some((s) => s.toLowerCase().includes(q));
     });
-  }, [transactions, typeFilter, statusFilter, search]);
+  }, [visibleTxns, typeFilter, statusFilter, search]);
 
   // ---------------- Handlers ----------------
   const openNewTxn = () => {
@@ -155,7 +161,7 @@ function SavingsInner() {
       product: txnForm.product,
       toProduct: txnForm.type === "Transfer" ? txnForm.toProduct : undefined,
       amount,
-      date: todayISO(),
+      date: today,
       channel,
       reference: txnForm.reference.trim() || `${channel === "Mobile Money" ? "MM" : channel === "Bank" ? "BNK" : channel === "Cash" ? "CSH" : "TRF"}-${id.slice(4)}`,
       status: needsApproval ? "pending" : "posted",
@@ -235,7 +241,7 @@ function SavingsInner() {
   const exportTxns = () => {
     if (!filteredTxns.length) return showToast("No transactions to export", "info");
     exportToCsv(
-      `savings-transactions-${todayISO()}`,
+      `savings-transactions-${today}`,
       filteredTxns.map((t) => ({ ...t, product: productName(t.product), toProduct: t.toProduct ? productName(t.toProduct) : "" })),
       [
         { key: "id", label: "Ref" }, { key: "date", label: "Date" }, { key: "sv", label: "SV No." }, { key: "member", label: "Member" },
@@ -247,7 +253,7 @@ function SavingsInner() {
   };
 
   const exportProducts = () => {
-    exportToCsv(`savings-products-${todayISO()}`, products.map((p) => ({ ...p })), [
+    exportToCsv(`savings-products-${today}`, products.map((p) => ({ ...p })), [
       { key: "code", label: "Code" }, { key: "name", label: "Product" }, { key: "rate", label: "Rate (% p.a.)" },
       { key: "min", label: "Minimum balance (UGX)" }, { key: "members", label: "Members" }, { key: "balance", label: "Balance (UGX)" },
       { key: "status", label: "Status" }, { key: "description", label: "Description" },
@@ -279,7 +285,7 @@ function SavingsInner() {
         tabs={[
           { id: "overview" as TabId, label: "Overview" },
           { id: "products" as TabId, label: "Products", count: products.length },
-          { id: "transactions" as TabId, label: "Transactions", count: transactions.length },
+          { id: "transactions" as TabId, label: "Transactions", count: visibleTxns.length },
         ]}
         active={activeTab}
         onChange={setTab}
@@ -301,7 +307,7 @@ function SavingsInner() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 glass-card rounded-xl p-6">
               <h3 className="font-semibold dm-text mb-1 text-sm">Savings Growth Trend</h3>
-              <p className="text-xs dm-text-secondary mb-4">Dec 2025 – Nov 2026 · latest month reflects live product balances</p>
+              <p className="text-xs dm-text-secondary mb-4">{growthRange} · latest month reflects live product balances</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={growth}>
@@ -475,7 +481,7 @@ function SavingsInner() {
             </div>
           )}
           <div className="px-4 py-3 text-xs dm-text-secondary border-t dm-border">
-            Showing {filteredTxns.length} of {transactions.length} · withdrawals above {formatCurrency(APPROVAL_THRESHOLD)} require approval
+            Showing {filteredTxns.length} of {visibleTxns.length} · withdrawals above {formatCurrency(APPROVAL_THRESHOLD)} require approval
           </div>
         </div>
       )}

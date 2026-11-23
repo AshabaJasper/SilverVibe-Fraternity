@@ -6,9 +6,10 @@ import {
   Users, Percent, Target, Banknote, CalendarDays, Edit2, Loader2, FileText, Wallet, Inbox,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from "recharts";
-import { formatCurrency, formatDate, formatNumber, todayISO } from "@/lib/utils";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
+import { firstOfNextMonth, monthLabel, useDemoToday } from "@/lib/demo-clock";
 import {
-  ADMIN_KPI, ADMIN_LOAN_APPLICATIONS, ADMIN_LOAN_PERFORMANCE, ADMIN_MEMBERS_LIST, DEMO_TODAY, PORTFOLIO_QUALITY,
+  ADMIN_KPI, ADMIN_LOAN_APPLICATIONS, ADMIN_MEMBERS_LIST, PORTFOLIO_QUALITY, loanPerformance,
 } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
@@ -16,7 +17,10 @@ import { exportToCsv } from "@/lib/export";
 import { generateLoanSchedulePdf } from "@/lib/pdf-reports";
 import Modal, { Button, FormField, SelectInput, TextAreaInput, TextInput } from "@/components/Modal";
 import { Badge, EmptyState, PageHeader, StatCard, Tabs } from "@/components/ui";
-import { isPendingLoanStatus, nextLoanAppId, type LoanApp } from "../_lib/seeds";
+import {
+  LOANS_KEY, SEED_LOANS, amortise, deriveLoan, isPendingLoanStatus, loanHealth, loanSchedule, nextLoanAppId,
+  type ActiveLoan, type LoanApp,
+} from "../_lib/seeds";
 
 /* ================================================================== */
 /* Types                                                              */
@@ -25,22 +29,6 @@ import { isPendingLoanStatus, nextLoanAppId, type LoanApp } from "../_lib/seeds"
 type TabId = "overview" | "applications" | "active" | "products";
 type AppFilter = "all" | "pending" | "approved" | "disbursed" | "rejected";
 type Member = (typeof ADMIN_MEMBERS_LIST)[number];
-
-interface Repayment { date: string; amount: number; principal: number; interest: number }
-
-interface ActiveLoan {
-  id: string;
-  sv: string;
-  member: string;
-  product: string;
-  principal: number;
-  balance: number;
-  rate: number; // % p.a.
-  term: number; // months
-  disbursed: string;
-  first_due: string;
-  repayments: Repayment[];
-}
 
 interface LoanProduct {
   code: string;
@@ -55,21 +43,10 @@ interface LoanProduct {
   par: number;
 }
 
-interface ScheduleRow {
-  installment: number;
-  due_date: string;
-  principal: number;
-  interest: number;
-  total: number;
-  balance: number;
-  status: string;
-}
-
 /* ================================================================== */
 /* Pure helpers                                                        */
 /* ================================================================== */
 
-const LOANS_KEY = "admin_active_loans";
 const PRODUCTS_KEY = "admin_loan_products";
 
 function termMonths(t: string | number | undefined): number {
@@ -77,91 +54,6 @@ function termMonths(t: string | number | undefined): number {
   return n > 0 ? n : 12;
 }
 const termLabel = (t: string | number | undefined) => `${termMonths(t)} months`;
-
-/** First day of the month `n` months after the month of `iso` (YYYY-MM-DD). */
-function addMonths(iso: string, n: number): string {
-  const [y, m] = iso.split("-").map(Number);
-  const d = new Date(y, m - 1 + n, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-/**
- * Reducing-balance amortisation: equal installments P·r / (1 − (1 + r)^−n), interest on
- * the outstanding balance each month. The last row absorbs rounding so principal sums exactly.
- */
-function amortise(principal: number, ratePct: number, months: number, firstDue: string) {
-  const r = ratePct / 100 / 12;
-  const installment = r === 0 ? Math.round(principal / months) : Math.round((principal * r) / (1 - Math.pow(1 + r, -months)));
-  let balance = principal;
-  return Array.from({ length: months }, (_, i) => {
-    const interest = Math.round(balance * r);
-    const principalPart = i === months - 1 ? balance : Math.min(balance, installment - interest);
-    balance -= principalPart;
-    return { installment: i + 1, due_date: addMonths(firstDue, i), principal: principalPart, interest, total: principalPart + interest, balance };
-  });
-}
-
-/** Schedule with Paid / Overdue / Pending status derived from how much principal is repaid. */
-function loanSchedule(loan: ActiveLoan): ScheduleRow[] {
-  const repaid = loan.principal - loan.balance;
-  let cumulative = 0;
-  return amortise(loan.principal, loan.rate, loan.term, loan.first_due).map((row) => {
-    cumulative += row.principal;
-    const status = cumulative <= repaid + 1 ? "Paid" : row.due_date < DEMO_TODAY ? "Overdue" : "Pending";
-    return { ...row, status };
-  });
-}
-
-function loanHealth(loan: ActiveLoan, schedule: ScheduleRow[]): "current" | "watch" | "arrears" | "closed" {
-  if (loan.balance <= 0) return "closed";
-  const overdue = schedule.filter((s) => s.status === "Overdue").length;
-  return overdue === 0 ? "current" : overdue <= 2 ? "watch" : "arrears";
-}
-
-/**
- * Seed loan whose outstanding balance equals the member register's loans column
- * (ADMIN_MEMBERS_LIST), so Members, Loans and the portal agree. Installments are marked
- * repaid in schedule order; any remainder is folded into the last repayment as an
- * extra principal payment.
- */
-function seedLoan(id: string, sv: string, product: string, principal: number, rate: number, term: number, firstDue: string): ActiveLoan {
-  const rows = amortise(principal, rate, term, firstDue);
-  const m = ADMIN_MEMBERS_LIST.find((x) => x.sv_number === sv);
-  const balance = Math.min(principal, m?.loans ?? principal);
-  const repaid = principal - balance;
-  const repayments: Repayment[] = [];
-  let cumulative = 0;
-  for (const r of rows) {
-    if (cumulative + r.principal > repaid) break;
-    cumulative += r.principal;
-    repayments.push({ date: r.due_date, amount: r.total, principal: r.principal, interest: r.interest });
-  }
-  const rest = repaid - cumulative;
-  if (rest > 0) {
-    const last = repayments[repayments.length - 1];
-    if (last) repayments[repayments.length - 1] = { ...last, amount: last.amount + rest, principal: last.principal + rest };
-    else repayments.push({ date: firstDue, amount: rest, principal: rest, interest: 0 });
-  }
-  return {
-    id, sv, member: m?.name ?? sv, product, principal, rate, term, balance,
-    disbursed: addMonths(firstDue, -1),
-    first_due: firstDue,
-    repayments,
-  };
-}
-
-// Names/SV numbers match ADMIN_MEMBERS_LIST and each balance equals that member's loans
-// column. SV-LN-2026-0042 mirrors James Mukasa's portal loan (UGX 4,178,544 outstanding).
-// Terms are chosen so health varies: David is on watch, Christine (suspended) in arrears.
-const SEED_LOANS: ActiveLoan[] = [
-  seedLoan("SV-LN-2026-0042", "SV-0042", "Short-Term Loan", 8_000_000, 18, 12, "2026-06-01"),
-  seedLoan("LN-2026-0118", "SV-0023", "Short-Term Loan", 12_000_000, 18, 24, "2026-04-01"),
-  seedLoan("LN-2026-0097", "SV-0001", "Development Loan", 8_500_000, 20, 24, "2026-01-01"),
-  seedLoan("LN-2026-0061", "SV-0034", "School Fees Loan", 5_000_000, 16, 24, "2026-02-01"),
-  seedLoan("LN-2026-0131", "SV-0056", "Business Loan", 14_200_000, 19, 36, "2026-05-01"),
-  seedLoan("LN-2025-0388", "SV-0089", "Business Loan", 23_100_000, 19, 36, "2025-09-01"),
-  seedLoan("LN-2026-0074", "SV-0095", "Emergency Loan", 6_000_000, 15, 12, "2026-06-01"),
-];
 
 // Portfolio totals sum to the UGX 2.15B loan book shown on the dashboard.
 const SEED_PRODUCTS: LoanProduct[] = [
@@ -336,7 +228,11 @@ function LoansInner() {
   const pathname = usePathname();
 
   const [applications, setApplications] = usePersistedState<LoanApp[]>(KEYS.adminLoanApps, ADMIN_LOAN_APPLICATIONS);
-  const [loans, setLoans] = usePersistedState<ActiveLoan[]>(LOANS_KEY, SEED_LOANS);
+  // Stored loans hold the position at the demo anchor plus anything recorded here;
+  // standing-order installments due since then are derived for today (see deriveLoan).
+  const today = useDemoToday();
+  const [storedLoans, setLoans] = usePersistedState<ActiveLoan[]>(LOANS_KEY, SEED_LOANS);
+  const loans = storedLoans.map((l) => deriveLoan(l, today));
   const [products, setProducts] = usePersistedState<LoanProduct[]>(PRODUCTS_KEY, SEED_PRODUCTS);
   const [members, setMembers] = usePersistedState<Member[]>(KEYS.adminMembers, ADMIN_MEMBERS_LIST);
 
@@ -407,7 +303,7 @@ function LoansInner() {
 
   const selectedApp = applications.find((a) => a.id === selectedAppId) ?? null;
   const selectedLoan = loans.find((l) => l.id === selectedLoanId) ?? null;
-  const selectedSchedule = selectedLoan ? loanSchedule(selectedLoan) : [];
+  const selectedSchedule = selectedLoan ? loanSchedule(selectedLoan, today) : [];
 
   const pendingApps = applications.filter((a) => isPending(a.status));
   const appCounts: Record<AppFilter, number> = {
@@ -422,11 +318,16 @@ function LoansInner() {
     .sort((a, b) => b.applied_date.localeCompare(a.applied_date));
 
   const loanRows = loans.map((l) => {
-    const schedule = loanSchedule(l);
+    const schedule = loanSchedule(l, today);
     const next = schedule.find((s) => s.status !== "Paid");
     return { loan: l, schedule, health: loanHealth(l, schedule), next };
   });
   const openLoans = loanRows.filter((r) => r.health !== "closed");
+
+  const performance = loanPerformance(today);
+  const performanceRange = performance.length
+    ? `${monthLabel(performance[0].key)} – ${monthLabel(performance[performance.length - 1].key)}`
+    : "";
 
   const portfolio = products.reduce((a, p) => a + p.portfolio, 0);
   const activeCount = products.reduce((a, p) => a + p.active, 0);
@@ -446,7 +347,7 @@ function LoansInner() {
 
   const handleApprove = () => {
     if (!selectedApp) return;
-    updateApp(selectedApp.id, { status: "approved", approve_note: approveNote.trim() || undefined, decided_date: todayISO() });
+    updateApp(selectedApp.id, { status: "approved", approve_note: approveNote.trim() || undefined, decided_date: today });
     setApproveOpen(false);
     showToast(`${selectedApp.id} approved for ${selectedApp.member}`);
   };
@@ -455,7 +356,7 @@ function LoansInner() {
     if (!selectedApp) return;
     if (!declineReason) return setDeclineError("Choose a reason");
     if (declineReason === "Other" && !declineNotes.trim()) return setDeclineError("Describe the reason in the notes");
-    updateApp(selectedApp.id, { status: "rejected", decline_reason: declineReason, decline_notes: declineNotes.trim() || undefined, decided_date: todayISO() });
+    updateApp(selectedApp.id, { status: "rejected", decline_reason: declineReason, decline_notes: declineNotes.trim() || undefined, decided_date: today });
     setDeclineOpen(false);
     showToast(`${selectedApp.id} declined`, "info");
   };
@@ -463,7 +364,6 @@ function LoansInner() {
   const handleDisburse = () => {
     if (!selectedApp) return;
     const product = productByName(selectedApp.product);
-    const today = todayISO();
     // Next free loan number for this year.
     const year = today.slice(0, 4);
     let n = 140 + loans.length;
@@ -478,7 +378,7 @@ function LoansInner() {
       rate: product?.rate ?? 18,
       term: termMonths(selectedApp.term),
       disbursed: today,
-      first_due: addMonths(today, 1),
+      first_due: firstOfNextMonth(today),
       repayments: [],
     };
     setLoans((prev) => [loan, ...prev]);
@@ -510,14 +410,14 @@ function LoansInner() {
 
     const app: LoanApp = {
       // Sequential LA-<year>-#### (tolerates the portal's uid-style ids).
-      id: nextLoanAppId(applications, todayISO().slice(0, 4)),
+      id: nextLoanAppId(applications, today.slice(0, 4)),
       sv: applicant.sv_number,
       member: applicant.name,
       product: product.name,
       amount,
       term: `${term} months`,
       status: "pending_review",
-      applied_date: todayISO(),
+      applied_date: today,
       score: creditScore(applicant, amount),
       guarantors: [newForm.g1, newForm.g2].filter(Boolean).map(nameOf),
       purpose: newForm.purpose.trim(),
@@ -533,7 +433,7 @@ function LoansInner() {
 
   const openSchedule = (l: ActiveLoan) => { setSelectedLoanId(l.id); setScheduleOpen(true); };
   const openRepay = (l: ActiveLoan) => {
-    const next = loanSchedule(l).find((s) => s.status !== "Paid");
+    const next = loanSchedule(l, today).find((s) => s.status !== "Paid");
     setSelectedLoanId(l.id);
     setRepayAmount(String(next ? Math.min(next.total, l.balance + Math.round(l.balance * (l.rate / 1200))) : l.balance));
     setRepayError(null);
@@ -559,7 +459,7 @@ function LoansInner() {
     setLoans((prev) =>
       prev.map((l) =>
         l.id === selectedLoan.id
-          ? { ...l, balance: newBalance, repayments: [...l.repayments, { date: todayISO(), amount, principal, interest }] }
+          ? { ...l, balance: Math.max(0, l.balance - principal), repayments: [...l.repayments, { date: today, amount, principal, interest }] }
           : l
       )
     );
@@ -574,7 +474,7 @@ function LoansInner() {
     try {
       await generateLoanSchedulePdf(
         { loan_number: l.id, product: l.product, principal: l.principal, interest_rate: `${l.rate}%`, member: `${l.member} (${l.sv})` },
-        loanSchedule(l)
+        loanSchedule(l, today)
       );
       showToast(`Schedule for ${l.id} downloaded`);
     } catch {
@@ -632,7 +532,7 @@ function LoansInner() {
   /* ---------- export ---------- */
 
   const handleExport = () => {
-    const stamp = todayISO();
+    const stamp = today;
     if (activeTab === "applications") {
       if (!filteredApps.length) return showToast("No applications to export", "error");
       exportToCsv(`loan-applications-${stamp}`, filteredApps.map((a) => ({
@@ -717,10 +617,11 @@ function LoansInner() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="glass-card rounded-xl p-6">
-              <h3 className="font-semibold dm-text mb-4 text-sm">Disbursement vs Recovery</h3>
+              <h3 className="font-semibold dm-text text-sm">Disbursement vs Recovery</h3>
+              <p className="text-xs dm-text-secondary mb-4">{performanceRange}</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={ADMIN_LOAN_PERFORMANCE}>
+                  <BarChart data={performance}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" strokeOpacity={0.25} />
                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#64748b" }} />
                     <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`} />
@@ -1037,7 +938,8 @@ function LoansInner() {
           const product = productByName(selectedApp.product);
           const rate = product?.rate ?? 18;
           const months = termMonths(selectedApp.term);
-          const preview = amortise(selectedApp.amount, rate, months, "2026-12-01");
+          const firstDue = firstOfNextMonth(today);
+          const preview = amortise(selectedApp.amount, rate, months, firstDue);
           const fee = Math.round(selectedApp.amount * ((product?.processing_fee ?? 0) / 100));
           return (
             <div className="space-y-4">
@@ -1047,6 +949,8 @@ function LoansInner() {
                 <InfoCell label="Rate" value={`${rate}% p.a. reducing`} />
                 <InfoCell label="Term" value={`${months} months`} />
                 <InfoCell label="Monthly installment" value={formatCurrency(preview[0]?.total ?? 0)} />
+                <InfoCell label="First installment due" value={formatDate(firstDue)} />
+                <InfoCell label="Final installment due" value={formatDate(preview[preview.length - 1]?.due_date ?? firstDue)} />
                 <InfoCell label="Processing fee" value={formatCurrency(fee)} />
                 <InfoCell label="Net to member" value={formatCurrency(selectedApp.amount - fee)} />
               </div>

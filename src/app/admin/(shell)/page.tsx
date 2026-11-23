@@ -10,11 +10,12 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area,
 } from "recharts";
-import { formatCurrency, formatDate, formatNumber, todayISO } from "@/lib/utils";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
+import { monthLabel, revealed, useDemoToday } from "@/lib/demo-clock";
 import {
-  ADMIN_KPI, ADMIN_SAVINGS_GROWTH, ADMIN_LOAN_PERFORMANCE, ADMIN_PRODUCT_DISTRIBUTION,
+  ADMIN_KPI, ADMIN_PRODUCT_DISTRIBUTION,
   ADMIN_RECENT_ACTIVITY, ADMIN_MEMBERS_LIST, ADMIN_LOAN_APPLICATIONS,
-  DEMO_ADMIN, DEMO_TODAY, MEMBER_GROWTH, PORTFOLIO_QUALITY,
+  DEMO_ADMIN, PORTFOLIO_QUALITY, loanPerformance, memberGrowth, savingsGrowth,
 } from "@/lib/mock-data";
 import { usePersistedState, showToast } from "@/lib/storage";
 import { KEYS } from "@/lib/keys";
@@ -178,14 +179,21 @@ export default function AdminDashboard() {
   const [txns, setTxns] = usePersistedState<SavingsTxn[]>(SAVINGS_TXN_KEY, DEFAULT_SAVINGS_TXN);
   const [, setProducts] = usePersistedState<SavingsProduct[]>(SAVINGS_PRODUCTS_KEY, DEFAULT_SAVINGS_PRODUCTS);
 
-  const pending = buildApprovals(loanApps, txns, manual);
+  const today = useDemoToday();
+  // Future-dated seed transactions are hidden until their date (none of them are pending).
+  const pending = buildApprovals(loanApps, revealed(txns, today, "date"), manual);
+
+  // Chart windows end at today's month; subtitles name the range shown.
+  const savingsSeries = savingsGrowth(today);
+  const loanSeries = loanPerformance(today);
+  const memberSeries = memberGrowth(today);
+  const range = (s: { key: string }[]) => (s.length ? `${monthLabel(s[0].key)} – ${monthLabel(s[s.length - 1].key)}` : "");
 
   // Society-wide count: seeded total plus/minus members registered or removed in the demo register.
   const totalMembers = kpi.total_members.value + (members.length - ADMIN_MEMBERS_LIST.length);
 
   /** Approve/reject performs the same change the owning page would make. */
   const decide = (item: ApprovalItem, approved: boolean) => {
-    const today = todayISO();
     if (item.kind === "loan_app") {
       setLoanApps((prev) =>
         prev.map((a) =>
@@ -224,7 +232,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-2xl font-bold dm-text">Dashboard</h1>
           <p className="dm-text-secondary text-sm">
-            Welcome back, {DEMO_ADMIN.full_name.split(" ")[0]}. Here&apos;s your SACCO overview as at {formatDate(DEMO_TODAY)}.
+            Welcome back, {DEMO_ADMIN.full_name.split(" ")[0]}. Here&apos;s your SACCO overview as at {formatDate(today)}.
           </p>
         </div>
         <Link
@@ -284,12 +292,15 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="glass-card rounded-xl p-6 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold dm-text text-sm">Savings Growth (12 Months)</h3>
+            <div>
+              <h3 className="font-semibold dm-text text-sm">Savings Growth (12 Months)</h3>
+              <p className="text-xs dm-text-secondary">{range(savingsSeries)}</p>
+            </div>
             <Link href="/admin/savings" className="text-xs text-[#4A90D9] hover:underline">Savings</Link>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={ADMIN_SAVINGS_GROWTH}>
+              <AreaChart data={savingsSeries}>
                 <CartesianGrid strokeDasharray="3 3" {...GRID} />
                 <XAxis dataKey="month" tick={AXIS_TICK} />
                 <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1_000_000_000).toFixed(1)}B`} />
@@ -302,13 +313,16 @@ export default function AdminDashboard() {
 
         <div className="glass-card rounded-xl p-6 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold dm-text text-sm">Loan Disbursement vs Recovery</h3>
+            <div>
+              <h3 className="font-semibold dm-text text-sm">Loan Disbursement vs Recovery</h3>
+              <p className="text-xs dm-text-secondary">{range(loanSeries)}</p>
+            </div>
             <Link href="/admin/loans?tab=overview" className="text-xs text-[#4A90D9] hover:underline">Loans</Link>
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               {/* Side-by-side bars: the two series are compared, not summed. */}
-              <BarChart data={ADMIN_LOAN_PERFORMANCE}>
+              <BarChart data={loanSeries}>
                 <CartesianGrid strokeDasharray="3 3" {...GRID} />
                 <XAxis dataKey="month" tick={AXIS_TICK} />
                 <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} />
@@ -325,10 +339,11 @@ export default function AdminDashboard() {
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="glass-card rounded-xl p-6 animate-fade-in">
-          <h3 className="font-semibold dm-text mb-4 text-sm">Member Growth</h3>
+          <h3 className="font-semibold dm-text text-sm">Member Growth</h3>
+          <p className="text-xs dm-text-secondary mb-4">{range(memberSeries)}</p>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={MEMBER_GROWTH}>
+              <LineChart data={memberSeries}>
                 <CartesianGrid strokeDasharray="3 3" {...GRID} />
                 <XAxis dataKey="month" tick={AXIS_TICK} />
                 <YAxis tick={AXIS_TICK} domain={["dataMin - 20", "dataMax + 10"]} />
