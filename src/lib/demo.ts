@@ -19,7 +19,8 @@ import {
   NOTIFICATIONS_DATA,
   RECENT_TRANSACTIONS,
 } from "@/lib/mock-data";
-import { formatCurrency, todayISO, uid } from "@/lib/utils";
+import { formatCurrency, uid } from "@/lib/utils";
+import { demoNowISO, demoTodayISO } from "@/lib/demo-clock";
 // Savings seeds, loan-application shape and balance rules are shared with the admin
 // pages so the sample activity lands exactly where (and how) the pages expect it.
 import {
@@ -36,6 +37,8 @@ import {
   type SavingsProduct,
   type SavingsTxn,
 } from "@/app/admin/(shell)/_lib/seeds";
+// Announcement shape, key and seeds come from the Communications page's own seed module.
+import { ANNOUNCEMENTS_KEY, SEED_ANNOUNCEMENTS, type Announcement } from "@/app/admin/(shell)/_lib/comms-seeds";
 
 // ------------------------------------------------------------------
 // Record shapes (mirroring the pages that own each key)
@@ -43,20 +46,6 @@ import {
 
 type AdminNotification = (typeof ADMIN_NOTIFICATIONS)[number];
 type MemberNotification = (typeof NOTIFICATIONS_DATA)[number];
-
-/** admin/(shell)/communications/page.tsx → Announcement */
-interface Announcement {
-  id: string;
-  title: string;
-  message: string;
-  channel: "SMS" | "Email" | "Push";
-  audience: "all" | "active" | "defaulters" | "member";
-  member_sv: string | null;
-  status: "draft" | "scheduled" | "sent";
-  created_at: string;
-  scheduled_for: string | null;
-  sent_at: string | null;
-}
 
 /** portal/(shell)/_lib/usePortalData.ts → PortalTxn */
 interface PortalTxn {
@@ -86,33 +75,8 @@ interface PortalAccount {
 // Seeds the pages use but do not export (kept identical to the page sources).
 // ------------------------------------------------------------------
 
-const ANNOUNCEMENTS_KEY = "admin_announcements";
 const LOADED_KEY = "demo_sample_loaded";
 const RUNS_KEY = "demo_sample_runs";
-
-// Mirrors SEED_ANNOUNCEMENTS in src/app/admin/(shell)/communications/page.tsx
-const SEED_ANNOUNCEMENTS: Announcement[] = [
-  {
-    id: "ann-agm", title: "AGM 2026 — notice of meeting", channel: "Email", audience: "all", member_sv: null, status: "sent",
-    message: "Dear Member, you are invited to the SilverVibe Annual General Meeting on 12 December 2026 at Silver Springs Hotel, Kampala, from 9:00 AM. Agenda: FY 2025 financial statements, dividend declaration and board elections.",
-    created_at: "2026-10-20T09:00:00", scheduled_for: null, sent_at: "2026-10-20T10:15:00",
-  },
-  {
-    id: "ann-fixed", title: "New fixed savings rate", channel: "SMS", audience: "active", member_sv: null, status: "sent",
-    message: "SilverVibe: Fixed savings now earn 13% p.a. on 12-month tenor from 1 Dec 2026. Visit any branch or the portal to lock in.",
-    created_at: "2026-10-08T08:30:00", scheduled_for: null, sent_at: "2026-10-08T11:00:00",
-  },
-  {
-    id: "ann-reminder", title: "Loan arrears reminder", channel: "SMS", audience: "defaulters", member_sv: null, status: "scheduled",
-    message: "Dear {name}, your loan instalment of {amount} was due on {date}. Please pay via *165# or at any branch to avoid penalties.",
-    created_at: "2026-11-03T15:20:00", scheduled_for: "2026-11-10T09:00", sent_at: null,
-  },
-  {
-    id: "ann-agm-push", title: "AGM reminder — RSVP", channel: "Push", audience: "all", member_sv: null, status: "draft",
-    message: "The AGM is on 12 Dec 2026 at Silver Springs Hotel. Tap to RSVP and download the FY 2025 report.",
-    created_at: "2026-11-02T16:40:00", scheduled_for: null, sent_at: null,
-  },
-];
 
 // ------------------------------------------------------------------
 // Helpers
@@ -130,8 +94,9 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * first, always earlier than now so "x min ago" labels stay sensible.
  */
 function morningTimes(today: string, count: number): string[] {
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  // Time of day on the demo clock (pinned to 10:00 when the real date is outside the window).
+  const nowIso = demoNowISO();
+  const nowMin = Number(nowIso.slice(11, 13)) * 60 + Number(nowIso.slice(14, 16));
   const slots = [7 * 60 + 40, 8 * 60 + 25, 9 * 60 + 10, 9 * 60 + 55, 10 * 60 + 40, 11 * 60 + 20];
   const picked = slots.slice(0, count);
   // Early in the day: squeeze the slots into the minutes before now instead.
@@ -140,9 +105,9 @@ function morningTimes(today: string, count: number): string[] {
   return mins.map((m) => `${today}T${pad(Math.floor(m / 60))}:${pad(m % 60)}:00`);
 }
 
-function tomorrowISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
+/** The day after `today` (YYYY-MM-DD) on the demo clock. */
+function tomorrowOf(today: string): string {
+  const d = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) + 1);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
@@ -158,7 +123,7 @@ function tomorrowISO(): string {
 export function loadSampleActivity(): { added: number } {
   if (typeof window === "undefined") return { added: 0 };
 
-  const today = todayISO();
+  const today = demoTodayISO();
   const runs = loadFromStorage<number>(RUNS_KEY, 0);
   const loadedToday = loadFromStorage<string | null>(LOADED_KEY, null) === today;
   // Variation index: 0 on the first load of a day keeps the "canonical" sample.
@@ -249,7 +214,7 @@ export function loadSampleActivity(): { added: number } {
     member_sv: null,
     status: "scheduled",
     created_at: t2,
-    scheduled_for: `${tomorrowISO()}T09:00`,
+    scheduled_for: `${tomorrowOf(today)}T09:00`,
     sent_at: null,
   };
   saveToStorage(ANNOUNCEMENTS_KEY, [newAnn, ...anns]);

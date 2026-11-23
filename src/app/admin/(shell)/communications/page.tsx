@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Bell, BellRing, CalendarClock, CheckCheck, Clock, Copy, Download, Edit2, ExternalLink,
@@ -13,46 +13,16 @@ import { exportToCsv } from "@/lib/export";
 import { ADMIN_KPI, ADMIN_MEMBERS_LIST, ADMIN_NOTIFICATIONS } from "@/lib/mock-data";
 import { cn, formatDateTime, formatNumber, timeAgo, uid } from "@/lib/utils";
 import { useHydrated } from "@/lib/use-hydrated";
+import { demoNowISO, isRevealed, monthKey, monthLabel, useDemoToday } from "@/lib/demo-clock";
+import {
+  ANNOUNCEMENTS_KEY, MESSAGE_LOG_KEY, SEED_ANNOUNCEMENTS, SEED_LOG, SEED_TEMPLATES, TEMPLATES_KEY, sendLogId,
+  type Announcement, type AnnStatus, type Audience, type Channel, type LogEntry, type Template,
+} from "../_lib/comms-seeds";
 
 /* ============================================================
- * Types & seed data
+ * Types & seed data (shared with src/lib/demo.ts)
  * ============================================================ */
-type Channel = "SMS" | "Email" | "Push";
-type Audience = "all" | "active" | "defaulters" | "member";
-type AnnStatus = "draft" | "scheduled" | "sent";
 type TabId = "announcements" | "compose" | "templates" | "history" | "notifications";
-
-interface Announcement {
-  id: string;
-  title: string;
-  message: string;
-  channel: Channel;
-  audience: Audience;
-  member_sv: string | null;
-  status: AnnStatus;
-  created_at: string;
-  scheduled_for: string | null;
-  sent_at: string | null;
-}
-
-interface LogEntry {
-  id: string;
-  announcement_id: string | null;
-  sent_at: string;
-  channel: Channel;
-  subject: string;
-  audience_label: string;
-  recipients: number;
-  delivered: number;
-  failed: number;
-}
-
-interface Template {
-  id: string;
-  name: string;
-  channel: Channel;
-  body: string;
-}
 
 const TAB_IDS: TabId[] = ["announcements", "compose", "templates", "history", "notifications"];
 const CHANNELS: Channel[] = ["SMS", "Email", "Push"];
@@ -99,43 +69,6 @@ function deliveryStats(channel: Channel, recipients: number) {
 function smsSegments(text: string) {
   return Math.max(1, Math.ceil(text.length / SMS_SEGMENT));
 }
-
-const SEED_ANNOUNCEMENTS: Announcement[] = [
-  {
-    id: "ann-agm", title: "AGM 2026 — notice of meeting", channel: "Email", audience: "all", member_sv: null, status: "sent",
-    message: "Dear Member, you are invited to the SilverVibe Annual General Meeting on 12 December 2026 at Silver Springs Hotel, Kampala, from 9:00 AM. Agenda: FY 2025 financial statements, dividend declaration and board elections.",
-    created_at: "2026-10-20T09:00:00", scheduled_for: null, sent_at: "2026-10-20T10:15:00",
-  },
-  {
-    id: "ann-fixed", title: "New fixed savings rate", channel: "SMS", audience: "active", member_sv: null, status: "sent",
-    message: "SilverVibe: Fixed savings now earn 13% p.a. on 12-month tenor from 1 Dec 2026. Visit any branch or the portal to lock in.",
-    created_at: "2026-10-08T08:30:00", scheduled_for: null, sent_at: "2026-10-08T11:00:00",
-  },
-  {
-    id: "ann-reminder", title: "Loan arrears reminder", channel: "SMS", audience: "defaulters", member_sv: null, status: "scheduled",
-    message: "Dear {name}, your loan instalment of {amount} was due on {date}. Please pay via *165# or at any branch to avoid penalties.",
-    created_at: "2026-11-03T15:20:00", scheduled_for: "2026-11-10T09:00", sent_at: null,
-  },
-  {
-    id: "ann-agm-push", title: "AGM reminder — RSVP", channel: "Push", audience: "all", member_sv: null, status: "draft",
-    message: "The AGM is on 12 Dec 2026 at Silver Springs Hotel. Tap to RSVP and download the FY 2025 report.",
-    created_at: "2026-11-02T16:40:00", scheduled_for: null, sent_at: null,
-  },
-];
-
-const SEED_LOG: LogEntry[] = [
-  { id: "log-1", announcement_id: null, sent_at: "2026-11-01T07:00:00", channel: "Email", subject: "October 2026 statements ready", audience_label: "Active members", recipients: 789, delivered: 761, failed: 28 },
-  { id: "log-2", announcement_id: "ann-agm", sent_at: "2026-10-20T10:15:00", channel: "Email", subject: "AGM 2026 — notice of meeting", audience_label: "All members", recipients: 847, delivered: 817, failed: 30 },
-  { id: "log-3", announcement_id: "ann-fixed", sent_at: "2026-10-08T11:00:00", channel: "SMS", subject: "New fixed savings rate", audience_label: "Active members", recipients: 789, delivered: 773, failed: 16 },
-  { id: "log-4", announcement_id: null, sent_at: "2026-10-02T09:30:00", channel: "Push", subject: "Mobile money deposits now available", audience_label: "All members", recipients: 847, delivered: 796, failed: 51 },
-];
-
-const SEED_TEMPLATES: Template[] = [
-  { id: "tpl-loan", name: "Loan repayment reminder", channel: "SMS", body: "Dear {name}, your loan instalment of {amount} is due on {date}. Pay via *165# or at any branch. SilverVibe SACCO" },
-  { id: "tpl-deposit", name: "Deposit confirmation", channel: "SMS", body: "Dear {name}, your deposit of {amount} was received on {date}. Thank you for saving with SilverVibe." },
-  { id: "tpl-agm", name: "AGM invitation", channel: "Email", body: "Dear {name},\n\nYou are invited to the Annual General Meeting on 12 December 2026 at Silver Springs Hotel, Kampala.\n\nKind regards,\nSilverVibe Board" },
-  { id: "tpl-dividend", name: "Dividend credited", channel: "Push", body: "Hi {name}, your FY 2025 dividend of {amount} was credited on {date}." },
-];
 
 /** Persisted list that falls back to seed data if an older build stored a different shape. */
 function hasField<T>(arr: unknown, field: keyof T): arr is T[] {
@@ -215,7 +148,7 @@ function MessageFields({ draft, onChange }: { draft: MessageDraft; onChange: (d:
         <TextInput
           value={draft.title}
           onChange={(v) => set("title", v)}
-          placeholder={draft.channel === "Email" ? "e.g. AGM 2026 — notice of meeting" : "e.g. November arrears reminder"}
+          placeholder={draft.channel === "Email" ? "e.g. Notice of Annual General Meeting" : "e.g. Loan arrears reminder"}
           maxLength={120}
         />
       </FormField>
@@ -306,14 +239,18 @@ function CommunicationsInner() {
   const router = useRouter();
   const params = useSearchParams();
   const hydrated = useHydrated();
+  const today = useDemoToday();
   const tabParam = params.get("tab") as TabId | null;
   const tab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "announcements";
   const setTab = (t: TabId) => router.replace(`/admin/communications?tab=${t}`, { scroll: false });
 
-  const [announcements, setAnnouncements] = useSafeList<Announcement>("admin_announcements", SEED_ANNOUNCEMENTS, "audience");
-  const [log, setLog] = useSafeList<LogEntry>("admin_message_log", SEED_LOG, "delivered");
-  const [templates, setTemplates] = useSafeList<Template>("admin_message_templates", SEED_TEMPLATES, "body");
-  const [notifs, setNotifs] = usePersistedState(KEYS.adminNotifications, ADMIN_NOTIFICATIONS);
+  const [announcements, setAnnouncements] = useSafeList<Announcement>(ANNOUNCEMENTS_KEY, SEED_ANNOUNCEMENTS, "audience");
+  const [rawLog, setLog] = useSafeList<LogEntry>(MESSAGE_LOG_KEY, SEED_LOG, "delivered");
+  const [templates, setTemplates] = useSafeList<Template>(TEMPLATES_KEY, SEED_TEMPLATES, "body");
+  const [rawNotifs, setNotifs] = usePersistedState(KEYS.adminNotifications, ADMIN_NOTIFICATIONS);
+  // Seeded history and notifications may be future-dated; show them once the demo clock reaches them.
+  const log = useMemo(() => rawLog.filter((l) => isRevealed(l.sent_at, today)), [rawLog, today]);
+  const notifs = useMemo(() => rawNotifs.filter((n) => isRevealed(n.time, today)), [rawNotifs, today]);
 
   // Announcements tab
   const [annFilter, setAnnFilter] = useState<"all" | AnnStatus>("all");
@@ -341,7 +278,7 @@ function CommunicationsInner() {
 
   /* ---------- computed summary ---------- */
   const stats = useMemo(() => {
-    const mtd = log.filter((l) => l.sent_at.startsWith("2026-11"));
+    const mtd = log.filter((l) => monthKey(l.sent_at) === monthKey(today));
     const recipients = log.reduce((a, l) => a + l.recipients, 0);
     const delivered = log.reduce((a, l) => a + l.delivered, 0);
     return {
@@ -352,30 +289,59 @@ function CommunicationsInner() {
       drafts: announcements.filter((a) => a.status === "draft").length,
       unread: notifs.filter((n) => !n.read).length,
     };
-  }, [log, announcements, notifs]);
+  }, [log, announcements, notifs, today]);
 
   /* ---------- actions ---------- */
-  const logSend = (a: Pick<Announcement, "id" | "title" | "channel" | "audience" | "member_sv">, sentAt: string) => {
+  const logSend = useCallback((a: Pick<Announcement, "id" | "title" | "channel" | "audience" | "member_sv">, sentAt: string, id: string = uid("log")) => {
     const recipients = recipientCount(a.audience);
     const entry: LogEntry = {
-      id: uid("log"), announcement_id: a.id, sent_at: sentAt, channel: a.channel, subject: a.title,
+      id, announcement_id: a.id, sent_at: sentAt, channel: a.channel, subject: a.title,
       audience_label: audienceLabel(a.audience, a.member_sv), recipients, ...deliveryStats(a.channel, recipients),
     };
-    setLog((prev) => [entry, ...prev]);
+    // Skip if this id is already logged (automatic catch-up can race with itself in dev double-effects).
+    setLog((prev) => (prev.some((l) => l.id === entry.id) ? prev : [entry, ...prev]));
     return entry;
-  };
+  }, [setLog]);
+
+  /**
+   * Mark announcements as sent at the given time and log each delivery — the single
+   * code path for "Send now" and for scheduled messages whose time has passed.
+   */
+  const markSent = useCallback((items: { a: Announcement; sentAt: string }[]) => {
+    const byId = new Map(items.map((i) => [i.a.id, i.sentAt]));
+    // The persisted setter runs this updater once, synchronously, against the stored list,
+    // so `sent` holds exactly the records that changed state here (none if already sent/deleted).
+    const sent: Announcement[] = [];
+    setAnnouncements((prev) =>
+      prev.map((x) => {
+        if (!byId.has(x.id) || x.status === "sent") return x;
+        sent.push(x);
+        return { ...x, status: "sent", sent_at: byId.get(x.id)!, scheduled_for: null };
+      })
+    );
+    return sent.map((a) => logSend(a, byId.get(a.id)!, sendLogId(a.id)));
+  }, [setAnnouncements, logSend]);
 
   const sendAnnouncement = (a: Announcement) => {
-    const now = new Date().toISOString();
-    setAnnouncements((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: "sent", sent_at: now, scheduled_for: null } : x)));
-    const e = logSend(a, now);
+    const [e] = markSent([{ a, sentAt: demoNowISO() }]);
+    if (!e) return;
     showToast(`"${a.title}" sent to ${formatNumber(e.recipients)} recipient${e.recipients === 1 ? "" : "s"} via ${a.channel}`);
   };
+
+  // Scheduled-message catch-up: once hydrated, anything scheduled at or before the demo
+  // clock goes out "at" its scheduled time. A state transition, so it happens only once.
+  useEffect(() => {
+    if (!hydrated) return;
+    const now = demoNowISO();
+    const due = announcements.filter((a) => a.status === "scheduled" && a.scheduled_for && a.scheduled_for.slice(0, 16) <= now.slice(0, 16));
+    if (due.length === 0) return;
+    markSent(due.map((a) => ({ a, sentAt: a.scheduled_for!.length === 16 ? `${a.scheduled_for}:00` : a.scheduled_for! })));
+  }, [hydrated, today, announcements, markSent]);
 
   const duplicate = (a: Announcement) => {
     const copy: Announcement = {
       ...a, id: uid("ann"), title: `${a.title} (copy)`, status: "draft",
-      created_at: new Date().toISOString(), scheduled_for: null, sent_at: null,
+      created_at: demoNowISO(), scheduled_for: null, sent_at: null,
     };
     setAnnouncements((prev) => [copy, ...prev]);
     setAnnFilter("all");
@@ -396,7 +362,7 @@ function CommunicationsInner() {
     const isScheduled = editing.status === "scheduled";
     if (isScheduled) {
       if (!editSendAt) return setEditErr("Pick a date and time to send the message.");
-      if (new Date(editSendAt).getTime() <= Date.now()) return setEditErr("The scheduled time must be in the future.");
+      if (editSendAt.slice(0, 16) <= demoNowISO().slice(0, 16)) return setEditErr("The scheduled time must be in the future.");
     }
     setAnnouncements((prev) =>
       prev.map((x) =>
@@ -422,7 +388,7 @@ function CommunicationsInner() {
   const buildAnnouncement = (status: AnnStatus, extra: Partial<Announcement> = {}): Announcement => ({
     id: uid("ann"), title: draft.title.trim(), message: draft.message, channel: draft.channel, audience: draft.audience,
     member_sv: draft.audience === "member" ? draft.member_sv : null, status,
-    created_at: new Date().toISOString(), scheduled_for: null, sent_at: null, ...extra,
+    created_at: demoNowISO(), scheduled_for: null, sent_at: null, ...extra,
   });
 
   const submitCompose = () => {
@@ -430,11 +396,11 @@ function CommunicationsInner() {
     if (err) return setComposeErr(err);
     if (sendMode === "schedule") {
       if (!scheduleAt) return setComposeErr("Pick a date and time to schedule the message.");
-      if (new Date(scheduleAt).getTime() <= Date.now()) return setComposeErr("The scheduled time must be in the future.");
+      if (scheduleAt.slice(0, 16) <= demoNowISO().slice(0, 16)) return setComposeErr("The scheduled time must be in the future.");
       setAnnouncements((prev) => [buildAnnouncement("scheduled", { scheduled_for: scheduleAt }), ...prev]);
       showToast(`Scheduled for ${formatDateTime(scheduleAt)}`);
     } else {
-      const now = new Date().toISOString();
+      const now = demoNowISO();
       const a = buildAnnouncement("sent", { sent_at: now });
       setAnnouncements((prev) => [a, ...prev]);
       const e = logSend(a, now);
@@ -482,7 +448,8 @@ function CommunicationsInner() {
 
   const markRead = (id: string) => setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   const markAllRead = () => {
-    setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
+    // Only the notifications visible on the demo clock; future ones stay unread until they arrive.
+    setNotifs((prev) => prev.map((n) => (isRevealed(n.time, today) ? { ...n, read: true } : n)));
     showToast("All notifications marked as read");
   };
 
@@ -516,7 +483,7 @@ function CommunicationsInner() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Messages sent (Nov 2026)" value={formatNumber(stats.mtdMessages)} sub={`${stats.mtdCampaigns} campaign${stats.mtdCampaigns === 1 ? "" : "s"}`} icon={Send} />
+        <StatCard label={`Messages sent (${monthLabel(today)})`} value={formatNumber(stats.mtdMessages)} sub={`${stats.mtdCampaigns} campaign${stats.mtdCampaigns === 1 ? "" : "s"}`} icon={Send} />
         <StatCard label="Delivery rate (all time)" value={`${stats.deliveryRate.toFixed(1)}%`} sub={`${log.length} campaigns logged`} icon={CheckCheck} color="#22c55e" />
         <StatCard label="Scheduled" value={stats.scheduled} sub={`${stats.drafts} draft${stats.drafts === 1 ? "" : "s"}`} icon={CalendarClock} color="#f59e0b" />
         <StatCard label="Unread notifications" value={stats.unread} sub={`${notifs.length} total`} icon={BellRing} color="#a855f7" />

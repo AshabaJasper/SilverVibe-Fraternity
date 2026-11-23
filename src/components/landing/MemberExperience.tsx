@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { ArrowRight, Download, FileText } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { card, container, eyebrow, focusRing, sectionLead, sectionTitle } from "./styles";
+// Date-dependent previews are client components that follow the demo clock after hydration.
+import { LoanPreview, StatementPreview } from "./TimelinePreviews";
 
 const EXPERIENCES = [
   {
@@ -94,57 +96,6 @@ function DashboardPreview() {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function LoanPreview() {
-  // Paid instalments are filled; the rest show the remaining schedule.
-  const paid = 7;
-  return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="rounded-xl bg-[#1a1a1a] p-3 ring-1 ring-[#C0C0C0]/10">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] text-[#a3a3a3]">Development loan</p>
-          <span className="rounded-full bg-[#22c55e]/15 px-1.5 py-0.5 text-[9px] font-semibold text-[#22c55e]">On track</span>
-        </div>
-        <p className="mt-1 text-sm font-semibold text-[#f5f5f5]">UGX 4.18M outstanding</p>
-        <div className="mt-2 h-1.5 rounded-full bg-[#f5f5f5]/[0.08]">
-          <div className="h-full w-[58%] rounded-full bg-[#4A90D9]" />
-        </div>
-      </div>
-      <div className="flex-1 rounded-xl bg-[#1a1a1a] p-3 ring-1 ring-[#C0C0C0]/10">
-        <p className="text-[10px] text-[#8a8a8a]">Repayment schedule</p>
-        <div className="mt-2 grid grid-cols-12 gap-1">
-          {Array.from({ length: 12 }, (_, i) => (
-            <span key={i} className={cn("h-4 rounded-sm", i < paid ? "bg-[#4A90D9]/70" : "bg-[#f5f5f5]/[0.08]")} />
-          ))}
-        </div>
-        <p className="mt-2 text-[10px] text-[#a3a3a3]">Next: UGX 350,000 · 15 Nov</p>
-      </div>
-    </div>
-  );
-}
-
-function StatementPreview() {
-  return (
-    <div className="flex h-full flex-col gap-2">
-      {[
-        ["Savings statement · Oct 2026", "142 KB"],
-        ["Share certificate · SC-0042", "88 KB"],
-        ["Loan statement · LN-2041", "120 KB"],
-      ].map(([name, size]) => (
-        <div key={name} className="flex flex-1 items-center gap-3 rounded-xl bg-[#1a1a1a] px-3 ring-1 ring-[#C0C0C0]/10">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ef4444]/10">
-            <FileText className="h-3.5 w-3.5 text-[#f87171]" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-medium text-[#e5e5e5]">{name}</p>
-            <p className="text-[10px] text-[#737373]">PDF · {size}</p>
-          </div>
-          <Download className="h-3.5 w-3.5 shrink-0 text-[#a3a3a3]" />
-        </div>
-      ))}
     </div>
   );
 }

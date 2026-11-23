@@ -13,6 +13,7 @@ import { useAuthHydrated, useAuthStore } from "@/lib/store";
 import { exportToCsv } from "@/lib/export";
 import { DEMO_ADMIN } from "@/lib/mock-data";
 import { cn, formatDateTime, getInitials, uid } from "@/lib/utils";
+import { ANCHOR, TIMELINE_EVENTS as EV, demoNowISO, isRevealed, useDemoToday } from "@/lib/demo-clock";
 
 /* ============================================================
  * Roles & permissions
@@ -73,11 +74,48 @@ interface SystemUser {
 
 const SEED_USERS: SystemUser[] = [
   { id: "usr-001", name: DEMO_ADMIN.full_name, email: DEMO_ADMIN.email, phone: "+256 772 400 100", role_id: "role-super", status: "active", two_factor: true, last_login: DEMO_ADMIN.last_login, protected: true },
-  { id: "usr-002", name: "John Mugisha", email: "john.mugisha@silvervibe.coop", phone: "+256 772 400 101", role_id: "role-accountant", status: "active", two_factor: true, last_login: "2026-11-04T09:00:00" },
-  { id: "usr-003", name: "Rose Namulema", email: "rose.namulema@silvervibe.coop", phone: "+256 772 400 102", role_id: "role-loans", status: "active", two_factor: false, last_login: "2026-11-03T16:45:00" },
-  { id: "usr-004", name: "Peter Ochieng", email: "peter.ochieng@silvervibe.coop", phone: "+256 772 400 103", role_id: "role-teller", status: "active", two_factor: true, last_login: "2026-11-04T07:55:00" },
+  { id: "usr-002", name: "John Mugisha", email: "john.mugisha@silvervibe.coop", phone: "+256 772 400 101", role_id: "role-accountant", status: "active", two_factor: true, last_login: "2026-11-23T09:00:00" },
+  { id: "usr-003", name: "Rose Namulema", email: "rose.namulema@silvervibe.coop", phone: "+256 772 400 102", role_id: "role-loans", status: "active", two_factor: false, last_login: "2026-11-21T16:45:00" },
+  { id: "usr-004", name: "Peter Ochieng", email: "peter.ochieng@silvervibe.coop", phone: "+256 772 400 103", role_id: "role-teller", status: "active", two_factor: true, last_login: "2026-11-23T07:55:00" },
   { id: "usr-005", name: "Diana Acan", email: "diana.acan@silvervibe.coop", phone: "+256 772 400 104", role_id: "role-relations", status: "inactive", two_factor: false, last_login: "2026-10-14T10:00:00" },
 ];
+
+/** Usual sign-in time of day for each seeded staff account (drives "last login" as the demo clock moves). */
+const USUAL_LOGIN: Record<string, string> = {
+  "usr-001": "08:30:00",
+  "usr-002": "09:00:00",
+  "usr-003": "08:15:00",
+  "usr-004": "07:55:00",
+};
+
+/** Office is closed on Sundays and over the festive break (24 Dec – 3 Jan). */
+function isWorkingDay(date: string): boolean {
+  const d = new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)));
+  if (d.getDay() === 0) return false;
+  return !(date >= EV.officeClosedFrom && date < EV.officeReopens);
+}
+
+/** The most recent working day strictly before `today`. */
+function previousWorkingDay(today: string): string {
+  let d = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)));
+  for (let i = 0; i < 20; i++) {
+    d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+    const iso = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    if (isWorkingDay(iso)) return iso;
+  }
+  return today;
+}
+
+/**
+ * Last login shown for a user: the stored value, moved forward for active seeded staff
+ * to their usual sign-in on the latest working day before today (they keep logging in).
+ */
+function effectiveLastLogin(u: SystemUser, today: string): string | null {
+  const usual = USUAL_LOGIN[u.id];
+  if (!usual || u.status !== "active") return u.last_login;
+  const derived = `${previousWorkingDay(today)}T${usual}`;
+  return !u.last_login || derived > u.last_login ? derived : u.last_login;
+}
 
 const EMPTY_USER: SystemUser = { id: "", name: "", email: "", phone: "", role_id: "role-teller", status: "active", two_factor: true, last_login: null };
 
@@ -97,28 +135,66 @@ interface AuditEntry {
 
 /** Audit timestamps are local wall-clock "YYYY-MM-DDTHH:MM:SS" (no zone), like the seeds. */
 const pad2 = (n: number) => String(n).padStart(2, "0");
-const localStamp = (d: Date) =>
-  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 /** Parsed time for sorting; zone-less strings parse as local time, older "…Z" entries as UTC. */
 const stampTime = (ts: string) => {
   const t = new Date(ts).getTime();
   return Number.isNaN(t) ? 0 : t;
 };
 
+/**
+ * Audit trail. History runs to 23 Nov 2026; entries dated later are revealed when the
+ * demo clock reaches them (filtered with isRevealed). Today's 03:00 automated backup
+ * is derived rather than seeded — see backupEntry().
+ */
 const SEED_AUDIT: AuditEntry[] = [
-  { id: "au-01", timestamp: "2026-11-04T09:15:00", user: "System", module: "Savings", action: "Deposit posted", detail: "UGX 500,000 to Regular Savings for Fatima Nankya (SV-0056)", severity: "info" },
-  { id: "au-02", timestamp: "2026-11-04T08:45:00", user: "Diana Acan", module: "Members", action: "Member registered", detail: "Martha Apio (SV-0078) — KYC pending", severity: "info" },
-  { id: "au-03", timestamp: "2026-11-04T08:30:12", user: "Sarah Nakamya", module: "Auth", action: "Login", detail: "Successful login with OTP from 197.239.4.18", severity: "info" },
-  { id: "au-04", timestamp: "2026-11-04T03:00:00", user: "System", module: "Settings", action: "Backup completed", detail: "Automated daily backup (2.4 GB) to AWS S3 eu-west-1", severity: "info" },
-  { id: "au-05", timestamp: "2026-11-03T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "Monthly savings interest computed and journalised", severity: "info" },
-  { id: "au-06", timestamp: "2026-11-03T15:20:00", user: "Rose Namulema", module: "Communications", action: "Message scheduled", detail: "Loan arrears reminder (SMS) to defaulters for 10 Nov 2026", severity: "info" },
-  { id: "au-07", timestamp: "2026-11-02T14:05:00", user: "Sarah Nakamya", module: "Loans", action: "Loan approved", detail: "Emergency Loan UGX 2,000,000 for Samuel Byaruhanga (SV-0089)", severity: "important" },
-  { id: "au-08", timestamp: "2026-11-01T22:14:00", user: "Unknown", module: "Auth", action: "Failed login", detail: "3 failed attempts for diana.acan@silvervibe.coop from 41.202.230.7", severity: "warning" },
-  { id: "au-09", timestamp: "2026-10-28T16:40:00", user: "Sarah Nakamya", module: "Accounting", action: "Journal posted", detail: "JE-2026-0146 Staff salaries — October 2026 UGX 11,800,000", severity: "info" },
+  // ---- Feb 2027 ----
+  { id: "au-f07", timestamp: "2027-02-20T15:20:00", user: "Sarah Nakamya", module: "Shares", action: "Dividend declared", detail: `${EV.dividendFy} dividend of ${EV.dividendRatePct}% approved at the AGM, payable 15 Mar 2027`, severity: "important" },
+  { id: "au-f06", timestamp: "2027-02-13T09:00:00", user: "System", module: "Communications", action: "Scheduled message sent", detail: "AGM reminder — this Saturday (SMS) to 847 members", severity: "info" },
+  { id: "au-f05", timestamp: "2027-02-10T11:30:00", user: "Sarah Nakamya", module: "Reports", action: "Report exported", detail: `${EV.dividendFy} annual report pack (PDF) for the AGM`, severity: "info" },
+  { id: "au-f04", timestamp: "2027-02-08T08:31:00", user: "Sarah Nakamya", module: "Auth", action: "Login", detail: "Successful login with OTP from 197.239.4.18", severity: "info" },
+  { id: "au-f03", timestamp: "2027-02-01T07:00:00", user: "System", module: "Loans", action: "Standing orders processed", detail: "Loan installments collected for 1 Feb 2027 (incl. SV-0042 UGX 733,440)", severity: "info" },
+  { id: "au-f02", timestamp: "2027-01-31T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "January 2027 savings interest computed and journalised", severity: "info" },
+  { id: "au-f01", timestamp: "2027-01-31T03:00:00", user: "System", module: "Settings", action: "Monthly backup archived", detail: "January 2027 month-end snapshot (2.5 GB) retained for 7 years", severity: "info" },
+  // ---- Jan 2027 ----
+  { id: "au-j07", timestamp: "2027-01-20T09:00:00", user: "System", module: "Communications", action: "Scheduled message sent", detail: "Notice of Annual General Meeting (Email) to 847 members", severity: "important" },
+  { id: "au-j06", timestamp: "2027-01-14T10:05:00", user: "John Mugisha", module: "Accounting", action: "Journal posted", detail: "Staff salaries — December 2026 UGX 11,800,000", severity: "info" },
+  { id: "au-j05", timestamp: "2027-01-04T08:29:00", user: "Sarah Nakamya", module: "Auth", action: "Login", detail: "First login after the festive break, OTP from 197.239.4.18", severity: "info" },
+  { id: "au-j04", timestamp: "2027-01-02T08:00:00", user: "System", module: "Communications", action: "Scheduled message sent", detail: "New fixed savings rate now live (SMS) to active members", severity: "info" },
+  { id: "au-j03", timestamp: "2027-01-01T00:05:00", user: "System", module: "Savings", action: "Product rate changed", detail: `Fixed Savings 12-month rate set to ${EV.newFixedRatePct}% p.a. (scheduled change)`, severity: "important" },
+  { id: "au-j02", timestamp: "2026-12-31T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "December 2026 savings interest computed and journalised", severity: "info" },
+  { id: "au-j01", timestamp: "2026-12-31T03:00:00", user: "System", module: "Settings", action: "Monthly backup archived", detail: "December 2026 month-end snapshot (2.5 GB) retained for 7 years", severity: "info" },
+  // ---- Dec 2026 ----
+  { id: "au-d07", timestamp: "2026-12-23T17:10:00", user: "Sarah Nakamya", module: "Settings", action: "Office hours updated", detail: "Branch closed 24 Dec – 3 Jan; portal and Mobile Money stay open", severity: "info" },
+  { id: "au-d06", timestamp: "2026-12-18T08:00:00", user: "System", module: "Communications", action: "Scheduled message sent", detail: "Festive season office hours (SMS) to 847 members", severity: "info" },
+  { id: "au-d05", timestamp: "2026-12-12T16:30:00", user: "Sarah Nakamya", module: "Reports", action: "Board pack exported", detail: "Quarterly board meeting — PAR, liquidity and AGM preparations (PDF)", severity: "info" },
+  { id: "au-d04", timestamp: "2026-12-12T13:52:00", user: "Sarah Nakamya", module: "Auth", action: "Login", detail: "Successful login with OTP from boardroom (197.239.4.22)", severity: "info" },
+  { id: "au-d03", timestamp: "2026-12-07T09:12:00", user: "Rose Namulema", module: "Loans", action: "Arrears follow-up", detail: "Called SV-0034 and SV-0095 after the 1 Dec reminder", severity: "info" },
+  { id: "au-d02", timestamp: "2026-12-01T09:00:00", user: "System", module: "Communications", action: "Scheduled message sent", detail: "Loan arrears reminder (SMS) to defaulters", severity: "info" },
+  { id: "au-d01", timestamp: "2026-11-30T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "November 2026 savings interest computed and journalised", severity: "info" },
+  // ---- history to 23 Nov 2026 ----
+  { id: "au-01", timestamp: "2026-11-23T09:15:00", user: "System", module: "Savings", action: "Deposit posted", detail: "UGX 500,000 to Flexi/Wallet for Fatima Nankya (SV-0056)", severity: "info" },
+  { id: "au-03", timestamp: "2026-11-23T08:30:12", user: "Sarah Nakamya", module: "Auth", action: "Login", detail: "Successful login with OTP from 197.239.4.18", severity: "info" },
+  { id: "au-06", timestamp: "2026-11-23T08:50:00", user: "Rose Namulema", module: "Communications", action: "Message scheduled", detail: "Loan arrears reminder (SMS) to defaulters for 1 Dec 2026, 09:00", severity: "info" },
+  { id: "au-07", timestamp: "2026-11-22T15:02:00", user: "System", module: "Loans", action: "Application received", detail: "Grace Nabirye (SV-0023) applied for UGX 5,000,000", severity: "info" },
+  { id: "au-02", timestamp: "2026-11-22T10:45:00", user: "System", module: "Members", action: "Registration submitted", detail: "Martha Apio (SV-0078) via the online form — KYC pending", severity: "info" },
+  { id: "au-13", timestamp: "2026-11-21T10:00:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: "Save the date: AGM 20 Feb 2027 (Email) to 847 members", severity: "important" },
+  { id: "au-14", timestamp: "2026-11-20T11:00:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: `New fixed savings rate (${EV.newFixedRatePct}% from 1 Jan 2027) by SMS to active members`, severity: "info" },
+  { id: "au-08", timestamp: "2026-11-18T22:14:00", user: "Unknown", module: "Auth", action: "Failed login", detail: "3 failed attempts for diana.acan@silvervibe.coop from 41.202.230.7", severity: "warning" },
+  { id: "au-05", timestamp: "2026-10-31T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "October 2026 savings interest computed and journalised", severity: "info" },
+  { id: "au-09", timestamp: "2026-10-28T16:40:00", user: "Sarah Nakamya", module: "Accounting", action: "Journal posted", detail: "Staff salaries — October 2026 UGX 11,800,000", severity: "info" },
   { id: "au-10", timestamp: "2026-10-28T11:05:00", user: "Sarah Nakamya", module: "Reports", action: "Report exported", detail: "Member Register (CSV)", severity: "info" },
-  { id: "au-11", timestamp: "2026-10-20T10:15:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: "AGM 2026 notice (Email) to 847 members", severity: "important" },
   { id: "au-12", timestamp: "2026-10-14T16:30:00", user: "Sarah Nakamya", module: "Settings", action: "User deactivated", detail: "Diana Acan set to inactive (extended leave)", severity: "important" },
+  { id: "au-11", timestamp: "2026-10-05T09:30:00", user: "Sarah Nakamya", module: "Communications", action: "Announcement sent", detail: "Mobile Money deposits now available (Push) to 847 members", severity: "info" },
+  { id: "au-15", timestamp: "2026-09-30T23:00:00", user: "System", module: "Accounting", action: "Interest accrual", detail: "September 2026 savings interest computed and journalised", severity: "info" },
+  { id: "au-16", timestamp: "2026-09-15T09:00:00", user: "System", module: "Communications", action: "Message sent", detail: "Loan arrears reminder (SMS) to defaulters", severity: "info" },
+  { id: "au-17", timestamp: "2026-09-01T08:20:00", user: "John Mugisha", module: "Accounting", action: "Period closed", detail: "August 2026 books closed and reconciled", severity: "important" },
 ];
+
+/** Today's automated 03:00 backup, derived from the demo clock so it is always "last night". */
+const backupEntry = (today: string, location: string): AuditEntry => ({
+  id: `au-backup-${today}`, timestamp: `${today}T03:00:00`, user: "System", module: "Settings", action: "Backup completed",
+  detail: `Automated daily backup (2.4 GB) to ${location}`, severity: "info",
+});
 
 /* ============================================================
  * System settings — stored as one keyed object
@@ -129,7 +205,7 @@ const SEED_SETTINGS = {
   contact_email: "info@silvervibe.coop",
   contact_phone: "+256 414 123 456",
   currency: "UGX",
-  fiscal_year_start: "January",
+  fiscal_year_start: "July",
   loan_interest_rate: "18",
   loan_interest_method: "Reducing balance",
   loan_penalty_rate: "2",
@@ -143,7 +219,8 @@ const SEED_SETTINGS = {
   backup_schedule: "Daily at 03:00 EAT",
   backup_location: "AWS S3 (eu-west-1)",
   retention_days: "90",
-  last_backup: "2026-11-04T03:00:00",
+  // Stored only when someone runs a manual backup; the display takes the later of this and today's 03:00 run.
+  last_backup: `${ANCHOR}T03:00:00`,
 };
 type SettingsKey = keyof typeof SEED_SETTINGS;
 type SystemSettings = Record<SettingsKey, string>;
@@ -374,6 +451,7 @@ function SettingsInner() {
   const tabParam = params.get("tab") as TabId | null;
   const tab: TabId = tabParam && TAB_IDS.includes(tabParam) ? tabParam : "users";
   const setTab = (t: TabId) => router.replace(`/admin/settings?tab=${t}`, { scroll: false });
+  const today = useDemoToday();
 
   // Logged-in user (read only after the auth store hydrates, so SSR and first client render match).
   const authReady = useAuthHydrated();
@@ -383,16 +461,26 @@ function SettingsInner() {
 
   const [users, setUsers] = useSafeList<SystemUser>("admin_system_users", SEED_USERS, "role_id");
   const [roles, setRoles] = useSafeList<Role>("admin_roles", SEED_ROLES, "permissions");
-  const [audit, setAudit] = useSafeList<AuditEntry>("admin_audit_log", SEED_AUDIT, "module");
+  const [storedAudit, setAudit] = useSafeList<AuditEntry>("admin_audit_log", SEED_AUDIT, "module");
   const [storedSettings, setStoredSettings] = usePersistedState<Partial<SystemSettings>>("admin_system_settings", SEED_SETTINGS);
   // Merge over defaults so new keys appear even if an older shape is stored.
   const settings: SystemSettings = { ...SEED_SETTINGS, ...(storedSettings && typeof storedSettings === "object" ? storedSettings : {}) };
+  // Nightly backups keep running as the demo clock moves: show the later of today's 03:00 run and any manual one.
+  const scheduledBackup = `${today}T03:00:00`;
+  const lastBackup = settings.last_backup > scheduledBackup ? settings.last_backup : scheduledBackup;
+  // Audit entries dated after today stay hidden until the demo clock reaches them; today's backup is derived.
+  const backupLocation = storedSettings?.backup_location ?? SEED_SETTINGS.backup_location;
+  const audit = useMemo(() => {
+    const shown = storedAudit.filter((a) => isRevealed(a.timestamp, today));
+    const nightly = backupEntry(today, backupLocation);
+    return shown.some((a) => a.id === nightly.id) ? shown : [nightly, ...shown];
+  }, [storedAudit, today, backupLocation]);
 
   const roleById = useMemo(() => Object.fromEntries(roles.map((r) => [r.id, r])), [roles]);
   const roleName = (id: string) => roleById[id]?.name ?? "Unassigned";
 
   const log = (module: string, action: string, detail: string, severity: AuditEntry["severity"] = "info") =>
-    setAudit((prev) => [{ id: uid("au"), timestamp: localStamp(new Date()), user: actor, module, action, detail, severity }, ...prev]);
+    setAudit((prev) => [{ id: uid("au"), timestamp: demoNowISO(), user: actor, module, action, detail, severity }, ...prev]);
 
   /* ---------------- Users ---------------- */
   const [userQuery, setUserQuery] = useState("");
@@ -544,7 +632,7 @@ function SettingsInner() {
     setBackingUp(true);
     // Simulated backup job.
     setTimeout(() => {
-      const at = new Date().toISOString();
+      const at = demoNowISO();
       setStoredSettings((prev) => ({ ...SEED_SETTINGS, ...prev, last_backup: at }));
       log("Settings", "Manual backup", `On-demand backup (2.4 GB) to ${settings.backup_location}`, "info");
       setBackingUp(false);
@@ -571,7 +659,7 @@ function SettingsInner() {
         <StatCard label="System users" value={users.length} sub={`${activeUsers} active`} icon={Users} />
         <StatCard label="Roles" value={roles.length} sub={`${roles.filter((r) => userCount(r.id) === 0).length} unassigned`} icon={ShieldCheck} color="#a855f7" />
         <StatCard label="2FA adoption" value={`${twoFaPct}%`} sub={settings.require_2fa} icon={Lock} color="#22c55e" />
-        <StatCard label="Last backup" value={formatDateTime(settings.last_backup).split(", ")[0]} sub={formatDateTime(settings.last_backup).split(", ")[1]} icon={Database} color="#f59e0b" />
+        <StatCard label="Last backup" value={formatDateTime(lastBackup).split(", ")[0]} sub={formatDateTime(lastBackup).split(", ")[1]} icon={Database} color="#f59e0b" />
       </div>
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
@@ -610,6 +698,7 @@ function SettingsInner() {
                     {shownUsers.map((u) => {
                       const isMe = !!myEmail && u.email.toLowerCase() === myEmail;
                       const role = roleById[u.role_id];
+                      const lastLogin = effectiveLastLogin(u, today);
                       return (
                         <tr key={u.id} className={cn("border-b dm-border last:border-0 hover:dm-surface-hover", isMe && "bg-[#4A90D9]/5")}>
                           <td className="px-4 py-3">
@@ -636,7 +725,7 @@ function SettingsInner() {
                               <span className="flex items-center gap-1 text-xs text-[#d97706]"><Unlock className="w-3 h-3" /> Off</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-xs dm-text-secondary whitespace-nowrap">{u.last_login ? formatDateTime(u.last_login) : "Never"}</td>
+                          <td className="px-4 py-3 text-xs dm-text-secondary whitespace-nowrap">{lastLogin ? formatDateTime(lastLogin) : "Never"}</td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               <IconBtn label={`Edit ${u.name}`} icon={Edit2} onClick={() => openUser(u)} />
@@ -790,7 +879,7 @@ function SettingsInner() {
                 {section.id === "backup" && (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2">
                     <dt className="text-xs dm-text-secondary">Last backup</dt>
-                    <dd className="text-xs font-medium dm-text">{formatDateTime(settings.last_backup)} · 2.4 GB</dd>
+                    <dd className="text-xs font-medium dm-text">{formatDateTime(lastBackup)} · 2.4 GB</dd>
                   </div>
                 )}
               </dl>

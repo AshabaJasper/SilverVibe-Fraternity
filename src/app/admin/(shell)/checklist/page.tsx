@@ -149,6 +149,7 @@ const MODULES: Module[] = [
       { name: "Live notification badges shared between header and pages", status: "done" },
       { name: "Reset demo data", status: "done" },
       { name: "Responsive layout for phones and tablets", status: "done" },
+      { name: "Demo timeline Nov 2026 – Feb 2027 with automatic standing orders, scheduled sends and dated reveals", status: "done" },
     ],
   },
   {
